@@ -1,0 +1,17 @@
+Patient: presents with chronic lower back pain persisting for 6 months. MRI completed on 07/15/2025
+Dob: 04/12/1983
+Mrn: 10293847
+Referring Physician: Dr. Alice Nguyen
+Referral Date: 08/20/2025
+Reason: Patient presents with chronic lower back pain persisting for 6 months. MRI completed on 07/15/2025
+
+showed mild degenerative disc disease at L4-L5.
+Medications: - Ibuprofen 600mg PO g8h
+
+- Cyclobenzaprine 10mg PO qHS
+History: - Hypertension
+
+- Type II Diabetes Mellitus
+Plan: Referral to physical therapy for evaluation and treatment. Consider pain management consult if no
+
+improvement.

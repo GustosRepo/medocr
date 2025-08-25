@@ -1,0 +1,20 @@
+Lab Report
+Patient: {{patient}}
+Accession #: {{accession}}
+Test: {{test}}
+Collection Date: {{collection_date}}
+Results:
+{{results}}
+Interpretation:
+{{interpretation}}
+
+
+Patient Name: {{patient_name}}
+Date of Birth: {{dob}}
+MRI: {{mri}}
+Referring Physician: {{referring_physician}}
+Date of Referral: {{referral_date}}
+Reason for Referral: {{reason}}
+Medications: {{medications}}
+Past Medical History: {{history}}
+Plan: {{plan}}

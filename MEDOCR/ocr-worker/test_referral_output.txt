@@ -1,0 +1,13 @@
+Patient: presents with chronic lower back pain persisting for 6 months.
+Mri: completed on 07/15/2025 showed mild degenerative disc disease at L4-L5
+Referral Date: 03/20/2025
+Reason: Patient presents with chronic lower back pain persisting for 6 months.
+Medications: - Ibuprofen 600mg Po g8h
+
+- Cyclobenzaprine 10mg Po qis
+History: — Hypertension
+
+- Type II Disbetes Mellitus
+Plan: Referral to physical therapy for evaluation and treatment.
+
+Consider pain management consult if no improvement.
