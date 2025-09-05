@@ -1,0 +1,33 @@
+{
+  "priority_keywords": [
+    ["sleep apnea", "obstructive sleep apnea", "OSA", "central sleep apnea", "CSA"],
+    ["snoring", "loud snoring", "heavy snoring", "habitual snoring"],
+    ["witnessed apneas", "apneic episodes", "gasping for air", "choking", "breathing stops"],
+    ["excessive daytime sleepiness", "hypersomnia", "nodding off", "falling asleep"],
+    ["daytime fatigue", "daytime sleepiness", "EDS"],
+    ["insomnia", "sleep onset", "sleep maintenance", "frequent awakening", "trouble sleeping"],
+    ["restless leg syndrome", "RLS", "restless legs", "leg movements", "PLMD"],
+    ["narcolepsy", "cataplexy", "sleep paralysis", "hypnagogic hallucinations"],
+    ["morning headaches", "dry mouth", "throat", "night sweats"],
+    ["memory problems", "concentration", "cognitive", "attention deficit"],
+    ["irritability", "mood changes", "depression", "anxiety"],
+    ["CPAP", "BiPAP", "APAP", "PAP therapy", "mask", "pressure"],
+    ["sleep study", "polysomnography", "PSG", "home sleep test", "HST"],
+    ["Epworth", "sleepiness scale", "ESS"],
+    ["BMI", "obesity", "overweight", "weight gain"],
+    ["neck circumference", "collar size"],
+    ["hypertension", "high blood pressure", "cardiovascular"],
+    ["diabetes", "metabolic syndrome", "glucose"],
+    ["GERD", "acid reflux", "heartburn"],
+    ["pain", "back", "lower", "chronic", "lumbar"],
+    ["neck", "cervical", "shoulder"],
+    ["knee", "joint", "arthritis", "osteoarthritis"],
+    ["headache", "migraine"],
+    ["chest", "shortness", "breath", "dyspnea"],
+    ["abdominal", "stomach", "nausea"],
+    ["fatigue", "weakness"],
+    ["degenerative", "disc", "disease", "herniated", "herniation"],
+    ["sciatica", "radiculopathy", "nerve"]
+  ],
+  "window_size": 8
+}

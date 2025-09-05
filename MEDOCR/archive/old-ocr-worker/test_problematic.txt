@@ -1,0 +1,14 @@
+CONSULTATION NOTE
+Patient: Jane Smith
+Referral Date: 12/15/2025
+
+HISTORY OF PRESENT ILLNESS
+Patient denies snoring but family reports loud snoring and witnessed apneas.
+Requesting CPAP titration study but no prior sleep study results available.
+
+INSURANCE: Prominence Health Plan
+DME Provider: Apria Healthcare mentioned for equipment
+
+ASSESSMENT
+Needs manual review due to contradictory information.
+Low OCR confidence in several areas.

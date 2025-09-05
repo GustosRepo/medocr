@@ -1,0 +1,50 @@
+CPAP COMPLIANCE REPORT
+
+Patient: Maria Rodriguez
+DOB: 02/28/1968
+Device: ResMed AirSense 10
+Serial: AS123456789
+Report Period: 01/01/2025 - 01/31/2025
+
+USAGE SUMMARY
+Days Used: 28/31 (90.3%)
+Average Hours/Night: 6.8 hours
+Nights ≥4 hours: 26/28 (92.9%)
+Total Hours: 190.4 hours
+
+EFFICACY DATA
+Average AHI: 2.1 events/hour
+95th Percentile AHI: 4.8 events/hour
+Average Leak: 12 L/min
+95th Percentile Leak: 28 L/min
+
+PRESSURE SETTINGS
+Mode: CPAP
+Prescribed Pressure: 9 cm H2O
+Ramp Time: 20 minutes
+Ramp Starting Pressure: 4 cm H2O
+
+MASK INFORMATION
+Mask Type: ResMed AirFit F20 (Full Face)
+Mask Fit: Good seal maintained
+Leak Events: 3 nights with high leak
+
+THERAPY ASSESSMENT
+✓ Excellent compliance (>90% nights ≥4 hours)
+✓ Effective AHI reduction (goal <5)
+✓ Good leak control
+✓ Patient tolerating therapy well
+
+RECOMMENDATIONS
+- Continue current CPAP settings
+- Schedule 6-month follow-up
+- Consider mask adjustment if leak persists
+
+Sleep Technologist: Jennifer Martinez, RPSGT
+Date Reviewed: 02/05/2025
+
+PATIENT SYMPTOMS (Last 30 days)
+Daytime Sleepiness: Improved (ESS: 8/24)
+Sleep Quality: Much better
+Morning Headaches: Resolved
+Partner Sleep: No longer disturbed by snoring

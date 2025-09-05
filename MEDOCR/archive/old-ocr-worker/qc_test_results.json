@@ -1,0 +1,23 @@
+{
+  "patient_name_consistency": [
+    "Patient first name mismatch: 'JOHN' vs 'JON' in insurance"
+  ],
+  "date_validation": [
+    "Invalid date of birth format: 13/45/1980"
+  ],
+  "phone_formatting": [
+    "Invalid phone format for Patient home phone: 555-123-456"
+  ],
+  "insurance_id_validation": [],
+  "cpt_code_validation": [
+    "Unrecognized sleep study CPT code: 12345"
+  ],
+  "warnings": [
+    "patient_name_consistency: Patient first name mismatch: 'JOHN' vs 'JON' in insurance",
+    "cpt_code_validation: Unrecognized sleep study CPT code: 12345"
+  ],
+  "errors": [
+    "date_validation: Invalid date of birth format: 13/45/1980",
+    "phone_formatting: Invalid phone format for Patient home phone: 555-123-456"
+  ]
+}

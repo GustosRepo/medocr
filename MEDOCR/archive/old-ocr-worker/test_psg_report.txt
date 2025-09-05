@@ -1,0 +1,67 @@
+POLYSOMNOGRAPHY REPORT
+
+Patient: David Kim
+Study Date: 02/18/2025
+Study Type: Diagnostic Polysomnography
+Sleep Center: Pacific Sleep Disorders Center
+
+PATIENT DEMOGRAPHICS
+Age: 45 years
+Sex: Male
+Height: 6'1"
+Weight: 195 lbs
+BMI: 25.7
+
+STUDY PARAMETERS
+Lights Out: 22:45
+Lights On: 06:30
+Total Recording Time: 465 minutes
+Total Sleep Time: 412 minutes
+Sleep Efficiency: 88.6%
+
+SLEEP ARCHITECTURE
+Stage N1: 52 minutes (12.6%)
+Stage N2: 248 minutes (60.2%)
+Stage N3: 62 minutes (15.0%)
+Stage REM: 50 minutes (12.1%)
+Wake After Sleep Onset: 41 minutes
+
+RESPIRATORY EVENTS
+Total Apneas: 85
+Total Hypopneas: 145
+Apnea-Hypopnea Index (AHI): 33.5/hour
+REM AHI: 52.8/hour
+NREM AHI: 28.2/hour
+
+OXYGEN SATURATION
+Baseline SpO2: 96%
+Minimum SpO2: 78%
+Time <90% SpO2: 12.5% TST
+ODI (3%): 28.4/hour
+
+AROUSAL DATA
+Spontaneous Arousals: 45
+Respiratory Arousals: 156
+Total Arousal Index: 29.3/hour
+
+LIMB MOVEMENTS
+Periodic Limb Movements: 23
+PLM Index: 3.4/hour
+PLM with Arousal: 8
+
+CARDIAC RHYTHM
+Heart Rate Range: 52-98 bpm
+Arrhythmias: None significant
+
+INTERPRETATION
+Severe obstructive sleep apnea with significant oxygen desaturation and sleep fragmentation. Recommend CPAP titration study.
+
+RECOMMENDATIONS
+1. CPAP titration study
+2. Sleep hygiene counseling
+3. Weight management if applicable
+4. Follow-up in sleep clinic
+
+Interpreted by: Dr. Michael Anderson, MD
+Board Certified Sleep Medicine
+Date: 02/19/2025
