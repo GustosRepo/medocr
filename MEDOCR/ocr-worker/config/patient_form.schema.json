@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MedOCR Patient Form",
+  "type": "object",
+  "required": ["patient", "referral", "insurance", "procedure", "clinical", "flags", "confidence"],
+  "properties": {
+    "doc_type": { "type": "string", "enum": ["referral", "consult_note", "unknown"] },
+    "patient": {
+      "type": "object",
+      "required": ["last_name", "first_name", "dob"],
+      "properties": {
+        "last_name": { "type": "string" },
+        "first_name": { "type": "string" },
+        "dob": { "type": "string", "pattern": "^(0[1-9]|1[0-2])\\/(0[1-9]|[12][0-9]|3[01])\\/\\d{4}$" },
+        "mrn": { "type": "string" },
+        "phones": { "type": "array", "items": { "type": "string" } },
+        "email": { "type": "string" }
+      }
+    },
+    "referral": {
+      "type": "object",
+      "required": ["date"],
+      "properties": {
+        "date": { "type": "string", "pattern": "^(0[1-9]|1[0-2])\\/(0[1-9]|[12][0-9]|3[01])\\/\\d{4}$" },
+        "source_file": { "type": "string" }
+      }
+    },
+    "insurance": {
+      "type": "object",
+      "required": ["primary"],
+      "properties": {
+        "primary": {
+          "type": "object",
+          "properties": {
+            "carrier": { "type": "string" },
+            "member_id": { "type": "string" },
+            "group": { "type": "string" },
+            "status": { "type": "string", "enum": ["accepted", "auto_flag", "unknown"] },
+            "notes": { "type": "string" }
+          }
+        },
+        "secondary": {
+          "type": "object",
+          "properties": {
+            "carrier": { "type": "string" },
+            "member_id": { "type": "string" },
+            "group": { "type": "string" }
+          }
+        }
+      }
+    },
+    "physician": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "npi": { "type": "string" },
+        "practice": { "type": "string" },
+        "phone": { "type": "string" },
+        "fax": { "type": "string" }
+      }
+    },
+    "procedure": {
+      "type": "object",
+      "properties": {
+        "requested_text": { "type": "string" },
+        "cpt": { "type": "string", "pattern": "^(95(806|810|811)|G0?399|9578[23])$" },
+        "description": { "type": "string" },
+        "titration_requested": { "type": "boolean" },
+        "titration_auto_criteria": { "type": "boolean" }
+      }
+    },
+    "clinical": {
+      "type": "object",
+      "properties": {
+        "icd10_primary": { "type": "string" },
+        "icd10_all": { "type": "array", "items": { "type": "string" } },
+        "symptoms": { "type": "array", "items": { "type": "string" } },
+        "vitals": {
+          "type": "object",
+          "properties": {
+            "bmi": { "type": "number" },
+            "height_cm": { "type": "number" },
+            "weight_kg": { "type": "number" },
+            "bp": { "type": "string" },
+            "neck_circumference_in": { "type": "number" }
+          }
+        },
+        "alerts": {
+          "type": "object",
+          "properties": {
+            "ppe_required": { "type": "boolean" },
+            "safety": { "type": "array", "items": { "type": "string" } },
+            "communication": { "type": "array", "items": { "type": "string" } },
+            "accommodations": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "dme": {
+      "type": "object",
+      "properties": {
+        "hcpcs": { "type": "array", "items": { "type": "string" } },
+        "providers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "confidence": { "type": "string", "enum": ["High", "Medium", "Low", "Manual Review Required"] }
+  }
+}

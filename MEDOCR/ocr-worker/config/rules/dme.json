@@ -1,0 +1,10 @@
+[
+  {"hcpcs": "E0601", "provider": ""},
+  {"hcpcs": "E0562", "provider": ""},
+  {"hcpcs": "A7034", "provider": ""},
+  {"hcpcs": "A7035", "provider": ""},
+  {"hcpcs": "E0470", "provider": ""},
+  {"hcpcs": "", "provider": "apria"},
+  {"hcpcs": "", "provider": "lincare"},
+  {"hcpcs": "", "provider": "rotech"}
+]

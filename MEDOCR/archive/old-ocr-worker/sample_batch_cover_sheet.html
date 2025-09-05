@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Referral Processing Summary - 03/15/2025</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .header { text-align: center; border-bottom: 3px solid #2c3e50; padding-bottom: 15px; margin-bottom: 25px; }
+        .checklist { margin: 20px 0; }
+        .patient-item { margin: 8px 0; padding: 8px; border-left: 4px solid #3498db; background-color: #f8f9fa; }
+        .patient-item.action-required { border-left-color: #e74c3c; background-color: #ffeaa7; }
+        .patient-item.ready { border-left-color: #27ae60; background-color: #d5f4e6; }
+        .patient-name { font-weight: bold; color: #2c3e50; }
+        .patient-details { color: #7f8c8d; font-size: 0.9em; }
+        .actions { margin-top: 5px; color: #e74c3c; font-weight: bold; }
+        .actions.none { color: #27ae60; }
+        .section { margin: 25px 0; }
+        .section-title { font-size: 1.2em; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom: 5px; }
+        .common-actions { background-color: #ecf0f1; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .forms-section { background-color: #e8f6f3; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .summary-stats { background-color: #d5e8d4; padding: 15px; margin: 15px 0; border-radius: 5px; text-align: center; }
+        .stat-item { display: inline-block; margin: 0 20px; }
+        .stat-number { font-size: 1.5em; font-weight: bold; color: #2c3e50; }
+        .checkbox { margin-right: 8px; }
+        .action-list { margin-left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>REFERRAL PROCESSING SUMMARY - INTAKE DATE: 03/15/2025</h1>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">PATIENT CHECKLIST:</div>
+        <div class="checklist">
+            
+        <div class="patient-item ready">
+            <div class="checkbox">☐</div>
+            <span class="patient-name">Thompson, Robert</span>
+            <div class="patient-details">DOB: 08/12/1975 | Insurance: Aetna | ID: A123456789</div>
+            <div class="actions none">
+                Additional Actions Required: None
+            </div>
+        </div>
+        
+        <div class="patient-item action-required">
+            <div class="checkbox">☐</div>
+            <span class="patient-name">Smith, Jane</span>
+            <div class="patient-details">DOB: 05/20/1980 | Insurance: Prominence | ID: P987654321</div>
+            <div class="actions ">
+                Additional Actions Required: Out of network - fax UTS; No chart notes/insurance verification required
+            </div>
+        </div>
+        
+        <div class="patient-item action-required">
+            <div class="checkbox">☐</div>
+            <span class="patient-name">Doe, John</span>
+            <div class="patient-details">DOB: 03/10/1990 | Insurance: BCBS | ID: B555666777</div>
+            <div class="actions ">
+                Additional Actions Required: Authorization required - submit/fax request
+            </div>
+        </div>
+        
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">COMMON ADDITIONAL ACTIONS:</div>
+        <div class="common-actions">
+            <div class="action-list">
+                <div>• <strong>"No chart notes/insurance verification required"</strong> → Generate insurance verification form</div>
+                <div>• <strong>"Insufficient information - sleep questionnaire required, call patient"</strong></div>
+                <div>• <strong>"Wrong test ordered - need order for complete sleep study due to no testing in last 5 years"</strong></div>
+                <div>• <strong>"Out of network - fax UTS"</strong> → Generate UTS referral form</div>
+                <div>• <strong>"Authorization required - submit/fax request"</strong> → Generate authorization form</div>
+                <div>• <strong>"Missing demographics - call provider for complete patient information"</strong></div>
+                <div>• <strong>"Provider follow-up required - obtain additional clinical documentation"</strong></div>
+                <div>• <strong>"Insurance expired/terminated - verify current coverage"</strong></div>
+                <div>• <strong>"Pediatric specialist referral required"</strong></div>
+                <div>• <strong>"DME evaluation needed before testing"</strong></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">FORMS GENERATED:</div>
+        <div class="forms-section">
+            <div><span class="checkbox">☐</span> Insurance verification forms: <strong>1</strong></div>
+            <div><span class="checkbox">☐</span> Authorization request forms: <strong>1</strong></div>
+            <div><span class="checkbox">☐</span> UTS referral forms: <strong>1</strong></div>
+            <div><span class="checkbox">☐</span> Provider follow-up requests: <strong>0</strong></div>
+            <div><span class="checkbox">☐</span> Patient contact forms: <strong>0</strong></div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">PROCESSING SUMMARY:</div>
+        <div class="summary-stats">
+            <div class="stat-item">
+                <div class="stat-number">3</div>
+                <div>TOTAL REFERRALS PROCESSED</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">1</div>
+                <div>READY TO SCHEDULE</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">2</div>
+                <div>ADDITIONAL ACTIONS REQUIRED</div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 40px; text-align: center; font-size: 0.9em; color: #7f8c8d;">
+        Generated: 08/28/2025 11:55 | 
+        Batch ID: BATCH_03152025_1155 | 
+        Processing System: Enhanced Sleep OCR v2.0
+    </div>
+</body>
+</html>
+    
