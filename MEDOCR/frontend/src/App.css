@@ -4,195 +4,259 @@
 
 /* Custom component classes */
 @layer components {
-  .dashboard {
-    @apply flex min-h-screen bg-surface;
+  /* Client Requirements Styles (kept; unique to batch/QC UI) */
+  .batch-results-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 2px solid #28a745;
   }
-  
-  .sidebar {
-    @apply w-56 bg-primary text-white p-8 flex flex-col;
+
+  .batch-summary {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
   }
-  
-  .sidebar h2 {
-    @apply text-3xl font-bold tracking-wider mb-8;
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
   }
-  
-  .sidebar nav ul {
-    @apply list-none p-0 m-0;
+
+  .stat-box {
+    text-align: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px solid #dee2e6;
   }
-  
-  .sidebar nav li {
-    @apply mb-5;
+
+  .stat-box.ready {
+    background: #d4edda;
+    border-color: #28a745;
+    color: #155724;
   }
-  
-  .sidebar nav a {
-    @apply text-white no-underline text-lg transition-colors hover:text-accent;
+
+  .stat-box.action-required {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
   }
-  
-  .main-content {
-    @apply flex-1 p-8;
+
+  .stat-number {
+    display: block;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
   }
-  
-  .header h1 {
-    @apply text-4xl font-bold text-primary mb-8;
+
+  .stat-label {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-  
-  .card {
-    @apply bg-white rounded-xl shadow-lg p-6 mb-6;
+
+  .client-features {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
   }
-  
-  .ocr-form {
-    @apply flex items-center gap-4 mb-4;
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
   }
-  
-  .ocr-form input[type="file"] {
-    @apply flex-1 p-3 border border-gray-300 rounded-lg;
+
+  .feature-box {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 2px solid #dee2e6;
+    background: #f8f9fa;
   }
-  
-  .ocr-form button {
-    @apply bg-primary text-white px-6 py-3 rounded-lg font-semibold transition-colors hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed;
+
+  .feature-box.ready {
+    background: #d4edda;
+    border-color: #28a745;
   }
-  
-  .selected-files {
-    @apply mt-4 text-base;
+
+  .feature-box.pending {
+    background: #f8d7da;
+    border-color: #dc3545;
   }
-  
-  .selected-files ul {
-    @apply mt-2 pl-5;
+
+  .document-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
-  
-  .selected-files li {
-    @apply text-primary font-medium mb-1;
+
+  .document-item {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
   }
-  
-  .ocr-error {
-    @apply bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mt-4;
+
+  .document-item.ready_to_schedule {
+    border-left: 4px solid #28a745;
   }
-  
-  .compare-list {
-    @apply flex flex-col gap-8;
+
+  .document-item.additional_actions_required {
+    border-left: 4px solid #ffc107;
   }
-  
-  .compare-row {
-    @apply grid grid-cols-[200px_1fr_1fr] gap-12 bg-gray-50 rounded-xl shadow-md p-8;
+
+  .document-name {
+    font-weight: bold;
+    font-size: 1.1rem;
   }
-  
-  .compare-preview {
-    @apply flex flex-col items-center;
+
+  .status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
   }
-  
-  .compare-preview b {
-    @apply text-lg font-semibold text-primary mb-3 text-center break-words;
+
+  .status-badge.ready_to_schedule {
+    background: #d4edda;
+    color: #155724;
   }
-  
-  .preview-box {
-    @apply w-36 h-36 flex items-center justify-center bg-secondary rounded-xl overflow-hidden shadow-lg;
+
+  .status-badge.additional_actions_required {
+    background: #fff3cd;
+    color: #856404;
   }
-  
-  .preview-img {
-    @apply max-w-full max-h-full object-contain rounded-lg;
+
+  .document-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
-  
-  .pdf-icon {
-    @apply text-5xl text-primary;
+
+  .detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
   }
-  
-  .compare-ocr {
-    @apply bg-white rounded-lg p-6 border border-gray-200 shadow-sm;
+
+  .detail-row.warning {
+    background: #fff3cd;
+    padding: 0.5rem;
+    border-radius: 4px;
+    color: #856404;
   }
-  
-  .compare-template {
-    @apply bg-green-50 rounded-lg p-6;
+
+  .flags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
   }
-  
-  .col-title {
-    @apply text-sm font-bold text-primary mb-3 uppercase tracking-wide;
+
+  .flag-badge {
+    background: #dc3545;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: bold;
   }
-  
-  .ocr-text {
-    @apply font-mono text-sm text-gray-700 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto break-words;
+
+  .actions-list {
+    margin: 0.5rem 0 0 1rem;
+    padding: 0;
   }
-  
-  .confidence {
-    @apply text-base text-blue-600 font-medium mt-2;
+
+  .cover-sheet-preview {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-top: 1.5rem;
   }
-  
-  /* HTML Template Styling */
-  .template-html {
-    @apply font-serif text-sm text-primary bg-white border border-gray-300 rounded-lg p-6 shadow-lg max-h-96 overflow-y-auto;
+
+  .cover-sheet-content {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 1rem;
+    max-height: 500px;
+    overflow-y: auto;
+    background: #f8f9fa;
   }
-  
-  .document-template {
-    @apply max-w-full mx-auto leading-relaxed;
+
+  .client-status {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
   }
-  
-  .document-header {
-    @apply border-b-2 border-primary pb-4 mb-6;
+
+  .status-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
   }
-  
-  .document-header h2 {
-    @apply text-2xl font-bold text-primary mb-2;
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
   }
-  
-  .header-info {
-    @apply flex justify-between text-sm text-gray-600;
+
+  .status-item.ready {
+    background: #d4edda;
+    color: #155724;
   }
-  
-  .patient-section, .test-section, .reason-section, 
-  .medications-section, .history-section, .plan-section,
-  .results-section, .interpretation-section, .content-section {
-    @apply mb-6;
+
+  .status-item.pending {
+    background: #f8d7da;
+    color: #721c24;
   }
-  
-  .patient-section h3, .test-section h3, .reason-section h3,
-  .medications-section h3, .history-section h3, .plan-section h3,
-  .results-section h3, .interpretation-section h3 {
-    @apply text-lg font-semibold text-primary mb-3 border-b border-gray-200 pb-1;
+
+  .flags-section, .actions-section, .qc-section {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
   }
-  
-  .field-row {
-    @apply flex gap-8 mb-3;
+
+  .flags-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
   }
-  
-  .field-group {
-    @apply flex items-baseline gap-2 flex-1;
+
+  .qc-issues { margin-top: 0.5rem; }
+  .qc-error { color: #dc3545; margin: 0.25rem 0; }
+  .qc-warning { color: #ffc107; margin: 0.25rem 0; }
+  .qc-pass { color: #28a745; font-weight: bold; }
+
+  /* Helper chips/lists used by results */
+  .aggregate-status { margin: 0.5rem 0 1rem 0; }
+  .aggregate-status .pill {
+    display: inline-block;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: 9999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
   }
-  
-  .field-group label {
-    @apply font-semibold text-primary text-sm min-w-fit;
-  }
-  
-  .field-value {
-    @apply text-gray-700 font-normal;
-  }
-  
-  .reason-content, .medications-content, .history-content, 
-  .plan-content, .results-content, .interpretation-content {
-    @apply bg-gray-50 border-l-4 border-primary p-4 rounded-r text-sm leading-normal;
-  }
-  
-  .lab-report .document-header {
-    @apply border-green-500;
-  }
-  
-  .lab-report .document-header h2 {
-    @apply text-green-600;
-  }
-  
-  .lab-report .results-content {
-    @apply border-green-500;
-  }
-  
-  .referral-form .document-header {
-    @apply border-blue-500;
-  }
-  
-  .referral-form .document-header h2 {
-    @apply text-blue-600;
-  }
-  
-  .referral-form .reason-content {
-    @apply border-blue-500;
-  }
+  .inline-list { list-style: none; margin: 0; padding: 0; display: inline; }
+  .inline-list li { display: inline; margin-right: 0.5rem; }
 }
 
 /* HTML Template Styling */

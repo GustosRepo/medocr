@@ -1,0 +1,20 @@
+SLEEP MEDICINE REFERRAL
+
+Patient: Robert Thompson DOB: 8/12/1975
+Phone: (352) 555-2718
+
+Provider: Dr. Smith
+Referring Physician: Dr. Wilson
+
+Insurance: Blue Cross Blue Shield
+Member ID: ABC123456
+
+Procedure requested: CPT: 95810, 95811
+Study Type: Overnight sleep study with CPAP titration
+
+Primary diagnosis: Sleep apnea, obstructive (G47.33)
+Epworth Sleepiness Scale score: 18
+
+Comments: Patient reports loud snoring and witnessed apneas. BMI 32.1
+Priority: Routine
+Authorization number: AUTH789456

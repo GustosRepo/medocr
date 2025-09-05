@@ -1,0 +1,12 @@
+SLEEP MEDICINE REFERRAL
+
+Patient: Robert Thompson
+DOB: 8/12/1975
+Phone: (352) 555-2718
+
+Provider: Dr. Smith
+Insurance: Blue Cross Blue Shield
+Member ID: ABC123456
+
+CPT: 95810
+Epworth score: 18

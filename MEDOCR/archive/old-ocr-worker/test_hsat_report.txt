@@ -1,0 +1,68 @@
+HOME SLEEP TEST REPORT
+
+Patient: Lisa Thompson
+Test Date: 02/10/2025
+Device: WatchPAT ONE
+Study ID: HST-2025-0210-LT
+
+PATIENT INFORMATION
+Age: 52 years
+Gender: Female
+BMI: 29.8
+Neck Circumference: 15.5 inches
+
+TEST QUALITY
+Recording Time: 7.2 hours
+Valid Sleep Time: 6.8 hours
+Signal Quality: Good
+Data Completeness: 94.5%
+
+SLEEP METRICS
+Sleep Latency: 18 minutes
+REM Latency: 112 minutes
+Sleep Efficiency: 85.2%
+REM Sleep: 22.1%
+
+RESPIRATORY FINDINGS
+pAHI (peripheral Apnea-Hypopnea Index): 18.7/hour
+pRDI (peripheral Respiratory Disturbance Index): 22.3/hour
+Oxygen Desaturation Index: 15.2/hour
+Mean SpO2: 94.2%
+Minimum SpO2: 86%
+
+SEVERITY CLASSIFICATION
+Moderate Obstructive Sleep Apnea
+(pAHI 15-30 events/hour)
+
+SLEEP POSITION
+Supine: 45% (pAHI 28.5/hour)
+Non-supine: 55% (pAHI 11.2/hour)
+Positional Component: Yes
+
+HEART RATE VARIABILITY
+Mean Heart Rate: 68 bpm
+Heart Rate Variability Index: Normal
+
+SNORING ANALYSIS
+Snoring Episodes: 234
+Snoring Index: 34.4/hour
+Loud Snoring: 15.8% of recording time
+
+CLINICAL CORRELATION
+Results consistent with moderate OSA. Recommend CPAP therapy evaluation.
+
+TREATMENT RECOMMENDATIONS
+1. CPAP therapy trial
+2. Positional therapy education
+3. Weight management counseling
+4. Sleep hygiene optimization
+
+Medical Director: Dr. Patricia Williams, MD
+Report Date: 02/12/2025
+
+PATIENT SYMPTOMS PRE-TEST
+Epworth Sleepiness Scale: 12/24
+Snoring: Loud, nightly
+Witnessed Apneas: Yes, frequent
+Morning Headaches: 3-4 times/week
+Concentration Issues: Moderate

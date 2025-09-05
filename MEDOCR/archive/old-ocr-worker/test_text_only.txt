@@ -1,0 +1,65 @@
+PATIENT REFERRAL FORM
+
+Date:
+
+12/21/2024
+
+Patient Information:
+
+Patient Name:
+
+Robert
+
+Taylor
+
+DOB:
+
+07/06/1960
+
+MRN: MRN873560
+
+Insurance:
+
+aetna
+
+Referring Physician: Dr. Davis
+
+Procedure/Service:
+
+CPT:
+
+72158
+
+—- Neck Mri
+
+Reason for Referral:
+
+Patient presents with degenerative,
+
+nerve,
+
+arthritis.
+
+Requesting evaluation and treatment
+
+as appropriate.
+
+Clinical Notes:
+
+Patient has been experiencing symptoms for several weeks.
+
+Standard conservative treatments have been attempted.
+
+Specialist evaluation recommended for further management.
+
+Authorization:
+
+Pre-approved
+
+Priority: Routine
+
+Physician Signature: Dr. Davis
+
+Date:
+
+12/21/2024

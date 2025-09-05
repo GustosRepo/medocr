@@ -1,0 +1,33 @@
+{
+  "flags": [
+    { "id": "WRONG_TEST_ORDERED", "category": "core", "route": "Verify CPT vs indication" },
+    { "id": "TITRATION_REQUIRES_CLINICAL_REVIEW", "category": "core", "route": "Clinical review for 95811" },
+    { "id": "MISSING_CHART_NOTES", "category": "core", "route": "Request chart notes" },
+    { "id": "MISSING_PATIENT_INFO", "category": "core", "route": "Call provider for demographics" },
+
+    { "id": "INSURANCE_NOT_ACCEPTED", "category": "insurance", "route": "Out of network — fax UTS" },
+    { "id": "PROMINENCE_CONTRACT_ENDED", "category": "insurance", "route": "Out of network — Prominence cutoff" },
+    { "id": "INSURANCE_EXPIRED", "category": "insurance", "route": "Verify coverage dates" },
+    { "id": "AUTHORIZATION_REQUIRED", "category": "insurance", "route": "Submit prior auth" },
+
+    { "id": "DME_MENTIONED", "category": "clinical", "route": "DME evaluation before test" },
+    { "id": "CPAP_COMPLIANCE_ISSUE", "category": "clinical", "route": "Schedule titration consult" },
+    { "id": "PEDIATRIC_SPECIAL_HANDLING", "category": "clinical", "route": "Route to pediatric workflow" },
+    { "id": "MOBILITY_ALERT", "category": "clinical", "route": "Room/equipment check" },
+    { "id": "SAFETY_ALERT", "category": "clinical", "route": "Safety precautions" },
+
+    { "id": "LOW_OCR_CONFIDENCE", "category": "processing", "route": "Manual verify OCR areas" },
+    { "id": "CONTRADICTORY_INFO", "category": "processing", "route": "Manual review contradictions" },
+    { "id": "MANUAL_REVIEW_REQUIRED", "category": "processing", "route": "Manual review required" },
+
+    { "id": "PPE_REQUIRED", "category": "info", "route": "Use PPE per policy" },
+    { "id": "COMMUNICATION_NEEDS", "category": "info", "route": "Interpreter or assistance" },
+    { "id": "SPECIAL_ACCOMMODATIONS", "category": "info", "route": "Arrange accommodations" },
+    { "id": "MEDICATION_ALERT", "category": "info", "route": "Medication caution" },
+    { "id": "HISTORY_ALERT", "category": "info", "route": "Note prior sleep history" },
+
+    { "id": "NOT_REFERRAL_DOCUMENT", "category": "core", "route": "Classify as clinical note" },
+    { "id": "NO_TEST_ORDER_FOUND", "category": "core", "route": "Request explicit order" },
+    { "id": "FUTURE_REFERRAL_DATE", "category": "processing", "route": "Verify referral date" }
+  ]
+}

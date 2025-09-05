@@ -1,0 +1,21 @@
+{
+  "95810": ["sleep study", "sleep evaluation", "diagnostic study"],
+  "95811": ["titration", "cpap titration"],
+  "G0399": ["home sleep test", "hst"],
+  "95806": ["home sleep test alternative"],
+  "95782": ["pediatric sleep study"],
+  "95783": ["pediatric cpap"],
+  "97110": ["physical therapy", "therapeutic exercise", "pt", "exercise therapy"],
+  "97112": ["neuromuscular reeducation", "balance training"],
+  "97116": ["gait training", "walking therapy"],
+  "97140": ["manual therapy", "massage", "mobilization"],
+  "97530": ["therapeutic activities", "functional training"],
+  "99213": ["office visit", "evaluation", "assessment", "consultation"],
+  "99214": ["detailed office visit", "comprehensive evaluation"],
+  "64483": ["pain management", "injection", "epidural"],
+  "62311": ["lumbar injection", "spinal injection"],
+  "20610": ["joint injection", "cortisone injection"],
+  "72148": ["mri lumbar", "lumbar mri", "lower back mri"],
+  "72158": ["mri cervical", "neck mri"],
+  "73721": ["mri knee", "knee imaging"]
+}

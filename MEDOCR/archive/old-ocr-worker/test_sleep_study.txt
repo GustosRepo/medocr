@@ -1,0 +1,31 @@
+PATIENT REFERRAL FORM
+Date: 08/28/2025
+
+Patient Information:
+Patient Name: Sarah Johnson
+DOB: 03/15/1975
+MRN: MRN445789
+Insurance: Blue Cross Blue Shield
+Referring Physician: Dr. Smith
+
+Procedure/Service:
+CPT: 95806 - Home Sleep Test
+
+Reason for Referral:
+Patient presents with loud snoring, witnessed apneas, and excessive daytime sleepiness.
+Epworth Sleepiness Scale: 14
+BMI: 32.5
+Neck circumference: 17 cm
+Patient reports falling asleep at work and while driving.
+
+Clinical Notes:
+Patient has been experiencing sleep apnea symptoms for 2 years.
+Reports CPAP pressure 8 cm H2O previously tried.
+Current medications include Ambien 5mg nightly.
+Standard conservative treatments have been attempted.
+Sleep study recommended for OSA evaluation.
+
+Authorization: Pre-approved
+Priority: Urgent
+Physician Signature: Dr. Smith
+Date: 08/28/2025

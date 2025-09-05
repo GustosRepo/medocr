@@ -1,0 +1,5 @@
+{
+  "accepted": ["aetna", "anthem", "cigna", "humana", "united healthcare", "medicare", "medicaid"],
+  "auto_flag": ["culinary", "intermountain", "p3 health", "select health", "wellcare"],
+  "contract_end": { "prominence": "2025-10-31" }
+}
