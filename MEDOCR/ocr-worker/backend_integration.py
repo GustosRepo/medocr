@@ -4,12 +4,23 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, List
+import os
+import json as _json
 
 # --- If you have enhanced_extract, keep using it; else fall back to lightweight parsing ---
 try:
     from enhanced_extract import analyze_medical_form as _enhanced_extract
 except Exception:
     _enhanced_extract = None
+try:
+    from quality_control import run_qc
+except Exception:
+    run_qc = None
+try:
+    from batch_cover_generator import render_cover_sheet
+except Exception:
+    render_cover_sheet = None
 
 
 # ----------------------
@@ -42,6 +53,8 @@ def normalize(text: str) -> str:
         t,
         flags=re.I,
     )
+    # General fix for dates with a 5-digit year like mm/dd/0yyyy -> mm/dd/yyyy (covers DOB etc.)
+    t = re.sub(r"\b([01]?\d\/[0-3]?\d\/)0(\d{4}\b)", r"\1\2", t)
     # Join digits split by newline
     t = re.sub(r"(\d)[ \t]*\n[ \t]*(\d)", r"\1\2", t)
     return t.strip()
@@ -64,15 +77,19 @@ RX = {
     ),
     "cpt_all": re.compile(r"\b(9\d{4})\b"),
     "epworth": re.compile(r"\bEpworth(?:\s*score(?:s)?)?[:\s]*([0-2]?\d)(?:\s*\/\s*24)?\b", re.I),
-    "insurance_primary": re.compile(r"Insurance\s*\(Primary\)[\s\S]{0,220}", re.I),
+    # Expand block length to capture carrier + member id lines reliably
+    "insurance_primary": re.compile(r"Insurance\s*\(Primary\)[\s\S]{0,500}", re.I),
     "carrier": re.compile(r"Carrier[:\s]*([^\n:]+)", re.I),
-    "member_id": re.compile(r"Member\s*ID[:\s]*([A-Z0-9\-]+)", re.I),
+    # stop at end-of-line; do not span newlines
+    # Member ID up to boundary; avoid capturing following words like Coverage/Authorization/etc.
+    "member_id": re.compile(r"Member\s*ID[:\s]*([A-Z0-9\- ]{2,})(?=\s*(?:\r?\n|$|Coverage|Authorization|Auth|Carrier|Group|Plan|Policy))", re.I),
     "auth": re.compile(r"Authorization(?:\s*number)?[:\s]*([A-Z0-9\-]+)", re.I),
     "study_requested": re.compile(r"(?:Study|Requested)\s*[:\s]*([A-Za-z ]+Study|Sleep study|Overnight Sleep Study)", re.I),
-    "patient_name": re.compile(r"Patient[:\s]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"),
+    "patient_name": re.compile(r"Patient[:\s]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?=\s*(?:[-–]\s*DOB|DOB|$))", re.I),
     "indication": re.compile(r"(?:Indication|Primary\s*Diagnosis)[:\s]*([^\n]+)", re.I),
     "neck": re.compile(r"Neck(?:\s*circumference)?[:\s]*([0-9]{1,2}(?:\s*in(?:ches)?)?)", re.I),
-    "doc_date": re.compile(r"(?:Referral\s*\/?\s*order\s*date|Document\s*Date)[:\s]*([01]?\d\/[0-3]?\d\/\d{4})", re.I),
+    "referring_provider": re.compile(r"Referring\s+Provider\s*:\s*([^\n]+)", re.I),
+    "doc_date": re.compile(r"(?:Referral\s*\/?\s*order\s*date|Referral\s*Date|Document\s*Date)[:\s]*([01]?\d\/[0-3]?\d\/\d{4})", re.I),
     "intake_date": re.compile(r"(?:Intake\s*\/?\s*processing|Intake\s*Date)[:\s]*([01]?\d\/[0-3]?\d\/\d{4})", re.I),
     "verified": re.compile(r"\bVerified\b|\bConfirmed\b", re.I),
 }
@@ -93,7 +110,7 @@ def _fmt_phone(raw: str) -> str:
     return fmt(d[-10:]) if len(d) >= 10 else ""
 
 
-def _fallback_extract(text: str, avg_conf: float | None) -> dict:
+def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
     t = normalize(text)
     out = {"patient": {}, "insurance": {"primary": {}}, "physician": {}, "procedure": {}, "clinical": {}}
 
@@ -131,16 +148,32 @@ def _fallback_extract(text: str, avg_conf: float | None) -> dict:
     if m: out["physician"]["clinic_phone"] = _fmt_phone(m.group(1))
 
     blk = RX["insurance_primary"].search(t)
-    if blk:
-        ib = blk.group(0)
-        m = RX["carrier"].search(ib)
-        if m:
-            carrier = re.sub(r"Member\s*Id$", "", m.group(1), flags=re.I).strip()
-            out["insurance"]["primary"]["carrier"] = carrier
-        m = RX["member_id"].search(ib)
-        if m: out["insurance"]["primary"]["member_id"] = m.group(1)
-        m = RX["auth"].search(ib)
-        if m: out["insurance"]["primary"]["authorization_number"] = m.group(1)
+    ib = blk.group(0) if blk else ""
+    # Primary carrier
+    m = RX["carrier"].search(ib)
+    if m:
+        carrier = re.sub(r"Member\s*Id$", "", m.group(1), flags=re.I).strip()
+        out["insurance"]["primary"]["carrier"] = carrier
+    else:
+        # Fallback 1: line right after header like: \nProminence: Prominence
+        m2 = re.search(r"Insurance\s*\(Primary\)[^\n]*\n\s*([A-Za-z][A-Za-z0-9 &\-]{2,})(?::\s*([A-Za-z][A-Za-z0-9 &\-]{2,}))?", t, flags=re.I)
+        if m2:
+            name = (m2.group(2) or m2.group(1)).strip()
+            # If name has duplicate like "Prominence Prominence" collapse
+            parts = [p.strip() for p in re.split(r"[:\s]+", name) if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                name = parts[0]
+            out["insurance"]["primary"]["carrier"] = name
+        else:
+            # Fallback 2: any uppercase-first token before Member ID within block
+            m3 = re.search(r"\b([A-Z][A-Za-z0-9 &\-]{2,})\b(?=[\s\S]{0,120}Member\s*ID)" , ib, flags=re.I)
+            if m3:
+                out["insurance"]["primary"]["carrier"] = m3.group(1).strip()
+    # Member ID
+    m = RX["member_id"].search(ib)
+    if m: out["insurance"]["primary"]["member_id"] = re.sub(r"\s+", "", m.group(1))
+    m = RX["auth"].search(ib)
+    if m: out["insurance"]["primary"]["authorization_number"] = m.group(1)
 
     if RX["verified"].search(t):
         out["insurance"]["primary"]["insurance_verified"] = "Yes"
@@ -160,6 +193,12 @@ def _fallback_extract(text: str, avg_conf: float | None) -> dict:
         out["procedure"]["indication"] = dx
         out["clinical"]["primary_diagnosis"] = dx
 
+    # Provider fallback: Referring Provider line
+    if not out["physician"].get("name"):
+        m = RX["referring_provider"].search(t)
+        if m:
+            out["physician"]["name"] = m.group(1).strip()
+
     m = RX["epworth"].search(t)
     if m: out["clinical"]["epworth_score"] = f"{m.group(1)}/24"
     m = RX["neck"].search(t)
@@ -169,8 +208,21 @@ def _fallback_extract(text: str, avg_conf: float | None) -> dict:
 
     m = re.search(r"Symptoms?[:\s]*([^\n]+)", t, flags=re.I)
     if m:
-        arr = [s.strip() for s in re.split(r"[;,]", m.group(1)) if s.strip()]
-        out["clinical"]["symptoms"] = [re.sub(r"\bnoring\b", "snoring", s, flags=re.I) for s in arr]
+        raw = m.group(1)
+        arr = [s.strip() for s in re.split(r"[;,]", raw) if s.strip()]
+        # Drop negated tokens ("Denies X", "No Y"), fix common OCR slip, dedupe preserving order
+        cleaned = []
+        seen = set()
+        for s in arr:
+            if re.match(r"^(denies|no)\b", s, flags=re.I):
+                continue
+            s2 = re.sub(r"\bnoring\b", "snoring", s, flags=re.I)
+            key = s2.lower()
+            if key not in seen:
+                seen.add(key)
+                cleaned.append(s2)
+        if cleaned:
+            out["clinical"]["symptoms"] = cleaned
 
     if isinstance(avg_conf, (int, float)):
         out["overall_confidence"] = float(avg_conf)
@@ -179,11 +231,157 @@ def _fallback_extract(text: str, avg_conf: float | None) -> dict:
     return out
 
 
-def extract(text: str, avg_conf: float | None) -> dict:
+def _merge_prefer_server(server: dict, client: dict):
+    def is_empty(v):
+        return v is None or (isinstance(v, str) and v.strip() == "")
+    if isinstance(server, list) or isinstance(client, list):
+        sa = server if isinstance(server, list) else []
+        ca = client if isinstance(client, list) else []
+        return sa if sa else ca
+    if isinstance(server, dict) or isinstance(client, dict):
+        out = {}
+        keys = set()
+        if isinstance(server, dict): keys.update(server.keys())
+        if isinstance(client, dict): keys.update(client.keys())
+        for k in keys:
+            sv = server.get(k) if isinstance(server, dict) else None
+            cv = client.get(k) if isinstance(client, dict) else None
+            if isinstance(sv, dict) and isinstance(cv, dict):
+                out[k] = _merge_prefer_server(sv, cv)
+            elif isinstance(sv, list) or isinstance(cv, list):
+                sa = sv if isinstance(sv, list) else []
+                ca = cv if isinstance(cv, list) else []
+                out[k] = sa if sa else ca
+            else:
+                out[k] = sv if not is_empty(sv) else cv
+        return out
+    return server if not is_empty(server) else client
+
+
+# ----------------------
+# User rules (regex) loader + applier
+# ----------------------
+_USER_RULES_PATH = os.path.join(os.path.dirname(__file__), 'rules', 'user_rules.json')
+
+def _load_user_rules():
+    try:
+        with open(_USER_RULES_PATH, 'r', encoding='utf-8') as f:
+            data = _json.load(f)
+        rules = data.get('rules', []) if isinstance(data, dict) else []
+        out = []
+        for r in rules:
+            # skip disabled rules
+            if r.get('disabled'):
+                continue
+            field = r.get('field')
+            pattern = r.get('pattern')
+            if not field or not pattern:
+                continue
+            try:
+                flags = re.I if str(r.get('flags', '')).lower().find('i') >= 0 else 0
+                rx = re.compile(pattern, flags)
+            except Exception:
+                continue
+            out.append({
+                'id': r.get('id'),
+                'field': field,
+                'rx': rx,
+                'section': r.get('section'),
+                'window': int(r.get('window', 500)),
+                'postprocess': r.get('postprocess') or [],
+                'priority': int(r.get('priority', 100))
+            })
+        # sort by priority asc
+        out.sort(key=lambda x: x['priority'])
+        return out
+    except Exception:
+        return []
+
+def _pp_value(val: str, pps: List[str]) -> str:
+    v = val or ''
+    for name in pps or []:
+        n = (name or '').lower()
+        if n == 'trim':
+            v = v.strip()
+        elif n == 'upper':
+            v = v.upper()
+        elif n == 'collapse_spaces':
+            v = re.sub(r"\s+", " ", v).strip()
+        elif n == 'digits_only':
+            v = re.sub(r"\D+", "", v)
+        elif n == 'strip_spaces':
+            v = re.sub(r"\s+", "", v)
+        elif n == 'nanp_phone':
+            try:
+                v = _fmt_phone(v)
+            except Exception:
+                pass
+        elif n == 'collapse_duplicate_tokens':
+            toks = [t for t in re.split(r"[\s:]+", v) if t]
+            out = []
+            for t in toks:
+                if not out or out[-1].lower() != t.lower():
+                    out.append(t)
+            v = ' '.join(out)
+    return v
+
+def _is_empty_value(x):
+    return x is None or (isinstance(x, str) and x.strip() == '')
+
+def _assign_field(obj: dict, path: str, value):
+    parts = path.split('.')
+    cur = obj
+    for i, p in enumerate(parts):
+        if i == len(parts) - 1:
+            cur[p] = value
+        else:
+            if p not in cur or not isinstance(cur[p], dict):
+                cur[p] = {}
+            cur = cur[p]
+
+def _apply_user_rules(text: str, data: dict):
+    rules = _load_user_rules()
+    if not rules:
+        return
+    t = text or ''
+    for r in rules:
+        # Skip if already present (only fill missing)
+        # Traverse to existing value if any
+        try:
+            cur = data
+            for idx, key in enumerate(r['field'].split('.')):
+                if idx == len(r['field'].split('.')) - 1:
+                    existing = cur.get(key) if isinstance(cur, dict) else None
+                else:
+                    cur = cur.get(key, {}) if isinstance(cur, dict) else {}
+            if not _is_empty_value(existing):
+                continue
+        except Exception:
+            pass
+
+        subject = t
+        if r.get('section'):
+            try:
+                m = re.search(r.get('section'), t, flags=re.I)
+                if m:
+                    start = m.start()
+                    end = min(len(t), start + max(100, r.get('window', 500)))
+                    subject = t[start:end]
+            except Exception:
+                subject = t
+        m = r['rx'].search(subject)
+        if m:
+            val = m.group(1)
+            val = _pp_value(val, r.get('postprocess'))
+            if not _is_empty_value(val):
+                _assign_field(data, r['field'], val)
+
+def extract(text: str, avg_conf: Optional[float]) -> dict:
+    # Always compute fallback on normalized text
+    fb = _fallback_extract(text, avg_conf)
     if _enhanced_extract:
         try:
             data = _enhanced_extract(text, avg_conf if avg_conf is not None else 0.85)
-            # ensure standard aliases present
             overall = (
                 data.get("overall_confidence")
                 or data.get("semantic_confidence")
@@ -192,10 +390,14 @@ def extract(text: str, avg_conf: float | None) -> dict:
             )
             data.setdefault("overall_confidence", overall)
             data.setdefault("confidence_scores", {}).setdefault("overall_confidence", overall)
-            return data
+            # Merge: prefer server, fill from fallback
+            merged = _merge_prefer_server(data, fb or {})
+            _apply_user_rules(text, merged)
+            return merged
         except Exception:
             pass
-    return _fallback_extract(text, avg_conf)
+    _apply_user_rules(text, fb)
+    return fb
 
 
 # ----------------------
@@ -205,7 +407,7 @@ def _val(x, fb="Not found"):
     return x if (x is not None and x != "") else fb
 
 
-def make_client_pdf_html(data: dict, flags: list[str] | None = None) -> str:
+def make_client_pdf_html(data: dict, flags: Optional[List[str]] = None) -> str:
     p = data.get("patient", {})
     ins = data.get("insurance", {}).get("primary", {})
     phy = data.get("physician", {})
@@ -226,6 +428,19 @@ def make_client_pdf_html(data: dict, flags: list[str] | None = None) -> str:
 
     flags_list = [] if flags is None else [f for f in flags if f]
     flags_html = "None" if len(flags_list) == 0 else ", ".join(flags_list)
+
+    # Build Authorization Notes
+    auth_notes = []
+    if proc.get('authorization_required') or ins.get('authorization_number'):
+        if ins.get('authorization_number'):
+            auth_notes.append(f"Authorization #: {ins.get('authorization_number')}")
+        else:
+            auth_notes.append("Authorization required")
+    carrier_lower = (ins.get('carrier') or '').lower()
+    if 'prominence' in carrier_lower:
+        auth_notes.append('Out of network — Prominence cutoff')
+    if '95811' in (proc.get('cpt') or []) and not proc.get('titration_auto_criteria'):
+        auth_notes.append('Clinical review for 95811 (prior positive study or CPAP issues)')
 
     html = f"""
 <div class="document-template">
@@ -288,7 +503,7 @@ def make_client_pdf_html(data: dict, flags: list[str] | None = None) -> str:
   </section>
   <section>
     <h3>AUTHORIZATION NOTES:</h3>
-    <div>{'Authorization #: ' + ins.get('authorization_number') if ins.get('authorization_number') else 'Not found'}</div>
+    <div>{_val(' — '.join(auth_notes))}</div>
   </section>
   <section>
     <h3>CONFIDENCE LEVEL:</h3>
@@ -308,23 +523,47 @@ def _safe(s: str) -> str:
 
 def suggest_filename(data: dict) -> str:
     p = data.get("patient", {})
+    ins = data.get("insurance", {}).get("primary", {})
     last = p.get("last_name", "Unknown")
     first = p.get("first_name", "Unknown")
     dob = (p.get("dob") or "NA").replace("/", "-")
-    date = (data.get("document_date") or datetime.today().strftime("%Y-%m-%d")).replace("/", "-")
-    return f"{_safe(last)}_{_safe(first)}_{dob}_{date}.pdf"
+    ref_date = (data.get("document_date") or datetime.today().strftime("%Y-%m-%d")).replace("/", "-")
+    carrier = ins.get("carrier") or "UnknownIns"
+    # Prefix with insurance for easy grouping
+    return f"{_safe(carrier)}_{_safe(last)}_{_safe(first)}_{dob}_{ref_date}.pdf"
 
 
 # ----------------------
 # Single & Batch modes
 # ----------------------
-def run_single(text_file: Path, confidence: float | None) -> dict:
+def _compute_status_from_flags(flags: list) -> str:
+    flags = flags or []
+    high_review = {
+        'WRONG_TEST_ORDERED', 'TITRATION_REQUIRES_CLINICAL_REVIEW', 'INSURANCE_NOT_ACCEPTED',
+        'PROMINENCE_CONTRACT_ENDED', 'NOT_REFERRAL_DOCUMENT', 'DME_MENTIONED', 'PEDIATRIC_SPECIAL_HANDLING'
+    }
+    action_flags = {
+        'MISSING_PATIENT_INFO', 'INSURANCE_EXPIRED', 'AUTHORIZATION_REQUIRED', 'MISSING_CHART_NOTES',
+        'NO_TEST_ORDER_FOUND', 'LOW_OCR_CONFIDENCE', 'CONTRADICTORY_INFO'
+    }
+    if any(f in flags for f in high_review):
+        return 'additional_review_required'
+    if any(f in flags for f in action_flags):
+        return 'additional_actions_required'
+    return 'ready_to_schedule'
+
+
+def run_single(text_file: Path, confidence: Optional[float]) -> dict:
     text = read_text(text_file)
     data = extract(text, confidence)
     # Collect flags if extractor produced any; default empty
     flags = data.get("flags", []) if isinstance(data, dict) else []
     pdf_html = make_client_pdf_html(data, flags=flags)
+    qc = run_qc(data) if run_qc else {"errors": [], "warnings": []}
     suggested = suggest_filename(data)
+    status = _compute_status_from_flags(flags)
+    if (qc.get('errors')) and status == 'ready_to_schedule':
+        status = 'additional_actions_required'
     return {
         "success": True,
         "extracted_data": data,
@@ -333,7 +572,7 @@ def run_single(text_file: Path, confidence: float | None) -> dict:
             "individual_pdf_ready": True,
             "quality_checked": True,
             "flags_applied": len(flags) if isinstance(flags, list) else 0,
-            "actions_required": 0,
+            "actions_required": 0 if status == 'ready_to_schedule' else 1,
         },
         # Keep naming consistent with batch results and older frontend checks
         "filename": suggested,
@@ -347,12 +586,12 @@ def run_single(text_file: Path, confidence: float | None) -> dict:
         "flags": flags,
         "actions": data.get("actions", []),
         # QC + status
-        "qc_results": {"errors": [], "warnings": []},
-        "status": "ready_to_schedule",
+        "qc_results": qc,
+        "status": status,
     }
 
 
-def run_batch(files: list[Path], intake_date: str | None) -> dict:
+def run_batch(files: List[Path], intake_date: Optional[str]) -> dict:
     individuals = []
     filename_suggestions = []
     ready = 0
@@ -364,28 +603,32 @@ def run_batch(files: list[Path], intake_date: str | None) -> dict:
         pdf_html = make_client_pdf_html(data, flags=flags)
         suggested = suggest_filename(data)
         filename_suggestions.append(suggested)
+        qc = run_qc(data) if run_qc else {"errors": [], "warnings": []}
+        status = _compute_status_from_flags(flags)
+        if (qc.get('errors')) and status == 'ready_to_schedule':
+            status = 'additional_actions_required'
         individuals.append({
             "source_file": Path(fp).name,
             "success": True,
-            "status": "ready_to_schedule",
+            "status": status,
             "filename": suggested,
             "confidence_score": float(data.get("overall_confidence", 0.85)),
             "flags": flags,
             "actions": data.get("actions", []),
-            "qc_issues": 0,
+            "qc_issues": len((qc.get('errors') or [])) + len((qc.get('warnings') or [])),
+            "qc_results": qc,
             "individual_pdf_ready": True,
             "individual_pdf_content": pdf_html,
         })
-        ready += 1
+        if status == 'ready_to_schedule':
+            ready += 1
 
-    cover_html = f"""
-<div>
-  <h2>Batch Cover Sheet</h2>
-  <p>Intake: {intake_date or datetime.today().strftime('%m/%d/%Y')}</p>
-  <p>Total: {len(files)}</p>
-  <p>Ready: {ready}</p>
-</div>
-"""
+    cover_html = None
+    if render_cover_sheet:
+        try:
+            cover_html = render_cover_sheet(individuals, intake_date).get('html')
+        except Exception:
+            cover_html = None
 
     return {
         "success": True,

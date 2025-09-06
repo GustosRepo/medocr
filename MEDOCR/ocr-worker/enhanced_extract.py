@@ -10,6 +10,56 @@ from datetime import date, datetime
 from typing import Dict, List, Any, Optional, Tuple
 from ocr_preprocessing import OCRPreprocessor, FuzzyPatternMatcher, enhance_extraction_confidence
 from semantic_template_mapper import SemanticTemplateMapper
+import os
+
+def _load_json_safe(p):
+    try:
+        import json
+        with open(p, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _token_windows(text, span, window_chars=80):
+    s, e = span
+    start = max(0, s - window_chars)
+    end = min(len(text), e + window_chars)
+    return text[start:end]
+
+def refine_symptoms(text: str) -> list:
+    """Extract symptoms with negation, subject, and proximity handling."""
+    t = text or ''
+    tl = t.lower()
+    rules_dir = os.path.join(os.path.dirname(__file__), 'rules')
+    symptoms_cfg = _load_json_safe(os.path.join(rules_dir, 'symptoms.json')) or {}
+    negations_cfg = _load_json_safe(os.path.join(rules_dir, 'negations.json')) or {}
+    phrases = symptoms_cfg.get('phrases') or [
+        'snoring', 'loud snoring', 'witnessed apneas', 'apneas', 'gasping', 'choking', 'fatigue', 'morning headaches',
+        'excessive daytime sleepiness', 'hypersomnia', 'insomnia', 'restless sleep'
+    ]
+    neg_words = set((negations_cfg.get('negations') or ['denies','no','not','negative','wnl','within normal limits']))
+    family_terms = ['family history','fh:','fhx','father','mother','sister','brother','wife','husband','spouse','child','kids']
+    normalized = set()
+    for phrase in phrases:
+        pr = phrase.lower()
+        for m in re.finditer(re.escape(pr), tl):
+            ctx = _token_windows(tl, m.span(), 60)
+            # Subject filter: family terms in context → ignore
+            if any(ft in ctx for ft in family_terms):
+                continue
+            # Negation within window
+            if any(nw in ctx for nw in neg_words):
+                continue
+            # Normalize synonyms
+            if pr == 'apneas':
+                normalized.add('witnessed apneas')
+            else:
+                normalized.add(pr)
+    # Return stable list with niceties
+    out = []
+    for s in sorted(normalized):
+        out.append(s)
+    return out
 
 def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str, Any]:
     """
@@ -121,13 +171,59 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
         if c not in cpt_list:
             cpt_list.append(c)
 
+    # --- CPT gating & titration auto-approval criteria ---
+    # Normalize to unique, stable order
+    cpt_list = list(dict.fromkeys(cpt_list))
+
+    # Detect text signals for titration auto-approval
+    text_l = corrected_text.lower()
+    prior_results_indicators = [
+        'previous sleep study', 'prior psg', 'prior hst', 'last test', 'previous psg', 'sleep study showed',
+        'ahi', 'rdi', 'oxygen desaturation', 'desaturation', 'diagnosed with osa', 'positive for sleep apnea'
+    ]
+    cpap_issue_indicators = [
+        'not tolerating pressure', 'not tolerating cpap', 'cannot tolerate cpap', 'pressure too high',
+        'pressure too low', 'not feeling better', 'still tired', 'needs pressure adjustment', 'needs pressure changes'
+    ]
+    # Numeric AHI/RDI positive threshold
+    positive_test = False
+    for m in re.finditer(r'\b(ahi|rdi)\s*[:=]?\s*(\d+(?:\.\d+)?)', text_l):
+        try:
+            val = float(m.group(2))
+            if val >= 5:
+                positive_test = True
+                break
+        except Exception:
+            pass
+    scored_4pct = bool(re.search(r'\b4\s*%\b.*?(?:desat|desaturation|scor)', text_l))
+    has_prior_results = positive_test or any(k in text_l for k in prior_results_indicators) or scored_4pct
+    has_cpap_issues = any(k in text_l for k in cpap_issue_indicators)
+    titration_auto_criteria = bool(has_prior_results or has_cpap_issues)
+
+    # Split-night phrasing
+    split_night_requested = any(kw in text_l for kw in ['split night', 'diagnostic portion', 'therapeutic portion'])
+
+    # If both 95810 and 95811 detected, select one (never both)
+    if '95810' in cpt_list and '95811' in cpt_list:
+        if titration_auto_criteria:
+            # keep 95811 only
+            cpt_list = ['95811']
+        else:
+            # default to diagnostic 95810 if auto criteria not met
+            cpt_list = ['95810']
+
+    # If split night requested without explicit CPT, prefer 95810 unless auto-criteria supports 95811
+    if split_night_requested and not cpt_list:
+        cpt_list = ['95811' if titration_auto_criteria else '95810']
+
     study_type = determine_study_type(cpt_list or extracted_fields.get('cpt_codes', ''))
     form["procedure"] = {
         "cpt": cpt_list,
         "study_requested": extracted_fields.get('study_requested') or extracted_fields.get('study_type') or study_type,
         "description": extracted_fields.get('cpt_descriptions', []),
         "priority": extracted_fields.get('priority', '') or "routine",
-        "indication": extracted_fields.get('indication', '') or extracted_fields.get('primary_diagnosis', '')
+        "indication": extracted_fields.get('indication', '') or extracted_fields.get('primary_diagnosis', ''),
+        "titration_auto_criteria": titration_auto_criteria
     }
     if form["procedure"]["indication"]:
         form["clinical"]["primary_diagnosis"] = form["procedure"]["indication"]
@@ -146,7 +242,12 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
     # Pull common symptoms line if present in free text
     m = re.search(r'Symptoms?:\s*([^\n\r]+)', corrected_text, re.I)
     if m and not form["clinical"]["symptoms"]:
-        form["clinical"]["symptoms"] = [s.strip() for s in re.split(r'[;,]', m.group(1)) if s.strip()]
+        line_symptoms = [s.strip() for s in re.split(r'[;,]', m.group(1)) if s.strip()]
+        form["clinical"]["symptoms"] = line_symptoms
+    # Refine symptoms using context rules (override raw if we have refined findings)
+    refined = refine_symptoms(corrected_text)
+    if refined:
+        form["clinical"]["symptoms"] = refined
 
     # ---- Document / Metadata ----
     # Referral/order date
@@ -177,6 +278,27 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
         "ocr_confidence": ocr_confidence
     }
     form["overall_confidence"] = overall_conf  # alias for UI
+
+    # Pediatric nuance: mark and prefer pediatric cpts if ambiguous
+    try:
+        patient_dob = form.get('patient',{}).get('dob')
+        age = calculate_age_from_dob(patient_dob) if patient_dob else None
+        if age is not None:
+            form['patient']['age'] = age
+        if age is not None and age < 18:
+            form.setdefault('clinical',{})['pediatric'] = True
+            proc = form.setdefault('procedure',{})
+            cpts = proc.get('cpt') or []
+            if '95782' in cpts or '95783' in cpts:
+                pass
+            else:
+                # If we saw generic sleep study terms without clear code, suggest pediatric cpt in description
+                if not cpts and proc.get('study_requested'):
+                    proc.setdefault('description',[])
+                    if 'Suggest pediatric CPT 95782/95783' not in proc['description']:
+                        proc['description'].append('Suggest pediatric CPT 95782/95783')
+    except Exception:
+        pass
 
     # ---- Enrichment: clinical & DME (ensure they run BEFORE return) ----
     try:
@@ -225,7 +347,9 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
     try:
         # Minimal rule-set for now; could be expanded or passed in
         rules = {
-            'carrier_autoflag': ['Kaiser', 'Medicaid', 'Medicare'],
+            # Nevada-specific checks (denied list minimal per spec)
+            'denied_carriers': ['Culinary', 'Intermountain', 'P3 Health', 'Select Health', 'WellCare'],
+            'prominence_contract_end': '2025-10-31',
             'hcpcs': ['E0601', 'E0470', 'E0471', 'E0561'],
         }
         from flag_rules import compute_confidence_bucket  # ensure imported

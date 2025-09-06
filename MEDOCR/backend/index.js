@@ -9,58 +9,48 @@ import { EventEmitter } from "events";
 import { randomBytes } from "crypto";
 import os from "os";
 import { fileURLToPath } from "url";
+import { PDFDocument } from "pdf-lib";
+import { normalizeOcr } from "./normalizer.js";
+// removed duplicate crypto imports; using named randomBytes above
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- Text normalization to improve downstream extraction ---
-function normalizeOcrServer(text = '') {
-  let t = String(text || '');
-  t = t.replace(/\r/g, '\n');
-  t = t.replace(/[ \t]+\n/g, '\n');
-  t = t.replace(/[ \t]{2,}/g, ' ');
-  t = t.replace(/[’‘]/g, "'");
-  t = t.replace(/[“”]/g, '"');
-  t = t.replace(/\bIbs\b/gi, 'lbs');
-  t = t.replace(/\bPuimonary\b/gi, 'Pulmonary');
-  t = t.replace(/\bSpeciallst\b/gi, 'Specialist');
-  t = t.replace(/\bDeseription\b/gi, 'Description');
-  t = t.replace(/\bOlstructive\b/gi, 'Obstructive');
-  t = t.replace(/circumferance/gi, 'circumference');
-  // Fix glued MMDD and year like 00402/002024 -> 04/02/2024
-  t = t.replace(/(Referral\/?order\s*date:\s*)0?(\d{2})(\d{2})\/0{1,2}(\d{4})/i, (_, p, mm, dd, yyyy) => `${p}${mm}/${dd}/${yyyy}`);
-  t = t.replace(/(\b\d{1,2}\/\d{1,2}\/)+00(\d{4}\b)/g, (m) => m.replace('/00', '/'));
-  t = t.replace(/(\b\d{1,2}\/\d{1,2}\/)+0(\d{4}\b)/g, (m) => m.replace('/0', '/'));
-
-  // newline before likely section heads to break run-ons
-  const heads = [
-    'Referral Form','Patient:','DOB','MRN','Insurance (Primary)','Provider:','Specialty:','NPI','Clinic phone','Fax',
-    'Procedure / Study','Requested','CPT','Priority','Indication','Clinical:','Symptoms','Epworth','Mallampati','Tonsil size',
-    'Document / Metadata','Referral/order date','Intake/processing','Extraction method','Flags / Routing'
-  ];
-  const headUnion = heads.map(h => h.replace(/[-/\\^$*+?.()|[\]{}]/g, r => `\\${r}`)).join('|');
-  t = t.replace(new RegExp(`\\s*(?=(?:${headUnion})\\b)`, 'g'), '\n');
-
-  // Fix numbers split across lines
-  t = t.replace(/(\d)[ \t]*\n[ \t]*(\d)/g, '$1$2');
-
-  return t.trim();
-}
+function normalizeOcrServer(text = '') { return normalizeOcr(String(text || '')); }
 
 const backendDir = path.resolve(__dirname);
 const ocrWorkerDir = path.resolve(backendDir, "..", "ocr-worker");
 const workerPath = path.join(ocrWorkerDir, "main.py");
 const fillTemplatePath = path.join(ocrWorkerDir, "fill_template.py");
 const templatePath = path.join(ocrWorkerDir, "template.txt");
+const userRulesPath = path.join(ocrWorkerDir, 'rules', 'user_rules.json');
+
+// Helpers for export root and checklist ledger
+function getExportRoot() {
+  const desktopPath = path.join(os.homedir(), 'Desktop');
+  return process.env.EXPORT_DIR || path.join(desktopPath, 'MEDOCR-Exports');
+}
+function getLedgerDir() {
+  const dir = path.join(getExportRoot(), 'ledger');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 const app = express();
 const allowed = (process.env.CORS_ORIGIN || "").split(",").map(s => s.trim()).filter(Boolean);
 app.use(cors(allowed.length ? { origin: allowed } : {}));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased limit for PDF exports
+
+// Create persistent uploads directory
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 const upload = multer({
-  dest: path.join(os.tmpdir(), "medocr-uploads"),
+  dest: uploadsDir,
   limits: { fileSize: 15 * 1024 * 1024, files: 50 },
   fileFilter: (_req, file, cb) => {
     const ok = [
@@ -268,6 +258,7 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
 
       const resultObj = {
         filename: file.originalname,
+        original_saved_name: undefined,
         text: ocrResult.text,
         avg_conf: ocrResult.avg_conf,
         analysis: enhancedData.procedure ? {
@@ -304,9 +295,40 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
         individual_pdf_content: clientFeatures.pdf_content ? clientFeatures.pdf_content : undefined,
         ready_to_schedule: clientFeatures.status === 'ready_to_schedule'
       };
+
+      // Persist a stable copy of the original upload for later export-combine
+      try {
+        const safeOriginal = (file.originalname || 'upload').replace(/[^A-Za-z0-9._-]+/g, '_');
+        const savedOriginalName = `${Date.now()}_${idx}_${safeOriginal}`;
+        const savedOriginalPath = path.join(uploadsDir, savedOriginalName);
+        try {
+          fs.copyFileSync(imgPath, savedOriginalPath);
+          resultObj.original_saved_name = savedOriginalName;
+        } catch (e) {
+          console.warn('Failed to persist original upload copy:', e.message);
+        }
+      } catch (_) { /* ignore */ }
       return resultObj;
     } finally {
       cleanup();
+    }
+  }
+
+  // Preserve original files for potential export later BEFORE processing
+  // Copy files to permanent location with original names
+  const preservedFiles = {};
+  for (const file of req.files) {
+    const permanentPath = path.join(uploadsDir, file.originalname);
+    try {
+      if (fs.existsSync(file.path)) {
+        fs.copyFileSync(file.path, permanentPath);
+        preservedFiles[file.originalname] = permanentPath;
+        console.log(`Preserved file: ${file.originalname} -> ${permanentPath}`);
+      } else {
+        console.error(`Temporary file not found: ${file.path}`);
+      }
+    } catch (error) {
+      console.error(`Failed to preserve file ${file.originalname}:`, error);
     }
   }
 
@@ -320,7 +342,305 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
     setTimeout(() => progressMap.delete(uploadId), 60 * 1000);
   }
 
-  res.json({ uploadId, results, errorsCount });
+  // Clean up any remaining temporary files
+  req.files.forEach(file => {
+    if (fs.existsSync(file.path)) {
+      fs.unlink(file.path, () => {});
+    }
+  });
+
+  res.json({ uploadId, results, errorsCount, preservedFiles });
+});
+
+// Re-extract from edited OCR text (no file upload)
+app.post('/reextract-text', async (req, res) => {
+  try {
+    const { text, avg_conf } = req.body || {};
+    if (typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid text' });
+    }
+    const pythonCmd = process.env.PYTHON || 'python3';
+    const normalizedText = normalizeOcrServer(text);
+    const tmpPath = path.join(uploadsDir, `edited_${Date.now()}_${Math.random().toString(36).slice(2)}.txt`);
+    fs.writeFileSync(tmpPath, normalizedText);
+
+    function runCommand(cmd, args, options = {}, { timeoutMs = 120000 } = {}) {
+      return new Promise((resolve) => {
+        const p = spawn(cmd, args, options);
+        let out = '';
+        let err = '';
+        let timedOut = false;
+        const killer = setTimeout(() => { timedOut = true; try { p.kill('SIGKILL'); } catch {} }, timeoutMs);
+        p.stdout.on('data', (d) => (out += d.toString()));
+        p.stderr.on('data', (d) => (err += d.toString()));
+        p.on('close', (code) => { clearTimeout(killer); resolve({ code, out, err, timedOut }); });
+      });
+    }
+
+    // Call backend integration in single mode
+    const clientRes = await runCommand(
+      pythonCmd,
+      ['backend_integration.py', '--mode', 'single', '--text-file', tmpPath, '--confidence', String(typeof avg_conf === 'number' ? avg_conf : -1)],
+      { cwd: ocrWorkerDir }
+    );
+
+    try { fs.unlinkSync(tmpPath); } catch {}
+
+    if (clientRes.code !== 0) {
+      return res.status(500).json({ success: false, error: 'Extraction failed', details: (clientRes.err || '').trim() });
+    }
+
+    // Parse JSON from stdout (skip possible logs before first '{')
+    const raw = clientRes.out || '';
+    const brace = raw.indexOf('{');
+    if (brace < 0) return res.status(500).json({ success: false, error: 'Invalid extractor output' });
+    const json = JSON.parse(raw.slice(brace));
+    if (!json || json.success !== true) {
+      return res.status(500).json({ success: false, error: 'Extractor returned non-success' });
+    }
+    // Return a trimmed payload similar to /ocr per-file result
+    return res.json({
+      success: true,
+      enhanced_data: json.extracted_data || {},
+      individual_pdf_content: json.individual_pdf_content || json.pdf_content || undefined,
+      client_features: json.client_features || {},
+      flags: json.flags || [],
+      actions: json.actions || [],
+      qc_results: json.qc_results || {},
+      suggested_filename: json.suggested_filename || '',
+      status: json.status || 'unknown'
+    });
+  } catch (e) {
+    console.error('reextract-text error:', e);
+    return res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// --- Simple rules API ---
+function readUserRules() {
+  try {
+    const txt = fs.readFileSync(userRulesPath, 'utf8');
+    const js = JSON.parse(txt);
+    if (js && Array.isArray(js.rules)) return js;
+    return { version: 1, rules: [] };
+  } catch {
+    return { version: 1, rules: [] };
+  }
+}
+
+function writeUserRules(obj) {
+  fs.writeFileSync(userRulesPath, JSON.stringify(obj, null, 2), 'utf8');
+}
+
+const FIELD_WHITELIST = new Set([
+  'patient.dob', 'patient.mrn', 'patient.phone_home', 'patient.blood_pressure', 'patient.height', 'patient.weight', 'patient.bmi',
+  'patient.first_name', 'patient.last_name', 'patient.email',
+  'physician.name', 'physician.npi', 'physician.clinic_phone', 'physician.fax', 'physician.specialty',
+  'physician.practice', 'physician.supervising',
+  'insurance.primary.carrier', 'insurance.primary.member_id', 'insurance.primary.authorization_number', 'insurance.primary.insurance_verified',
+  'insurance.primary.group', 'insurance.secondary.carrier', 'insurance.secondary.member_id',
+  'procedure.cpt', 'procedure.study_requested', 'procedure.indication',
+  'procedure.description',
+  'clinical.primary_diagnosis', 'clinical.epworth_score', 'clinical.neck_circumference'
+]);
+
+app.get('/rules/list', (_req, res) => {
+  res.json(readUserRules());
+});
+
+app.get('/rules/list-fields', (_req, res) => {
+  res.json({ fields: Array.from(FIELD_WHITELIST) });
+});
+
+app.post('/rules/add', (req, res) => {
+  try {
+    const { field, pattern, flags = 'i', section = null, window = 500, postprocess = [], priority = 100 } = req.body || {};
+    if (!FIELD_WHITELIST.has(field)) return res.status(400).json({ success: false, error: 'Invalid field' });
+    if (!pattern || typeof pattern !== 'string' || pattern.length > 400) return res.status(400).json({ success: false, error: 'Invalid pattern' });
+    const w = Number(window);
+    if (Number.isNaN(w) || w < 100 || w > 2000) return res.status(400).json({ success: false, error: 'Invalid window' });
+    // Basic JS regex compile for sanity (Python will compile again when applying)
+    try { new RegExp(pattern, flags.includes('i') ? 'i' : undefined); } catch { return res.status(400).json({ success: false, error: 'Pattern does not compile' }); }
+    const data = readUserRules();
+      const id = randomBytes(6).toString('hex');
+    data.rules.push({ id, field, pattern, flags, section, window: w, postprocess, priority });
+    writeUserRules(data);
+    res.json({ success: true, id, version: (data.version || 1), count: data.rules.length });
+  } catch (e) {
+    console.error('rules/add error', e);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+app.post('/rules/delete', (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ success: false, error: 'Missing id' });
+    const data = readUserRules();
+    const before = data.rules.length;
+    data.rules = data.rules.filter(r => r.id !== id);
+    writeUserRules(data);
+    res.json({ success: true, removed: before - data.rules.length });
+  } catch (e) {
+    console.error('rules/delete error', e);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+app.post('/rules/toggle', (req, res) => {
+  try {
+    const { id, disabled } = req.body || {};
+    if (!id || typeof disabled !== 'boolean') return res.status(400).json({ success: false, error: 'Missing id/disabled' });
+    const data = readUserRules();
+    const rule = data.rules.find(r => r.id === id);
+    if (!rule) return res.status(404).json({ success: false, error: 'Rule not found' });
+    rule.disabled = disabled;
+    writeUserRules(data);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('rules/toggle error', e);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// Checklist ledger API
+app.get('/checklist/list', async (_req, res) => {
+  try {
+    const dir = getLedgerDir();
+    const files = await fs.promises.readdir(dir);
+    const items = [];
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const js = JSON.parse(await fs.promises.readFile(path.join(dir, f), 'utf8'));
+        items.push(js);
+      } catch (_) {}
+    }
+    items.sort((a,b)=> new Date(b.export_time) - new Date(a.export_time));
+    res.json({ success: true, items });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to read checklist' });
+  }
+});
+
+app.post('/checklist/update', async (req, res) => {
+  try {
+    const { id, status, color, checklist, note } = req.body || {};
+    if (!id) return res.status(400).json({ success: false, error: 'Missing id' });
+    const fp = path.join(getLedgerDir(), `${id}.json`);
+    if (!fs.existsSync(fp)) return res.status(404).json({ success: false, error: 'Record not found' });
+    const js = JSON.parse(await fs.promises.readFile(fp, 'utf8'));
+    if (status) js.status = status;
+    if (color) js.color = color;
+    if (Array.isArray(checklist)) {
+      const map = new Map((js.checklist || []).map(it => [it.key, it]));
+      checklist.forEach(upd => {
+        if (!upd || !upd.key) return;
+        const cur = map.get(upd.key) || { key: upd.key, label: upd.label || upd.key, done: false };
+        if (typeof upd.done === 'boolean') cur.done = upd.done;
+        if (upd.label) cur.label = upd.label;
+        map.set(upd.key, cur);
+      });
+      js.checklist = Array.from(map.values());
+    }
+    if (note) {
+      js.notes = js.notes || [];
+      js.notes.push({ when: new Date().toISOString(), text: String(note) });
+    }
+    await fs.promises.writeFile(fp, JSON.stringify(js, null, 2), 'utf8');
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to update record' });
+  }
+});
+
+// Import existing PDFs under export root and create ledger records for any missing
+app.post('/checklist/import-scan', async (_req, res) => {
+  try {
+    const root = getExportRoot();
+    const ledgerDir = getLedgerDir();
+    // Load existing ledger entries to avoid duplicates (by file.path)
+    const existing = new Set();
+    try {
+      const ledFiles = await fs.promises.readdir(ledgerDir);
+      for (const f of ledFiles) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const js = JSON.parse(await fs.promises.readFile(path.join(ledgerDir, f), 'utf8'));
+          if (js?.file?.path) existing.add(js.file.path);
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // Scan carrier folders one level deep (root/<Carrier>/*.pdf)
+    const rootEntries = await fs.promises.readdir(root, { withFileTypes: true });
+    const carriers = rootEntries.filter(d => d.isDirectory() && d.name !== 'ledger').map(d => d.name);
+    const pdfs = [];
+    for (const c of carriers) {
+      const dir = path.join(root, c);
+      try {
+        const files = await fs.promises.readdir(dir);
+        for (const f of files) {
+          if (f.toLowerCase().endsWith('.pdf')) pdfs.push({ carrierFolder: c, file: f, full: path.join(dir, f) });
+        }
+      } catch (_) {}
+    }
+
+    let imported = 0;
+    const parseFromName = (name) => {
+      // "Last, First | DOB: MM/DD/YYYY | Insurance: Carrier | ID: Member"
+      const m = /^(.+?),\s+(.+?)\s+\|\s+DOB:\s+([0-1]?\d\/[0-3]?\d\/\d{4})\s+\|\s+Insurance:\s+([^|]+?)\s+\|\s+ID:\s+(.+)$/i.exec(name.replace(/\.pdf$/i, ''));
+      if (!m) return null;
+      return { last: m[1].trim(), first: m[2].trim(), dob: m[3].trim(), insurance: m[4].trim(), member: m[5].trim() };
+    };
+
+    for (const p of pdfs) {
+      if (existing.has(p.full)) continue;
+      const parsed = parseFromName(p.file);
+      if (!parsed) continue;
+      const id = randomBytes(8).toString('hex');
+      const stat = await fs.promises.stat(p.full);
+      const record = {
+        id,
+        export_time: stat.mtime.toISOString(),
+        patient: { first_name: parsed.first, last_name: parsed.last, dob: parsed.dob },
+        insurance: { carrier: parsed.insurance, member_id: parsed.member },
+        document_date: '',
+        avg_conf: null,
+        flags: [],
+        actions: [],
+        status: 'new',
+        color: 'gray',
+        checklist: [
+          { key: 'verify_demographics', label: 'Verify demographics', done: false },
+          { key: 'verify_insurance', label: 'Verify insurance', done: false },
+          { key: 'submit_auth', label: 'Submit prior authorization', done: false },
+          { key: 'attach_chart_notes', label: 'Attach chart notes', done: false },
+          { key: 'upload_emr', label: 'Upload to EMR', done: false },
+          { key: 'schedule_patient', label: 'Schedule patient', done: false },
+          { key: 'patient_contacted', label: 'Patient contacted', done: false },
+          // Common additional actions
+          { key: 'gen_ins_verification_form', label: 'Generate insurance verification form', done: false },
+          { key: 'sleep_questionnaire_call', label: 'Insufficient information - sleep questionnaire required, call patient', done: false },
+          { key: 'order_correct_study', label: 'Wrong test ordered - need order for complete sleep study due to no testing in last 5 years', done: false },
+          { key: 'fax_uts', label: 'Out of network - fax UTS → Generate UTS referral form', done: false },
+          { key: 'auth_submit_fax', label: 'Authorization required - submit/fax request → Generate authorization form', done: false },
+          { key: 'call_provider_demographics', label: 'Missing demographics - call provider for complete patient information', done: false },
+          { key: 'provider_followup_docs', label: 'Provider follow-up required - obtain additional clinical documentation', done: false },
+          { key: 'verify_coverage_current', label: 'Insurance expired/terminated - verify current coverage', done: false },
+          { key: 'pediatric_specialist', label: 'Pediatric specialist referral required', done: false },
+          { key: 'dme_evaluation_needed', label: 'DME evaluation needed before testing', done: false }
+        ],
+        file: { filename: p.file, path: p.full, carrier_folder: p.carrierFolder }
+      };
+      await fs.promises.writeFile(path.join(ledgerDir, `${id}.json`), JSON.stringify(record, null, 2), 'utf8');
+      imported++;
+    }
+    res.json({ success: true, imported, scanned: pdfs.length });
+  } catch (e) {
+    console.error('import-scan error', e);
+    res.status(500).json({ success: false, error: 'Import scan failed' });
+  }
 });
 
 // New endpoint for batch processing with client requirements (cover sheets, etc.)
@@ -389,6 +709,463 @@ app.get('/progress/:id', (req, res) => {
     clearInterval(heartbeat);
     em.off('progress', onProgress);
   });
+});
+
+// Feedback endpoints
+const feedbackDir = path.join(__dirname, 'feedback');
+if (!fs.existsSync(feedbackDir)) {
+  fs.mkdirSync(feedbackDir, { recursive: true });
+}
+
+app.post('/feedback', async (req, res) => {
+  try {
+    const { feedback, type, data, comment, comments, timestamp, ...ocrData } = req.body;
+    
+    // Handle both 'feedback' (from frontend) and 'type' fields
+    const feedbackType = feedback === 'up' ? 'positive' : feedback === 'down' ? 'negative' : type;
+    
+    const feedbackEntry = {
+      timestamp: timestamp || new Date().toISOString(),
+      type: feedbackType,
+      data: data || ocrData, // OCR data that was being reviewed
+      comment: comment || comments || null
+    };
+    
+    // Save to NDJSON file (one JSON object per line)
+    const today = new Date().toISOString().split('T')[0];
+    const feedbackFile = path.join(feedbackDir, `feedback-${today}.ndjson`);
+    
+    await fs.promises.appendFile(feedbackFile, JSON.stringify(feedbackEntry) + '\n', 'utf8');
+    
+    res.json({ success: true, message: 'Feedback recorded' });
+  } catch (error) {
+    console.error('Error saving feedback:', error);
+    res.status(500).json({ success: false, error: 'Failed to save feedback' });
+  }
+});
+
+app.get('/feedback/summary', async (req, res) => {
+  try {
+    const files = await fs.promises.readdir(feedbackDir);
+    const ndjsonFiles = files.filter(f => f.endsWith('.ndjson'));
+    
+    let totalPositive = 0;
+    let totalNegative = 0;
+    let recentFeedback = [];
+    
+    for (const file of ndjsonFiles) {
+      const filePath = path.join(feedbackDir, file);
+      const content = await fs.promises.readFile(filePath, 'utf8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.type === 'positive') totalPositive++;
+          if (entry.type === 'negative') totalNegative++;
+          recentFeedback.push(entry);
+        } catch (e) {
+          console.error('Error parsing feedback line:', e);
+        }
+      }
+    }
+    
+    // Sort by timestamp and take most recent 50
+    recentFeedback.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    recentFeedback = recentFeedback.slice(0, 50);
+    
+    res.json({
+      summary: {
+        totalPositive,
+        totalNegative,
+        total: totalPositive + totalNegative
+      },
+      recentFeedback
+    });
+  } catch (error) {
+    console.error('Error reading feedback:', error);
+    res.status(500).json({ success: false, error: 'Failed to read feedback' });
+  }
+});
+
+// Helper function to convert image to PDF with better quality
+async function convertImageToPdf(imagePath) {
+  try {
+    const imageBytes = fs.readFileSync(imagePath);
+    const pdf = await PDFDocument.create();
+    
+    let image;
+    const ext = path.extname(imagePath).toLowerCase();
+    
+    if (ext === '.png') {
+      image = await pdf.embedPng(imageBytes);
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      image = await pdf.embedJpg(imageBytes);
+    } else {
+      throw new Error(`Unsupported image format: ${ext}`);
+    }
+    
+    // Get original image dimensions
+    const { width, height } = image;
+    
+    // Create page with image dimensions or A4, whichever fits better
+    const maxWidth = 595; // A4 width in points
+    const maxHeight = 842; // A4 height in points
+    
+    let pageWidth = width;
+    let pageHeight = height;
+    
+    // If image is too large, scale down to fit A4 while maintaining aspect ratio
+    if (width > maxWidth || height > maxHeight) {
+      const scale = Math.min(maxWidth / width, maxHeight / height);
+      pageWidth = width * scale;
+      pageHeight = height * scale;
+    }
+    
+    const page = pdf.addPage([pageWidth, pageHeight]);
+    
+    // Draw image to fill the entire page
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: pageWidth,
+      height: pageHeight,
+    });
+    
+    return await pdf.save();
+  } catch (error) {
+    console.error('Error converting image to PDF:', error);
+    throw error;
+  }
+}
+
+// Helper function to create patient-based filename
+function createPatientFilename(patientData) {
+  try {
+    const lastName = patientData.last_name || patientData['Last Name'] || 'Unknown';
+    const firstName = patientData.first_name || patientData['First Name'] || 'Unknown';
+    const dob = patientData.dob || patientData.DOB || patientData['Date of Birth'] || 'Unknown';
+    const insurance = patientData.insurance || patientData['Insurance'] || patientData.carrier || 'Unknown';
+    const memberId = patientData.member_id || patientData['Member ID'] || patientData.id || 'Unknown';
+    
+    // Format DOB to MM/DD/YYYY if it's in different format
+    let formattedDOB = dob;
+    if (dob !== 'Unknown') {
+      const dobDate = new Date(dob);
+      if (!isNaN(dobDate.getTime())) {
+        formattedDOB = `${String(dobDate.getMonth() + 1).padStart(2, '0')}/${String(dobDate.getDate()).padStart(2, '0')}/${dobDate.getFullYear()}`;
+      }
+    }
+    
+    // Create filename and sanitize invalid characters
+    const filename = `${lastName}, ${firstName} | DOB: ${formattedDOB} | Insurance: ${insurance} | ID: ${memberId}`;
+    
+    // Replace invalid filename characters
+    return filename.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
+  } catch (error) {
+    console.error('Error creating patient filename:', error);
+    return `Unknown_Patient_${Date.now()}`;
+  }
+}
+
+// Export combined PDF endpoint
+app.post('/export-combined', async (req, res) => {
+  try {
+    const { originalFilename, patientData, individualPatientPdfBase64 } = req.body;
+    
+    if (!patientData || !individualPatientPdfBase64) {
+      return res.status(400).json({ success: false, error: 'Missing required data' });
+    }
+    
+    // Create desktop export directory
+    const desktopPath = path.join(os.homedir(), 'Desktop');
+    const exportRoot = process.env.EXPORT_DIR || path.join(desktopPath, 'MEDOCR-Exports');
+    const insCarrier = (patientData.insurance || patientData['Insurance'] || patientData.carrier || 'UnknownIns');
+    const safeCarrier = String(insCarrier).replace(/[<>:"/\\|?*]+/g, '_').replace(/\s+/g, '_').trim() || 'UnknownIns';
+    const exportDir = path.join(exportRoot, safeCarrier);
+    if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+    
+    // Generate patient-based filename
+    const baseFilename = createPatientFilename(patientData);
+    const outputPath = path.join(exportDir, `${baseFilename}.pdf`);
+    
+    // Create new PDF document
+    const combinedPdf = await PDFDocument.create();
+    
+    // Add Individual Patient PDF Form FIRST (the processed data)
+    try {
+      const individualPdfBytes = Buffer.from(individualPatientPdfBase64, 'base64');
+      const individualPdf = await PDFDocument.load(individualPdfBytes);
+      const individualPages = await combinedPdf.copyPages(individualPdf, individualPdf.getPageIndices());
+      individualPages.forEach((page) => combinedPdf.addPage(page));
+      console.log('Added Individual Patient PDF Form pages');
+    } catch (error) {
+      return res.status(400).json({ success: false, error: 'Invalid PDF data for patient form' });
+    }
+    
+    // Add original PDF/Image SECOND (the source document for reference)
+    if (originalFilename) {
+      const originalFilePath = path.join(uploadsDir, originalFilename);
+      if (fs.existsSync(originalFilePath)) {
+        try {
+          const ext = path.extname(originalFilename).toLowerCase();
+          
+          if (ext === '.pdf') {
+            // Handle PDF files
+            const originalPdfBytes = fs.readFileSync(originalFilePath);
+            const originalPdf = await PDFDocument.load(originalPdfBytes);
+            const originalPages = await combinedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+            originalPages.forEach((page) => combinedPdf.addPage(page));
+            console.log('Added original PDF pages');
+          } else if (['.png', '.jpg', '.jpeg', '.tiff'].includes(ext)) {
+            // Handle image files - convert to PDF first
+            const imagePdfBytes = await convertImageToPdf(originalFilePath);
+            const imagePdf = await PDFDocument.load(imagePdfBytes);
+            const imagePages = await combinedPdf.copyPages(imagePdf, imagePdf.getPageIndices());
+            imagePages.forEach((page) => combinedPdf.addPage(page));
+            console.log('Added original image as PDF pages');
+          } else {
+            console.log('Unsupported original file format:', ext);
+          }
+        } catch (error) {
+          console.log('Could not load original file, continuing with patient form only:', error.message);
+        }
+      } else {
+        console.log('Original file not found at:', originalFilePath);
+        console.log('Available files in uploads:', fs.readdirSync(uploadsDir));
+      }
+    }
+    
+    // Save combined PDF
+    const combinedPdfBytes = await combinedPdf.save();
+    fs.writeFileSync(outputPath, combinedPdfBytes);
+    
+    res.json({
+      success: true,
+      message: 'Combined PDF exported successfully',
+      filename: `${baseFilename}.pdf`,
+      path: outputPath
+    });
+    
+  } catch (error) {
+    console.error('Error exporting combined PDF:', error);
+    res.status(500).json({ success: false, error: 'Failed to export combined PDF' });
+  }
+});
+
+// NEW: Server-side generation of patient form PDF (avoids html2canvas blank issues)
+app.post('/export-combined-data', async (req, res) => {
+  try {
+    const { originalFilename, enhancedData, avgConf, flags = [], actions = [] } = req.body;
+    if (!enhancedData) {
+      return res.status(400).json({ success: false, error: 'Missing enhancedData' });
+    }
+
+    // Derive patientData for filename
+    const p = enhancedData.patient || {};
+    const ins = (enhancedData.insurance && enhancedData.insurance.primary) || {};
+    const patientData = {
+      last_name: p.last_name || 'Unknown',
+      first_name: p.first_name || 'Unknown',
+      dob: p.dob || 'Unknown',
+      insurance: ins.carrier || 'Unknown',
+      member_id: ins.member_id || 'Unknown'
+    };
+
+    // Helper to build patient form PDF using pdf-lib
+    function buildPatientFormPdf(data) {
+      return PDFDocument.create().then(async pdf => {
+        const page = pdf.addPage([612, 792]); // Letter size
+        const { width, height } = page.getSize();
+        const margin = 40;
+        let y = height - margin;
+        const lineGap = 16;
+
+        const digits = (s) => String(s || '').replace(/\D/g, '');
+        const last10 = (s) => {
+          const d = digits(s);
+          return d.length >= 10 ? d.slice(-10) : d;
+        };
+        const dedupePhoneFax = (phone, fax) => {
+          const p10 = last10(phone);
+          const f10 = last10(fax);
+          if (p10 && f10 && p10 === f10) return phone || fax || 'Not found';
+          if (phone && fax) return `${phone} | Fax: ${fax}`;
+          return phone || fax || 'Not found';
+        };
+        const formatPercent = (v) => {
+          if (typeof v !== 'number' || Number.isNaN(v)) return 'N/A';
+          const val = v <= 1 ? v * 100 : v;
+          return `${val.toFixed(1)}%`;
+        };
+
+        const drawLine = (text, fontSize = 11, opts = {}) => {
+          if (y < margin + 40) { // new page threshold
+            y = height - margin;
+            pdf.addPage([612, 792]);
+            return drawLine(text, fontSize, opts);
+          }
+          const pageRef = pdf.getPages()[pdf.getPageCount() - 1];
+            pageRef.drawText(String(text || ''), {
+              x: margin,
+              y: y - fontSize,
+              size: fontSize,
+              ...opts
+            });
+          y -= lineGap;
+        };
+
+        const section = (title) => {
+          drawLine('');
+          drawLine(title, 12, { });
+        };
+
+        // Title
+        drawLine('Individual Patient PDF Form', 16);
+        drawLine(`Generated: ${new Date().toLocaleString()}`, 8);
+
+        section('PATIENT');
+        drawLine(`Name: ${p.first_name || 'Not found'} ${p.last_name || ''}`);
+        drawLine(`DOB: ${p.dob || 'Not found'}`);
+        drawLine(`MRN: ${p.mrn || 'Not found'}`);
+        // Only use explicit home phone for the patient; avoid clinic phone bleed-through
+        drawLine(`Phone(Home): ${p.phone_home || 'Not found'}`);
+        drawLine(`Blood Pressure: ${p.blood_pressure || 'Not found'}`);
+        drawLine(`BMI: ${p.bmi || 'Not found'} | Height: ${p.height || '—'} | Weight: ${p.weight || '—'}`);
+
+        section('INSURANCE');
+        drawLine(`Carrier: ${ins.carrier || 'Not found'}`);
+        drawLine(`Member ID: ${ins.member_id || 'Not found'}`);
+        drawLine(`Authorization #: ${ins.authorization_number || 'Not found'}`);
+        drawLine(`Verified: ${ins.insurance_verified || 'No'}`);
+
+        const phy = enhancedData.physician || {};
+        section('PHYSICIAN');
+        drawLine(`Name: ${phy.name || 'Not found'}`);
+        drawLine(`Specialty: ${phy.specialty || 'Not found'}`);
+        drawLine(`NPI: ${phy.npi || 'Not found'}`);
+        drawLine(`Clinic Phone: ${dedupePhoneFax(phy.clinic_phone, phy.fax)}`);
+
+        const proc = enhancedData.procedure || {};
+        section('PROCEDURE');
+        drawLine(`Study Requested: ${proc.study_requested || 'Not found'}`);
+        drawLine(`CPT: ${(proc.cpt && proc.cpt.join(', ')) || 'Not found'}`);
+        drawLine(`Indication: ${proc.indication || proc.study_requested || 'Not found'}`);
+
+        const clin = enhancedData.clinical || {};
+        section('CLINICAL');
+        drawLine(`Primary Dx: ${clin.primary_diagnosis || 'Not found'}`);
+        drawLine(`Epworth: ${clin.epworth_score || 'Not found'}`);
+        drawLine(`Symptoms: ${(clin.symptoms && clin.symptoms.join(', ')) || 'Not found'}`);
+  // Neck circumference actually lives under clinical in enhancedData; previous code looked under patient (p)
+  drawLine(`Neck Circumference: ${clin.neck_circumference || 'Not found'}`);
+
+        section('METADATA');
+        drawLine(`Document Date: ${enhancedData.document_date || 'Not found'}`);
+        drawLine(`Intake Date: ${enhancedData.intake_date || 'Not found'}`);
+        drawLine(`Extraction Method: ${enhancedData.extraction_method || 'Not found'}`);
+        const ocVal = (typeof enhancedData.overall_confidence === 'number')
+          ? enhancedData.overall_confidence
+          : (typeof avgConf === 'number' ? (avgConf > 1 ? avgConf / 100 : avgConf) : null);
+        drawLine(`Overall Confidence: ${ocVal === null ? 'N/A' : formatPercent(ocVal)}`);
+
+        return pdf.save();
+      });
+    }
+
+    const patientFormBytes = await buildPatientFormPdf(enhancedData);
+
+    // Combine with original (reuse existing logic but simpler)
+    const exportRoot = getExportRoot();
+    const carrier = (patientData.insurance || 'UnknownIns');
+    const safeCarrier = String(carrier).replace(/[<>:"/\\|?*]+/g, '_').replace(/\s+/g, '_').trim() || 'UnknownIns';
+    const exportDir = path.join(exportRoot, safeCarrier);
+    if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+    const baseFilename = createPatientFilename(patientData);
+    const outputPath = path.join(exportDir, `${baseFilename}.pdf`);
+
+    const combinedPdf = await PDFDocument.create();
+    // Add patient form first
+    try {
+      const pfDoc = await PDFDocument.load(patientFormBytes);
+      const pfPages = await combinedPdf.copyPages(pfDoc, pfDoc.getPageIndices());
+      pfPages.forEach(p => combinedPdf.addPage(p));
+    } catch (e) {
+      return res.status(500).json({ success: false, error: 'Failed to build patient form PDF' });
+    }
+
+    // Add original file pages
+    if (originalFilename) {
+      const originalFilePath = path.join(uploadsDir, originalFilename);
+      if (fs.existsSync(originalFilePath)) {
+        try {
+          const ext = path.extname(originalFilename).toLowerCase();
+          if (ext === '.pdf') {
+            const origBytes = fs.readFileSync(originalFilePath);
+            const origDoc = await PDFDocument.load(origBytes);
+            const origPages = await combinedPdf.copyPages(origDoc, origDoc.getPageIndices());
+            origPages.forEach(p => combinedPdf.addPage(p));
+          } else if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+            const imgPdfBytes = await convertImageToPdf(originalFilePath);
+            const imgDoc = await PDFDocument.load(imgPdfBytes);
+            const imgPages = await combinedPdf.copyPages(imgDoc, imgDoc.getPageIndices());
+            imgPages.forEach(p => combinedPdf.addPage(p));
+          }
+        } catch (e) {
+          console.log('Could not append original file:', e.message);
+        }
+      }
+    }
+
+    const outBytes = await combinedPdf.save();
+    fs.writeFileSync(outputPath, outBytes);
+
+    // Append checklist ledger record
+    try {
+      const id = randomBytes(8).toString('hex');
+      const ledgerDir = getLedgerDir();
+      const rec = {
+        id,
+        export_time: new Date().toISOString(),
+        patient: { first_name: p.first_name || '', last_name: p.last_name || '', dob: p.dob || '' },
+        insurance: { carrier: ins.carrier || '', member_id: ins.member_id || '' },
+        document_date: enhancedData.document_date || '',
+        avg_conf: typeof avgConf === 'number' ? avgConf : null,
+        flags, actions,
+        status: 'new',
+        color: 'gray',
+        checklist: [
+          { key: 'verify_demographics', label: 'Verify demographics', done: false },
+          { key: 'verify_insurance', label: 'Verify insurance', done: false },
+          { key: 'submit_auth', label: 'Submit prior authorization', done: false },
+          { key: 'attach_chart_notes', label: 'Attach chart notes', done: false },
+          { key: 'upload_emr', label: 'Upload to EMR', done: false },
+          { key: 'schedule_patient', label: 'Schedule patient', done: false },
+          { key: 'patient_contacted', label: 'Patient contacted', done: false },
+          // Common additional actions
+          { key: 'gen_ins_verification_form', label: 'Generate insurance verification form', done: false },
+          { key: 'sleep_questionnaire_call', label: 'Insufficient information - sleep questionnaire required, call patient', done: false },
+          { key: 'order_correct_study', label: 'Wrong test ordered - need order for complete sleep study due to no testing in last 5 years', done: false },
+          { key: 'fax_uts', label: 'Out of network - fax UTS → Generate UTS referral form', done: false },
+          { key: 'auth_submit_fax', label: 'Authorization required - submit/fax request → Generate authorization form', done: false },
+          { key: 'call_provider_demographics', label: 'Missing demographics - call provider for complete patient information', done: false },
+          { key: 'provider_followup_docs', label: 'Provider follow-up required - obtain additional clinical documentation', done: false },
+          { key: 'verify_coverage_current', label: 'Insurance expired/terminated - verify current coverage', done: false },
+          { key: 'pediatric_specialist', label: 'Pediatric specialist referral required', done: false },
+          { key: 'dme_evaluation_needed', label: 'DME evaluation needed before testing', done: false }
+        ],
+        file: { filename: `${baseFilename}.pdf`, path: outputPath, carrier_folder: safeCarrier }
+      };
+      fs.writeFileSync(path.join(ledgerDir, `${id}.json`), JSON.stringify(rec, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('Checklist ledger write failed:', e.message);
+    }
+
+    res.json({ success: true, filename: `${baseFilename}.pdf`, path: outputPath, method: 'server-generated' });
+  } catch (err) {
+    console.error('Server export-combined-data error:', err);
+    res.status(500).json({ success: false, error: 'Internal error creating PDF' });
+  }
 });
 
 const port = process.env.PORT || 5000;

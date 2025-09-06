@@ -1,0 +1,53 @@
+{
+  "referral_date": "12/01/2025",
+  "referral_id": "REF-MASTER-TEST-0001",
+  "patient": {
+    "name": "Alex Master",
+    "dob": "03/15/2010",
+    "age": 15,
+    "sex": "M",
+    "mrn": "MRN-TEST-0001",
+    "phone": "(555) 000-0000"
+  },
+  "vitals": {
+    "height": "5'0\"",
+    "weight": "240 lbs",
+    "bmi": 42.0,
+    "blood_pressure": "140/95",
+    "neck_circumference_in": 18.0,
+    "mallampati_score": "IV"
+  },
+  "insurance": {
+    "primary": {
+      "carrier": "Prominence",
+      "member_id": "PR-12345",
+      "group_id": "GRP-EX",
+      "plan_type": "PPO"
+    }
+  },
+  "physician": {
+    "referring": {
+      "name": "Dr. Test Physician, MD",
+      "specialty": "Pulmonary",
+      "npi": "1234567890"
+    }
+  },
+  "procedure": {
+    "study_type": "Split Night Study",
+    "cpt_codes": ["95810", "95811", "95782"],
+    "priority": "urgent",
+    "authorization_required": true,
+    "authorization_number": "AUTH-XYZ123"
+  },
+  "clinical": {
+    "chief_complaint": "Evaluate and treat; Denies snoring but witnessed apneas reported by spouse; Prior PSG showed severe OSA (AHI: 24, 4% desaturation scoring). CPAP user with pressure too high and mask leaking; Needs pressure adjustment; DME noted: E0601, A7034; Apria and Lincare involved. Patient uses wheelchair; seizure disorder history; pacemaker; oxygen dependent. COVID positive last month; MRSA carrier. Interpreter needed (Spanish speaking); wheelchair accessible. Coverage ended 01/01/2020. Family history: father snores (ignore).",
+    "epworth_score": 18,
+    "symptoms": [
+      "witnessed apneas",
+      "gasping",
+      "fatigue",
+      "morning headaches"
+    ],
+    "primary_diagnosis": "G47.33 Obstructive Sleep Apnea"
+  }
+}
