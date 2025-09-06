@@ -8,6 +8,7 @@ import json
 import re
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any
+import os, json
 from difflib import SequenceMatcher
 
 
@@ -122,6 +123,16 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
         List of flag IDs
     """
     flags = []
+    # Load external insurance rules if not provided
+    try:
+        if not rules or not rules.get('denied_carriers'):
+            rules_dir = os.path.join(os.path.dirname(__file__), 'rules')
+            ins_path = os.path.join(rules_dir, 'insurance.json')
+            if os.path.exists(ins_path):
+                data = json.load(open(ins_path,'r'))
+                rules = { **(rules or {}), **data }
+    except Exception:
+        pass
     text_lower = ocr_text.lower()
     
     # === CORE FLAGS ===
@@ -149,7 +160,12 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
         flags.append('NO_TEST_ORDER_FOUND')
     
     # WRONG_TEST_ORDERED
-    cpt = procedure.get('cpt', '')
+    cpt_val = procedure.get('cpt', '')
+    # Normalize CPT to a single primary code for gating checks (list -> first)
+    if isinstance(cpt_val, list):
+        cpt = cpt_val[0] if cpt_val else ''
+    else:
+        cpt = cpt_val
     symptoms = parsed.get('clinical', {}).get('symptoms', [])
     
     if cpt == '95811':  # Titration study
@@ -163,7 +179,7 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     
     # TITRATION_REQUIRES_CLINICAL_REVIEW
     if cpt == '95811':
-        auto_criteria = procedure.get('titration_auto_criteria', False)
+        auto_criteria = bool(procedure.get('titration_auto_criteria', False))
         if not auto_criteria:
             flags.append('TITRATION_REQUIRES_CLINICAL_REVIEW')
     
@@ -175,7 +191,8 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     
     # MISSING_PATIENT_INFO
     patient = parsed.get('patient', {})
-    if not patient.get('dob') or not patient.get('mrn') or not patient.get('phones'):
+    has_phone = bool(patient.get('phones')) or bool(patient.get('phone_home')) or bool(patient.get('phone'))
+    if not patient.get('dob') or not patient.get('mrn') or not has_phone:
         flags.append('MISSING_PATIENT_INFO')
     
     # === INSURANCE FLAGS ===
@@ -183,9 +200,10 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     insurance = parsed.get('insurance', {}).get('primary', {})
     carrier = insurance.get('carrier', '').lower()
     
-    # INSURANCE_NOT_ACCEPTED
-    autoflag_carriers = rules.get('carrier_autoflag', [])
-    if any(ac.lower() in carrier for ac in autoflag_carriers):
+    # INSURANCE_NOT_ACCEPTED (config-driven)
+    denied_defaults = ['culinary','intermountain','p3 health','select health','wellcare']
+    denied_carriers = [d.lower() for d in rules.get('denied_carriers', [])] or denied_defaults
+    if any(dc in carrier for dc in denied_carriers):
         flags.append('INSURANCE_NOT_ACCEPTED')
     
     # PROMINENCE_CONTRACT_ENDED
@@ -241,6 +259,9 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     
     if cpt in pediatric_cpts or (age and age < 18):
         flags.append('PEDIATRIC_SPECIAL_HANDLING')
+    # Pediatric wrong code if adult CPT used for <18
+    if age is not None and age < 18 and cpt in {'95810','95811'}:
+        flags.append('WRONG_TEST_ORDERED')
     
     # MOBILITY_ALERT
     vitals = clinical.get('vitals', {})

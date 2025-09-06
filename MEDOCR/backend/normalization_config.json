@@ -1,0 +1,30 @@
+{
+  "dateLabels": [
+    "DOB",
+    "Date of Birth",
+    "Document Date",
+    "Referral Date",
+    "Referral/order date",
+    "Intake",
+    "Intake/processing",
+    "Intake Date"
+  ],
+  "misspellings": {
+    "Ibs": "lbs",
+    "Puimonary": "Pulmonary",
+    "Speciallst": "Specialist",
+    "Deseription": "Description",
+    "Olstructive": "Obstructive",
+    "Vkrified": "Verified",
+    "circumferance": "circumference"
+  },
+  "ungluePhrases": {
+    "Authorizationnumber": "Authorization number",
+    "BloodPressure": "Blood Pressure",
+    "VerifiedConfirmed": "Verified Confirmed"
+  },
+  "cptCorrections": {
+    "958711": "95811"
+  }
+}
+
