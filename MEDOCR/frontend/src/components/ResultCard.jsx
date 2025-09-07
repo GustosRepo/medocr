@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import FeedbackPanel from './panels/FeedbackPanel';
+import ExportPanel from './panels/ExportPanel';
 
 export default function ResultCard({ r, idx, files, toggleRowCollapse, collapsedRows, collapsedSections, toggleSectionCollapse, handleFeedback, handleExportCombinedPdf, openHtmlInNewWindow, setEditTarget, setEditText, isSectionCollapsed }) {
   const resultId = r.id || r.suggested_filename || r.filename || `res-${idx}`;
@@ -34,25 +36,8 @@ export default function ResultCard({ r, idx, files, toggleRowCollapse, collapsed
 
           <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
             <div className="flex gap-8 items-start flex-wrap">
-              <div className="flex-1 min-w-[280px]">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-sm font-bold tracking-wide text-gray-700 uppercase">💭 Feedback</span>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button type="button" onClick={() => handleFeedback(resultId, 'up')} className="btn-small btn-outline">👍 Looks Good</button>
-                  <button type="button" onClick={() => handleFeedback(resultId, 'down')} className="btn-small btn-outline">👎 Needs Fix</button>
-                </div>
-              </div>
-
-              <div className="flex-1 min-w-[280px]">
-                <div className="flex items-center gap-2 mb-3"><span className="text-sm font-bold tracking-wide text-gray-700 uppercase">📤 Export</span></div>
-                <div className="flex gap-2 flex-wrap">
-                  <button type="button" onClick={() => handleExportCombinedPdf(resultId, r)} className="btn-primary btn-small">📄 Export PDF</button>
-                  { (r.client_features && r.client_features.individual_pdf_ready) || r.individual_pdf_content ? (
-                    <button type="button" className="btn-outline btn-small" onClick={() => openHtmlInNewWindow(r.individual_pdf_content || r.client_features.individual_pdf_content)}>View Template</button>
-                  ) : null }
-                </div>
-              </div>
+              <FeedbackPanel resultId={resultId} onFeedback={handleFeedback} />
+              <ExportPanel resultId={resultId} r={r} onExport={handleExportCombinedPdf} openHtmlInNewWindow={openHtmlInNewWindow} />
             </div>
           </div>
 

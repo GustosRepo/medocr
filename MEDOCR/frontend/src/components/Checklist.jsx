@@ -1,12 +1,73 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { checklistImportScan as apiChecklistImportScan, checklistUpdate as apiChecklistUpdate, checklistList as apiChecklistList } from '../lib/api';
 
 export default function Checklist(props) {
   const {
-    checklistItems, results, searchTerm, setSearchTerm,
-    statusFilter, setStatusFilter, carrierFilter, setCarrierFilter,
-    loadChecklist, groupBy, setGroupBy, noteDrafts, setNoteDrafts,
-    mapActionToCommon
-  } = props;
+    checklistItems: pChecklistItems,
+    results: pResults,
+    searchTerm: pSearchTerm,
+    setSearchTerm: pSetSearchTerm,
+    statusFilter: pStatusFilter,
+    setStatusFilter: pSetStatusFilter,
+    carrierFilter: pCarrierFilter,
+    setCarrierFilter: pSetCarrierFilter,
+    loadChecklist: pLoadChecklist,
+    groupBy: pGroupBy,
+    setGroupBy: pSetGroupBy,
+    noteDrafts: pNoteDrafts,
+    setNoteDrafts: pSetNoteDrafts,
+    mapActionToCommon: pMapActionToCommon,
+  } = props || {};
+
+  // Fallback self-managed state if not provided via props (App shell)
+  const [localChecklistItems, setLocalChecklistItems] = useState([]);
+  const [localResults] = useState([]);
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const [localStatusFilter, setLocalStatusFilter] = useState('all');
+  const [localCarrierFilter, setLocalCarrierFilter] = useState('');
+  const [localGroupBy, setLocalGroupBy] = useState('none');
+  const [localNoteDrafts, setLocalNoteDrafts] = useState({});
+
+  const mapActionToCommon = pMapActionToCommon || ((a) => {
+    const s = String(a || '').toLowerCase();
+    if (!s) return null;
+    if (s.includes('verification') || (s.includes('no chart') && s.includes('insurance'))) return 'Generate insurance verification form';
+    if (s.includes('questionnaire') || (s.includes('insufficient') && s.includes('information')) || s.includes('call patient')) return 'Insufficient information - sleep questionnaire required, call patient';
+    if (s.includes('wrong test')) return 'Wrong test ordered - need order for complete sleep study due to no testing in last 5 years';
+    if (s.includes('out of network') || s.includes('uts')) return 'Out of network - fax UTS → Generate UTS referral form';
+    if (s.includes('authorization')) return 'Authorization required - submit/fax request → Generate authorization form';
+    if (s.includes('missing demographics') || s.includes('demographic')) return 'Missing demographics - call provider for complete patient information';
+    if (s.includes('provider follow')) return 'Provider follow-up required - obtain additional clinical documentation';
+    if (s.includes('expired') || s.includes('terminated')) return 'Insurance expired/terminated - verify current coverage';
+    if (s.includes('pediatric')) return 'Pediatric specialist referral required';
+    if (s.includes('dme')) return 'DME evaluation needed before testing';
+    return a;
+  });
+
+  const loadChecklist = pLoadChecklist || (async () => {
+    try {
+      const js = await apiChecklistList();
+      if (js.success) setLocalChecklistItems(js.items || []);
+    } catch (_) {}
+  });
+
+  useEffect(() => {
+    if (!pLoadChecklist) loadChecklist();
+  }, []);
+
+  // Choose external vs local state
+  const checklistItems = pChecklistItems ?? localChecklistItems;
+  const results = pResults ?? localResults;
+  const searchTerm = pSearchTerm ?? localSearchTerm;
+  const setSearchTerm = pSetSearchTerm ?? setLocalSearchTerm;
+  const statusFilter = pStatusFilter ?? localStatusFilter;
+  const setStatusFilter = pSetStatusFilter ?? setLocalStatusFilter;
+  const carrierFilter = pCarrierFilter ?? localCarrierFilter;
+  const setCarrierFilter = pSetCarrierFilter ?? setLocalCarrierFilter;
+  const groupBy = pGroupBy ?? localGroupBy;
+  const setGroupBy = pSetGroupBy ?? setLocalGroupBy;
+  const noteDrafts = pNoteDrafts ?? localNoteDrafts;
+  const setNoteDrafts = pSetNoteDrafts ?? setLocalNoteDrafts;
 
   // Build items list (mirrors previous App.renderChecklist logic)
   let items = checklistItems && checklistItems.length ? checklistItems.map(rec => ({
@@ -62,7 +123,7 @@ export default function Checklist(props) {
           </select>
           <input placeholder="Carrier filter" value={carrierFilter} onChange={e=>setCarrierFilter(e.target.value)} className="form-input w-40" />
           <button type="button" onClick={loadChecklist} className="btn-outline btn-small">Refresh</button>
-          <button type="button" onClick={async ()=>{ try { await fetch('http://localhost:5001/checklist/import-scan', { method:'POST' }); await loadChecklist(); alert('Imported from export folder'); } catch(_){ alert('Import failed'); } }} className="btn-secondary btn-small">Import From Exports</button>
+          <button type="button" onClick={async ()=>{ try { await apiChecklistImportScan(); await loadChecklist(); alert('Imported from export folder'); } catch(_){ alert('Import failed'); } }} className="btn-secondary btn-small">Import From Exports</button>
           <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="form-input w-auto">
             <option value="none">Group: None</option>
             <option value="carrier">Group: Insurance</option>
@@ -100,12 +161,12 @@ export default function Checklist(props) {
                             </div>
                             {checklistItems.length > 0 && (
                               <div className="flex gap-2 flex-shrink-0">
-                                <select value={it.status} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){} }} className="form-input text-sm">
+                          <select value={it.status} onChange={async (e)=>{ try { await apiChecklistUpdate({ id: it.id, status: e.target.value }); loadChecklist(); } catch(_){} }} className="form-input text-sm">
                                   <option value="new">New</option>
                                   <option value="in_progress">In Progress</option>
                                   <option value="completed">Completed</option>
                                 </select>
-                                <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){} }} className="form-input text-sm">
+                          <select value={it.color} onChange={async (e)=>{ try { await apiChecklistUpdate({ id: it.id, color: e.target.value }); loadChecklist(); } catch(_){} }} className="form-input text-sm">
                                   <option value="gray">Gray</option>
                                   <option value="yellow">Yellow</option>
                                   <option value="green">Green</option>
@@ -123,7 +184,7 @@ export default function Checklist(props) {
                               <div className="flex flex-wrap gap-3 mb-3">
                                 {(it.checklist||[]).map(ch => (
                                   <label key={ch.key} className="flex items-center gap-2 text-sm">
-                                    <input type="checkbox" checked={!!ch.done} onChange={async (e) => { const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] }; try { await fetch('http://localhost:5001/checklist/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); loadChecklist(); } catch (_) {} }} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
+                              <input type="checkbox" checked={!!ch.done} onChange={async (e) => { const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] }; try { await apiChecklistUpdate(payload); loadChecklist(); } catch (_) {} }} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
                                     <span className={ch.done ? 'line-through text-gray-500' : ''}>{ch.label}</span>
                                   </label>
                                 ))}
@@ -134,7 +195,7 @@ export default function Checklist(props) {
                             <div className="mt-3 pl-4">
                               <div className="flex gap-2">
                                 <input placeholder="Add note..." value={noteDrafts[it.id] || ''} onChange={e=>setNoteDrafts(d=>({ ...d, [it.id]: e.target.value }))} className="form-input flex-1 text-sm" />
-                                <button type="button" onClick={async ()=>{ const txt = (noteDrafts[it.id] || '').trim(); if (!txt) return; try { await fetch('http://localhost:5001/checklist/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, note: txt }) }); setNoteDrafts(d=>({ ...d, [it.id]: '' })); loadChecklist(); } catch(_){} }} className="btn-small btn-primary">Add Note</button>
+                          <button type="button" onClick={async ()=>{ const txt = (noteDrafts[it.id] || '').trim(); if (!txt) return; try { await apiChecklistUpdate({ id: it.id, note: txt }); setNoteDrafts(d=>({ ...d, [it.id]: '' })); loadChecklist(); } catch(_){} }} className="btn-small btn-primary">Add Note</button>
                               </div>
                             </div>
                           )}
@@ -161,12 +222,12 @@ export default function Checklist(props) {
                       </div>
                       {checklistItems.length > 0 && (
                         <div className="flex gap-2 flex-shrink-0">
-                          <select value={it.status} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){} }} className="form-input text-sm">
+                          <select value={it.status} onChange={async (e)=>{ try { await apiChecklistUpdate({ id: it.id, status: e.target.value }); loadChecklist(); } catch(_){} }} className="form-input text-sm">
                             <option value="new">New</option>
                             <option value="in_progress">In Progress</option>
                             <option value="completed">Completed</option>
                           </select>
-                          <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){} }} className="form-input text-sm">
+                          <select value={it.color} onChange={async (e)=>{ try { await apiChecklistUpdate({ id: it.id, color: e.target.value }); loadChecklist(); } catch(_){} }} className="form-input text-sm">
                             <option value="gray">Gray</option>
                             <option value="yellow">Yellow</option>
                             <option value="green">Green</option>
@@ -184,14 +245,14 @@ export default function Checklist(props) {
                         <div className="flex flex-wrap gap-3 mb-3">
                           {(it.checklist||[]).map(ch => (
                             <label key={ch.key} className="flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={!!ch.done} onChange={async (e) => { const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] }; try { await fetch('http://localhost:5001/checklist/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); loadChecklist(); } catch (_) {} }} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
+                              <input type="checkbox" checked={!!ch.done} onChange={async (e) => { const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] }; try { await apiChecklistUpdate(payload); loadChecklist(); } catch (_) {} }} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
                               <span className={ch.done ? 'line-through text-gray-500' : ''}>{ch.label}</span>
                             </label>
                           ))}
                         </div>
                         <div className="flex gap-2">
                           <input placeholder="Add note..." value={noteDrafts[it.id] || ''} onChange={e=>setNoteDrafts(d=>({ ...d, [it.id]: e.target.value }))} className="form-input flex-1 text-sm" />
-                          <button type="button" onClick={async ()=>{ const txt = (noteDrafts[it.id] || '').trim(); if (!txt) return; try { await fetch('http://localhost:5001/checklist/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, note: txt }) }); setNoteDrafts(d=>({ ...d, [it.id]: '' })); loadChecklist(); } catch(_){} }} className="btn-small btn-primary">Add Note</button>
+                          <button type="button" onClick={async ()=>{ const txt = (noteDrafts[it.id] || '').trim(); if (!txt) return; try { await apiChecklistUpdate({ id: it.id, note: txt }); setNoteDrafts(d=>({ ...d, [it.id]: '' })); loadChecklist(); } catch(_){} }} className="btn-small btn-primary">Add Note</button>
                         </div>
                       </div>
                     )}
