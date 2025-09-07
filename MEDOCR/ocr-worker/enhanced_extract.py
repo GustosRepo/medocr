@@ -1261,26 +1261,86 @@ def extract_dme_info(text: str) -> Dict[str, Any]:
 
 def main():
     """Extract and output JSON for backend integration"""
-    if len(sys.argv) < 2:
-        print("Usage: python3 enhanced_extract.py <input_file>")
-        return
+    import argparse
     
-    input_file = sys.argv[1]
+    parser = argparse.ArgumentParser(description='Extract patient form data or analyze flags')
+    parser.add_argument('input_file', help='Input text file')
+    parser.add_argument('--text-only-flags', action='store_true', help='Only run flag analysis on raw text')
+    parser.add_argument('--confidence', type=float, default=0.94, help='OCR confidence score')
+    
+    args = parser.parse_args()
     
     try:
-        with open(input_file, 'r') as f:
+        with open(args.input_file, 'r') as f:
             ocr_text = f.read()
         
-        # Extract form data with flagging
-        form_data = extract_patient_form(ocr_text, ocr_confidence=0.94)
+        if args.text_only_flags:
+            # Only run flag analysis without full form extraction
+            result = analyze_flags_only(ocr_text, args.confidence)
+        else:
+            # Full form extraction with flagging
+            result = extract_patient_form(ocr_text, ocr_confidence=args.confidence)
         
         # Output JSON for backend consumption
-        print(json.dumps(form_data))
+        print(json.dumps(result))
         
     except FileNotFoundError:
-        print(f"Error: File '{input_file}' not found")
+        print(f"Error: File '{args.input_file}' not found")
     except Exception as e:
         print(f"Error: {e}")
+
+def analyze_flags_only(ocr_text: str, ocr_confidence: float = 0.8) -> Dict[str, Any]:
+    """
+    Analyze OCR text for flags and actions without full form extraction
+    """
+    try:
+        # Load flag catalog
+        try:
+            catalog = load_flags_catalog('config/flags_catalog.json')
+        except Exception:
+            catalog = {"flags": []}
+        
+        # Minimal rule-set for flag analysis
+        rules = {
+            'denied_carriers': ['Culinary', 'Intermountain', 'P3 Health', 'Select Health', 'WellCare'],
+            'prominence_contract_end': '2025-10-31',
+            'hcpcs': ['E0601', 'E0470', 'E0471', 'E0561'],
+        }
+        
+        # Apply basic OCR corrections for better flag detection
+        preprocessor = OCRPreprocessor()
+        corrected_text = preprocessor.correct_ocr_text(ocr_text)
+        
+        # Create minimal form structure for flag analysis
+        minimal_form = {
+            "doc_type": "referral",
+            "corrected_text": corrected_text,
+            "processing_timestamp": datetime.now().isoformat()
+        }
+        
+        # Run flag analysis
+        from flag_rules import compute_confidence_bucket
+        flags = derive_flags(corrected_text, minimal_form, date.today(), rules, ocr_confidence)
+        actions = flags_to_actions(flags, catalog)
+        conf_bucket = compute_confidence_bucket(ocr_confidence, flags)
+        
+        return {
+            "flags": flags,
+            "actions": actions,
+            "confidence": conf_bucket,
+            "ocr_confidence": ocr_confidence,
+            "text_analyzed": len(corrected_text) > 0
+        }
+        
+    except Exception as e:
+        print(f"Flag analysis failed: {e}")
+        return {
+            "flags": [],
+            "actions": [],
+            "confidence": "Medium",
+            "ocr_confidence": ocr_confidence,
+            "error": str(e)
+        }
 
 def calculate_age_from_dob(dob_str: str) -> Optional[int]:
     """Calculate age from date of birth string"""

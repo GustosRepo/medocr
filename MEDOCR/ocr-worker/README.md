@@ -61,6 +61,18 @@ result = process_ocr_result(image_path, ocr_text, confidence)
 - **Error Correction**: OCR text preprocessing and correction
 - **Flexible Architecture**: Supports both semantic and legacy extraction methods
 
+## PDF Ingestion
+
+- Image-first OCR remains the core. PDF files are supported by rasterizing pages to images (via `pdf2image`) and running the same preprocessing + OCR pipeline.
+- Defaults: `OCR_PDF_DPI=200` and `OCR_PDF_MAX_PAGES=3` (env vars). Adjust for quality vs speed.
+- Dependencies: install `pdf2image` and `PyPDF2`. For `pdf2image`, ensure Poppler is available on your system (e.g., macOS via `brew install poppler`, Ubuntu via `apt-get install poppler-utils`).
+
+### Quick Start
+
+- CLI automatically handles `.pdf` inputs:
+  - `python3 main.py /path/to/file.pdf` (adds page labels and aggregates confidence)
+- Backend already accepts `application/pdf` uploads and routes them through the same worker (`index.js`).
+
 ## Archived Files
 
 Old test files, debug outputs, and legacy code have been moved to `../archive/old-ocr-worker/` for reference.
