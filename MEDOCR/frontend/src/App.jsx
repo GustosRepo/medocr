@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import './App.css';
+import ResultsList from './components/ResultsList';
 
 // --- OCR Normalization & Client-side Extraction Helpers ---
 function normalizeOcrText(text) {
@@ -325,10 +326,17 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [batchResults, setBatchResults] = useState(null);
-  const [intakeDate, setIntakeDate] = useState(new Date().toLocaleDateString('en-US'));
+  const [intakeDate, setIntakeDate] = useState(() => {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const year = today.getFullYear();
+    return `${month}/${day}/${year}`;
+  });
   const [errorsCount, setErrorsCount] = useState(0);
   const [devMode, setDevMode] = useState(true);
   const [activeView, setActiveView] = useState('process'); // 'process' | 'checklist'
+  
   // Always show server data; no client extraction toggle
   // (Template toggles removed; always use server-rendered template when available)
   // --- Feedback system state ---
@@ -339,12 +347,54 @@ function App() {
   const [commentSending, setCommentSending] = useState(false);
   // --- Export system state ---
   const [exportingPdf, setExportingPdf] = useState({}); // resultId -> boolean
+  const [massExporting, setMassExporting] = useState(false); // for mass export all
   // --- Edit OCR state ---
   const [editTarget, setEditTarget] = useState(null); // { idx, resultId, text }
   const [editText, setEditText] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [showRuleForm, setShowRuleForm] = useState(false);
   const [ruleField, setRuleField] = useState('insurance.primary.carrier');
+  // --- Collapse/Expand state ---
+  const [collapsedRows, setCollapsedRows] = useState({}); // resultId -> boolean
+  const [collapsedSections, setCollapsedSections] = useState({}); // resultId -> { ocr: bool, image: bool, template: bool, etc. }
+  
+  const toggleRowCollapse = (resultId) => {
+    setCollapsedRows(prev => ({
+      ...prev,
+      [resultId]: !prev[resultId]
+    }));
+  };
+
+  const toggleSectionCollapse = (resultId, sectionName) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [resultId]: {
+        ...prev[resultId],
+        [sectionName]: !prev[resultId]?.[sectionName]
+      }
+    }));
+  };
+  
+  const isSectionCollapsed = (resultId, sectionName) => {
+    // Default collapsed states for sections
+    const defaultCollapsed = {
+      image: true,    // Image preview collapsed by default
+      ocr: false,     // OCR text expanded by default
+      qc: false,      // QC results expanded by default
+      flags: false,   // Flags expanded by default
+      actions: false, // Actions expanded by default
+      template: false // Template expanded by default
+    };
+    
+    // Check if user has specifically toggled this section
+    if (collapsedSections[resultId] && collapsedSections[resultId].hasOwnProperty(sectionName)) {
+      return collapsedSections[resultId][sectionName];
+    }
+    
+    // Otherwise use default state
+    return defaultCollapsed[sectionName] || false;
+  };
+  
   const [ruleFields, setRuleFields] = useState([
     // Fallback options if backend not reachable
     'insurance.primary.carrier', 'insurance.primary.member_id', 'insurance.primary.authorization_number', 'insurance.primary.group',
@@ -370,7 +420,7 @@ function App() {
 
   async function loadChecklist() {
     try {
-      const resp = await fetch('http://localhost:5000/checklist/list');
+      const resp = await fetch('http://localhost:5001/checklist/list');
       const js = await resp.json();
       if (js.success) setChecklistItems(js.items || []);
     } catch(_) {}
@@ -453,32 +503,76 @@ function App() {
     });
 
     return (
-      <section className="card" style={{whiteSpace:'normal'}}>
-        <h2>Checklist</h2>
-        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:8}}>
-          <input placeholder="Search patient, member, carrier" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{padding:'6px 8px'}} />
-          <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-            <option value="all">All statuses</option>
-            <option value="new">New</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-          </select>
-          <input placeholder="Carrier filter" value={carrierFilter} onChange={e=>setCarrierFilter(e.target.value)} style={{padding:'6px 8px'}} />
-          <button type="button" onClick={loadChecklist}>Refresh</button>
-          <button type="button" onClick={async ()=>{ try { await fetch('http://localhost:5000/checklist/import-scan', { method:'POST' }); await loadChecklist(); alert('Imported from export folder'); } catch(_){ alert('Import failed'); } }}>Import From Exports</button>
-          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)}>
-            <option value="none">Group: None</option>
-            <option value="carrier">Group: Insurance</option>
-          </select>
+      <section className="card">
+        <div className="card-header">
+          <h2 className="text-xl font-semibold">Patient Checklist</h2>
         </div>
-        <div className="template-html" style={{maxHeight:'unset'}}>
-          <div style={{fontWeight:700, marginBottom:8}}>PATIENT CHECKLIST:</div>
-          <div>
-            {items.length === 0 && (
-              <div style={{margin:'8px 0', color:'#666', fontSize:13}}>
-                No checklist records yet. Export a combined PDF, or click "Import From Exports" to scan your Desktop/MEDOCR-Exports folder.
-              </div>
-            )}
+        <div className="card-body">
+          <div className="flex flex-wrap gap-2 mb-4">
+            <input 
+              placeholder="Search patient, member, carrier" 
+              value={searchTerm} 
+              onChange={e=>setSearchTerm(e.target.value)}
+              className="form-input flex-1 min-w-[200px]"
+            />
+            <select 
+              value={statusFilter} 
+              onChange={e=>setStatusFilter(e.target.value)}
+              className="form-input w-auto"
+            >
+              <option value="all">All statuses</option>
+              <option value="new">New</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+            <input 
+              placeholder="Carrier filter" 
+              value={carrierFilter} 
+              onChange={e=>setCarrierFilter(e.target.value)}
+              className="form-input w-40"
+            />
+            <button 
+              type="button" 
+              onClick={loadChecklist}
+              className="btn-outline btn-small"
+            >
+              Refresh
+            </button>
+            <button 
+              type="button" 
+              onClick={async ()=>{ 
+                try { 
+                  await fetch('http://localhost:5001/checklist/import-scan', { method:'POST' }); 
+                  await loadChecklist(); 
+                  alert('Imported from export folder'); 
+                } catch(_){ 
+                  alert('Import failed'); 
+                } 
+              }}
+              className="btn-secondary btn-small"
+            >
+              Import From Exports
+            </button>
+            <select 
+              value={groupBy} 
+              onChange={e=>setGroupBy(e.target.value)}
+              className="form-input w-auto"
+            >
+              <option value="none">Group: None</option>
+              <option value="carrier">Group: Insurance</option>
+            </select>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="font-bold text-lg text-gray-800">PATIENT CHECKLIST:</div>
+            <div>
+              {items.length === 0 && (
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                  <p className="text-gray-600 text-sm">
+                    No checklist records yet. Export a combined PDF, or click "Import From Exports" to scan your Desktop/MEDOCR-Exports folder.
+                  </p>
+                </div>
+              )}
             {groupBy === 'carrier' ? (
               (() => {
                 const groups = items.reduce((acc, it) => { const k = it.carrier || 'Unknown'; (acc[k] = acc[k] || []).push(it); return acc; }, {});
@@ -492,13 +586,13 @@ function App() {
                           {checklistItems.length>0 && (
                             <div style={{display:'flex', gap:8, alignItems:'center'}}>
                               <select value={it.status} onChange={async (e)=>{
-                                try { await fetch('http://localhost:5000/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){}}
+                                try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){}}
                               }>
                                 <option value="new">New</option>
                                 <option value="in_progress">In Progress</option>
                                 <option value="completed">Completed</option>
                               </select>
-                              <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5000/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){}}}>
+                              <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){}}}>
                                 <option value="gray">Gray</option>
                                 <option value="yellow">Yellow</option>
                                 <option value="green">Green</option>
@@ -521,7 +615,7 @@ function App() {
                                   onChange={async (e) => {
                                     const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] };
                                     try {
-                                      await fetch('http://localhost:5000/checklist/update', {
+                                      await fetch('http://localhost:5001/checklist/update', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(payload)
@@ -548,7 +642,7 @@ function App() {
                                 const txt = (noteDrafts[it.id] || '').trim();
                                 if (!txt) return;
                                 try {
-                                  await fetch('http://localhost:5000/checklist/update', {
+                                  await fetch('http://localhost:5001/checklist/update', {
                                     method:'POST', headers:{'Content-Type':'application/json'},
                                     body: JSON.stringify({ id: it.id, note: txt })
                                   });
@@ -572,13 +666,13 @@ function App() {
                   {checklistItems.length>0 && (
                     <div style={{display:'flex', gap:8, alignItems:'center'}}>
                       <select value={it.status} onChange={async (e)=>{
-                        try { await fetch('http://localhost:5000/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){}}
+                        try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, status: e.target.value })}); loadChecklist(); } catch(_){}}
                       }>
                         <option value="new">New</option>
                         <option value="in_progress">In Progress</option>
                         <option value="completed">Completed</option>
                       </select>
-                      <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5000/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){}}}>
+                      <select value={it.color} onChange={async (e)=>{ try { await fetch('http://localhost:5001/checklist/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: it.id, color: e.target.value })}); loadChecklist(); } catch(_){}}}>
                         <option value="gray">Gray</option>
                         <option value="yellow">Yellow</option>
                         <option value="green">Green</option>
@@ -600,7 +694,7 @@ function App() {
                           const txt = (noteDrafts[it.id] || '').trim();
                           if (!txt) return;
                           try {
-                            await fetch('http://localhost:5000/checklist/update', {
+                            await fetch('http://localhost:5001/checklist/update', {
                               method:'POST', headers:{'Content-Type':'application/json'},
                               body: JSON.stringify({ id: it.id, note: txt })
                             });
@@ -625,7 +719,7 @@ function App() {
                           onChange={async (e) => {
                             const payload = { id: it.id, checklist: [{ key: ch.key, done: e.target.checked }] };
                             try {
-                              await fetch('http://localhost:5000/checklist/update', {
+                              await fetch('http://localhost:5001/checklist/update', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify(payload)
@@ -645,17 +739,31 @@ function App() {
             
           </div>
           {/* Removed static COMMON ADDITIONAL ACTIONS reference list per request */}
-        </div>
-        <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button type="button" onClick={()=>{
-            try{
-              const el = document.querySelector('.card .template-html');
-              const text = el ? el.innerText : '';
-              navigator.clipboard.writeText(text);
-              alert('Checklist copied to clipboard');
-            }catch(_){/* ignore */}
-          }}>Copy Checklist</button>
-          <button type="button" onClick={()=>window.print()}>Print</button>
+          </div>
+          
+          <div className="flex gap-2 mt-4">
+            <button 
+              type="button" 
+              onClick={()=>{
+                try{
+                  const el = document.querySelector('.card .template-html');
+                  const text = el ? el.innerText : '';
+                  navigator.clipboard.writeText(text);
+                  alert('Checklist copied to clipboard');
+                }catch(_){/* ignore */}
+              }}
+              className="btn-outline btn-small"
+            >
+              Copy Checklist
+            </button>
+            <button 
+              type="button" 
+              onClick={()=>window.print()}
+              className="btn-secondary btn-small"
+            >
+              Print
+            </button>
+          </div>
         </div>
       </section>
     );
@@ -739,7 +847,7 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch('http://localhost:5000/rules/list-fields');
+        const resp = await fetch('http://localhost:5001/rules/list-fields');
         const js = await resp.json();
         if (js && Array.isArray(js.fields) && js.fields.length) {
           setRuleFields(js.fields);
@@ -835,7 +943,7 @@ function App() {
     const endpoint = batchMode ? '/batch-ocr' : '/ocr?lang=eng';
     
     try {
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(`http://localhost:5001${endpoint}`, {
         method: 'POST',
         body: formData,
       });
@@ -850,23 +958,6 @@ function App() {
         }
       } else {
         // Handle individual processing results
-        if (data.uploadId) {
-          setUploadId(data.uploadId);
-          try {
-            const es = new EventSource(`http://localhost:5000/progress/${data.uploadId}`);
-            es.onmessage = (ev) => {
-              try {
-                const d = JSON.parse(ev.data);
-                setProgress((p) => ({ ...p, [d.idx || 0]: d }));
-              } catch (err) {
-                // ignore parse errors
-              }
-            };
-            es.onerror = () => es.close();
-          } catch (e) {
-            // ignore SSE setup errors
-          }
-        }
         if (typeof data.errorsCount === 'number') setErrorsCount(data.errorsCount);
         if (data.error) {
           setError(data.details || data.error);
@@ -881,6 +972,79 @@ function App() {
     }
     setLoading(false);
   };
+
+  // Open server-rendered HTML in a new window
+  function openHtmlInNewWindow(html) {
+    try {
+      const w = window.open();
+      if (!w) return;
+      w.document.open();
+      w.document.write(html || '<div>No content</div>');
+      w.document.close();
+    } catch (_) { /* ignore */ }
+  }
+
+  // Feedback handler lifted out so ResultsList can call it
+  async function handleFeedback(resultId, kind) {
+    const fbState = feedbackSent[resultId];
+    if (fbState || feedbackSubmitting[resultId]) return;
+    const basePayload = {
+      result_id: resultId,
+      feedback: kind,
+      filename: (results.find(r => (r.id || r.suggested_filename || r.filename) === resultId) || {}).filename,
+      // include summary fields for server-side triage
+      flags: (results.find(r => (r.id || r.suggested_filename || r.filename) === resultId) || {}).flags || [],
+      actions: (results.find(r => (r.id || r.suggested_filename || r.filename) === resultId) || {}).actions || [],
+      avg_conf: (results.find(r => (r.id || r.suggested_filename || r.filename) === resultId) || {}).avg_conf
+    };
+    if (kind === 'down') {
+      setCommentTarget({ resultId, payload: basePayload });
+      return;
+    }
+    setFeedbackSubmitting(s => ({ ...s, [resultId]: true }));
+    try {
+      const resp = await fetch('http://localhost:5001/feedback', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(basePayload)
+      });
+      const js = await resp.json();
+      if (js.ok) setFeedbackSent(s => ({ ...s, [resultId]: kind }));
+    } catch (_) {
+      // ignore
+    } finally {
+      setFeedbackSubmitting(s => ({ ...s, [resultId]: false }));
+    }
+  }
+
+  // Export a single result (lifted out)
+  async function handleExportCombinedPdf(resultId, r) {
+    if (exportingPdf[resultId]) return;
+    setExportingPdf(s => ({ ...s, [resultId]: true }));
+    try {
+      const effectiveEnhanced = r.enhanced_data || {};
+      const payload = {
+        originalFilename: r.original_saved_name || r.filename,
+        enhancedData: effectiveEnhanced,
+        avgConf: r.avg_conf,
+        flags: r.flags || [],
+        actions: r.actions || []
+      };
+      const response = await fetch('http://localhost:5001/export-combined-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert(`Combined PDF exported (server-rendered)!\nSaved as: ${result.filename}`);
+        try { await fetch('http://localhost:5001/checklist/list'); } catch (_) {}
+      } else {
+        alert(`Export failed: ${result.error}`);
+      }
+    } catch (e) {
+      console.error('[Export Combined PDF] Server export error', e);
+      alert('Failed to export combined PDF (server error)');
+    } finally {
+      setExportingPdf(s => ({ ...s, [resultId]: false }));
+    }
+  }
 
   return (
     <div className="dashboard">
@@ -897,112 +1061,188 @@ function App() {
         <header className="header">
           <h1>{activeView==='checklist' ? 'Patient Checklist' : 'Medical OCR Dashboard'}</h1>
         </header>
+        <div className="content-area">
         {activeView==='process' && (
-        <section className="card upload-card">
-          <h2>Upload Documents</h2>
-          <form onSubmit={handleSubmit} className="ocr-form">
-            <div className="form-controls">
-              <div className="mode-selector">
-                <label>
+        <section className="card hover:shadow-xl transition-all duration-300">
+          <div className="card-header">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <span className="text-2xl">📄</span>
+              Upload Documents
+            </h2>
+          </div>
+          <div className="card-body">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="form-group">
+                <div className="relative">
                   <input 
-                    type="radio" 
-                    name="mode" 
-                    checked={!batchMode} 
-                    onChange={() => setBatchMode(false)}
+                    type="file" 
+                    accept="image/*,.pdf" 
+                    multiple 
+                    onChange={handleFileChange}
+                    className="form-input file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-white file:font-semibold hover:file:bg-primary/90 file:transition-all file:duration-200"
+                    disabled={loading}
                   />
-                  Individual Processing
-                </label>
-                <label>
-                  <input 
-                    type="radio" 
-                    name="mode" 
-                    checked={batchMode} 
-                    onChange={() => setBatchMode(true)}
-                  />
-                  Batch Processing (Client Requirements)
-                </label>
-              </div>
-              
-              {batchMode && (
-                <div className="batch-controls">
-                  <label>
-                    Intake Date:
-                    <input 
-                      type="date" 
-                      value={intakeDate.split('/').reverse().join('-')} 
-                      onChange={(e) => setIntakeDate(new Date(e.target.value).toLocaleDateString('en-US'))}
-                    />
-                  </label>
+                  {loading && (
+                    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
+                        <span className="text-sm text-gray-600">Processing...</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              {/* Dev toggles removed */}
-              <input type="file" accept="image/*,.pdf" multiple onChange={handleFileChange} />
-              <button type="submit" disabled={!files.length || loading}>
-                {loading ? 'Processing...' : (batchMode ? 'Run Batch OCR with Client Requirements' : 'Run Individual OCR')}
-              </button>
-            </div>
-          </form>
-          {files.length > 0 && (
-            <div className="selected-files">
-              <b>Selected files:</b>
-              <ul>
-                {files.map((f) => (
-                  <li key={f.name}>{f.name}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {error && <div className="ocr-error">Error: {error}</div>}
+                <button 
+                  type="submit" 
+                  disabled={!files.length || loading}
+                  className={`btn-primary mt-4 w-full sm:w-auto min-w-[140px] ${loading ? 'loading-shimmer' : ''}`}
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      Processing...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span>🔍</span>
+                      Run OCR
+                    </div>
+                  )}
+                </button>
+              </div>
+            </form>
+            
+            {files.length > 0 && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 shadow-inner">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-blue-600 font-semibold text-sm">📎 Selected Files</span>
+                  <span className="badge badge-info">{files.length}</span>
+                </div>
+                <div className="grid gap-2">
+                  {files.map((f, idx) => (
+                    <div key={f.name} className="flex items-center gap-3 p-2 bg-white/80 rounded-md border border-blue-100">
+                      <span className="text-lg">
+                        {f.type?.startsWith('image/') ? '🖼️' : '📄'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-blue-800 truncate">{f.name}</p>
+                        <p className="text-xs text-blue-600">
+                          {(f.size / 1024 / 1024).toFixed(2)} MB • {f.type || 'Unknown type'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="badge badge-success text-xs">Ready</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {error && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-red-50 to-red-100 border border-red-200 rounded-lg shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-red-500 text-lg">⚠️</span>
+                  <div>
+                    <p className="text-red-800 font-semibold text-sm">Processing Error</p>
+                    <p className="text-red-700 text-sm">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </section>
         )}
         
         {/* Batch Results with Client Requirements */}
         {activeView==='process' && batchResults && (
-          <section className="card batch-results-card">
-            <h2>Batch Processing Results - Client Requirements</h2>
-            
-            <div className="batch-summary">
-              <h3>Processing Summary - Intake Date: {batchResults.intake_date}</h3>
-              <div className="stats-grid">
-                <div className="stat-box">
-                  <span className="stat-number">{batchResults.total_documents}</span>
-                  <span className="stat-label">Total Documents</span>
-                </div>
-                <div className="stat-box ready">
-                  <span className="stat-number">{batchResults.ready_to_schedule}</span>
-                  <span className="stat-label">Ready to Schedule</span>
-                </div>
-                <div className="stat-box action-required">
-                  <span className="stat-number">{batchResults.additional_actions_required}</span>
-                  <span className="stat-label">Actions Required</span>
+          <section className="card">
+            <div className="card-header">
+              <h2 className="text-xl font-semibold">Batch Processing Results - Client Requirements</h2>
+            </div>
+            <div className="card-body">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Processing Summary - Intake Date: {batchResults.intake_date}
+                </h3>
+                <div className="stats-grid">
+                  <div className="stat-box">
+                    <span className="stat-number">{batchResults.total_documents}</span>
+                    <span className="stat-label">Total Documents</span>
+                  </div>
+                  <div className="stat-box ready">
+                    <span className="stat-number">{batchResults.ready_to_schedule}</span>
+                    <span className="stat-label">Ready to Schedule</span>
+                  </div>
+                  <div className="stat-box action-required">
+                    <span className="stat-number">{batchResults.additional_actions_required}</span>
+                    <span className="stat-label">Actions Required</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <div className="client-features">
-              <h3>Client Requirements Status</h3>
-              <div className="feature-grid">
-                <div className={`feature-box ${batchResults.client_features?.batch_cover_sheet_ready ? 'ready' : 'pending'}`}>
-                  <span>📄</span>
-                  <span>Batch Cover Sheet</span>
-                  <span>{batchResults.client_features?.batch_cover_sheet_ready ? 'Ready' : 'Pending'}</span>
-                </div>
-                <div className={`feature-box ${batchResults.client_features?.individual_pdfs_ready > 0 ? 'ready' : 'pending'}`}>
-                  <span>📋</span>
-                  <span>Individual PDFs</span>
-                  <span>{batchResults.client_features?.individual_pdfs_ready || 0} Generated</span>
-                </div>
-                <div className={`feature-box ${batchResults.client_features?.quality_control_applied ? 'ready' : 'pending'}`}>
-                  <span>✅</span>
-                  <span>Quality Control</span>
-                  <span>{batchResults.client_features?.quality_control_applied ? 'Applied' : 'Pending'}</span>
-                </div>
-                <div className={`feature-box ${batchResults.client_features?.file_naming_standardized ? 'ready' : 'pending'}`}>
-                  <span>📁</span>
-                  <span>File Naming</span>
-                  <span>{batchResults.client_features?.file_naming_standardized ? 'Standardized' : 'Pending'}</span>
-                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800">Client Requirements Status</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className={`p-4 rounded-lg border-2 text-center ${
+                    batchResults.client_features?.batch_cover_sheet_ready 
+                      ? 'border-green-300 bg-green-50' 
+                      : 'border-orange-300 bg-orange-50'
+                  }`}>
+                    <span className="text-2xl block mb-2">📄</span>
+                    <span className="block font-medium text-gray-800">Batch Cover Sheet</span>
+                    <span className={`text-sm ${
+                      batchResults.client_features?.batch_cover_sheet_ready 
+                        ? 'text-green-600' 
+                        : 'text-orange-600'
+                    }`}>
+                      {batchResults.client_features?.batch_cover_sheet_ready ? 'Ready' : 'Pending'}
+                    </span>
+                  </div>
+                  <div className={`p-4 rounded-lg border-2 text-center ${
+                    batchResults.client_features?.individual_pdfs_ready > 0 
+                      ? 'border-green-300 bg-green-50' 
+                      : 'border-orange-300 bg-orange-50'
+                  }`}>
+                    <span className="text-2xl block mb-2">📋</span>
+                    <span className="block font-medium text-gray-800">Individual PDFs</span>
+                    <span className={`text-sm ${
+                      batchResults.client_features?.individual_pdfs_ready > 0 
+                        ? 'text-green-600' 
+                        : 'text-orange-600'
+                    }`}>
+                      {batchResults.client_features?.individual_pdfs_ready || 0} Generated
+                    </span>
+                  </div>
+                  <div className={`p-4 rounded-lg border-2 text-center ${
+                    batchResults.client_features?.quality_control_applied 
+                      ? 'border-green-300 bg-green-50' 
+                      : 'border-orange-300 bg-orange-50'
+                  }`}>
+                    <span className="text-2xl block mb-2">✅</span>
+                    <span className="block font-medium text-gray-800">Quality Control</span>
+                    <span className={`text-sm ${
+                      batchResults.client_features?.quality_control_applied 
+                        ? 'text-green-600' 
+                        : 'text-orange-600'
+                    }`}>
+                      {batchResults.client_features?.quality_control_applied ? 'Applied' : 'Pending'}
+                    </span>
+                  </div>
+                  <div className={`p-4 rounded-lg border-2 text-center ${
+                    batchResults.client_features?.file_naming_standardized 
+                      ? 'border-green-300 bg-green-50' 
+                      : 'border-orange-300 bg-orange-50'
+                  }`}>
+                    <span className="text-2xl block mb-2">📁</span>
+                    <span className="block font-medium text-gray-800">File Naming</span>
+                    <span className={`text-sm ${
+                      batchResults.client_features?.file_naming_standardized 
+                        ? 'text-green-600' 
+                        : 'text-orange-600'
+                    }`}>
+                      {batchResults.client_features?.file_naming_standardized ? 'Standardized' : 'Pending'}
+                    </span>
+                  </div>
               </div>
             </div>
             
@@ -1077,6 +1317,7 @@ function App() {
             )}
           </section>
         )}
+        
         {activeView==='process' && results.length > 0 && !batchMode && (
           <section className="card result-card">
             <h2>Individual Processing Results</h2>
@@ -1085,6 +1326,114 @@ function App() {
                 <span className="pill">Errors in batch: <b>{errorsCount}</b></span>
               </div>
             )}
+            
+            {/* Mass Export Function */}
+            {(() => {
+              const handleMassExportCombined = async () => {
+                if (massExporting) return;
+                setMassExporting(true);
+                try {
+                  // Prepare data for all results
+                  const allExportData = results.map((r, idx) => {
+                    const effectiveEnhanced = r.enhanced_data || {};
+                    return {
+                      originalFilename: r.original_saved_name || r.filename,
+                      enhancedData: effectiveEnhanced,
+                      text: r.text, // Include raw OCR text
+                      avgConf: r.avg_conf,
+                      flags: r.flags || [],
+                      actions: r.actions || []
+                    };
+                  });
+                  
+                  const payload = {
+                    batchExport: true,
+                    documents: allExportData
+                  };
+                  
+                  console.log('[Mass Export Combined PDF] request', payload);
+                  const response = await fetch('http://localhost:5001/export-mass-combined', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                  });
+                  const result = await response.json();
+                  console.log('[Mass Export Combined PDF] response', { status: response.status, ok: response.ok, result });
+                  
+                  if (result.success) {
+                    const successCount = result.export_count || 0;
+                    const errorCount = result.error_count || 0;
+                    let message = `Mass export completed!\n✅ Successfully exported ${successCount} individual PDF files`;
+                    
+                    if (errorCount > 0) {
+                      message += `\n❌ ${errorCount} files had errors`;
+                    }
+                    
+                    if (result.files && result.files.length > 0) {
+                      const fileList = result.files
+                        .filter(f => !f.error)
+                        .map(f => `• ${f.filename} (${f.patient})`)
+                        .slice(0, 5) // Show first 5 files
+                        .join('\n');
+                      message += `\n\nFiles created:\n${fileList}`;
+                      if (result.files.length > 5) {
+                        message += `\n... and ${result.files.length - 5} more files`;
+                      }
+                    }
+                    
+                    alert(message);
+                    // refresh checklist ledger if user switches to checklist
+                    try { await fetch('http://localhost:5001/checklist/list'); } catch(_){}
+                  } else {
+                    alert(`Mass export failed: ${result.error}`);
+                  }
+                } catch (e) {
+                  console.error('[Mass Export Combined PDF] Server export error', e);
+                  alert('Failed to export mass combined PDF (server error)');
+                } finally {
+                  setMassExporting(false);
+                }
+              };
+              
+              return (
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 rounded-xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-300">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full">
+                        <span className="text-xl">📦</span>
+                      </div>
+                      <div>
+                        <h3 className="text-blue-700 font-bold text-base">Mass Export</h3>
+                        <p className="text-blue-600 text-sm">
+                          Export all {results.length} documents as individual PDF files
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMassExportCombined}
+                      disabled={massExporting}
+                      className={`btn-primary btn-small flex items-center gap-2 ${
+                        massExporting ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105'
+                      } transition-transform duration-200`}
+                    >
+                      {massExporting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <span>📄</span>
+                          Export All {results.length}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+            
             <div className="compare-list">
               {results.map((r, idx) => {
                   const effectiveEnhanced = r.enhanced_data || {};
@@ -1112,7 +1461,7 @@ function App() {
                     }
                     setFeedbackSubmitting(s => ({ ...s, [resultId]: true }));
                     try {
-                      const resp = await fetch('http://localhost:5000/feedback', {
+                      const resp = await fetch('http://localhost:5001/feedback', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(basePayload)
@@ -1136,7 +1485,7 @@ function App() {
                         actions: r.actions || []
                       };
                       console.log('[Export Combined PDF] request', payload, { resultId });
-                      const response = await fetch('http://localhost:5000/export-combined-data', {
+                      const response = await fetch('http://localhost:5001/export-combined-data', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -1146,7 +1495,7 @@ function App() {
                       if (result.success) {
                         alert(`Combined PDF exported (server-rendered)!\nSaved as: ${result.filename}`);
                         // refresh checklist ledger if user switches to checklist
-                        try { await fetch('http://localhost:5000/checklist/list'); } catch(_){}
+                        try { await fetch('http://localhost:5001/checklist/list'); } catch(_){}
                       } else {
                         alert(`Export failed: ${result.error}`);
                       }
@@ -1157,43 +1506,230 @@ function App() {
                       setExportingPdf(s => ({ ...s, [resultId]: false }));
                     }
                   }
+                  const isCollapsed = collapsedRows[resultId] || false;
                   
                   return (
-                    <div key={idx} className="compare-row">
+                    <div key={idx} className={`document-card ${isCollapsed ? 'collapsed' : ''}`} style={{ width: '100%', minWidth: '100%', boxSizing: 'border-box' }}>
+                      {/* Row Header with Collapse Button */}
+                      <div className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200" style={{ width: '100%' }}>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-full">
+                            <span className="text-xl">📄</span>
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-gray-800 text-lg">
+                              {r.filename || `Document ${idx + 1}`}
+                            </h3>
+                            {avgConfText && (
+                              <span className={`confidence-badge mt-1 ${
+                                parseFloat(avgConfText) >= 85 ? 'confidence-high' :
+                                parseFloat(avgConfText) >= 70 ? 'confidence-medium' :
+                                'confidence-low'
+                              }`}>
+                                {avgConfText} confidence
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button 
+                          className="btn-small btn-outline px-3 py-2 text-sm hover:scale-105 transition-transform duration-200"
+                          onClick={() => toggleRowCollapse(resultId)}
+                          title={isCollapsed ? 'Expand row' : 'Collapse row'}
+                        >
+                          <span className="flex items-center gap-1">
+                            {isCollapsed ? '▶' : '▼'}
+                            <span className="hidden sm:inline">{isCollapsed ? 'Expand' : 'Collapse'}</span>
+                          </span>
+                        </button>
+                      </div>
+                      
+                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[5000px] opacity-100'}`} style={{ width: '100%', boxSizing: 'border-box' }}>
+                      <div className="p-6" style={{ width: '100%', boxSizing: 'border-box' }}>
+                      
+                      {/* Feedback and Export Controls */}
+                      <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="flex gap-8 items-start flex-wrap">
+                          {/* Feedback Controls */}
+                          <div className="flex-1 min-w-[280px]">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-sm font-bold tracking-wide text-gray-700 uppercase">
+                                💭 Feedback
+                              </span>
+                              {fbState && (
+                                <span className="badge badge-success text-xs">Recorded</span>
+                              )}
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => handleFeedback('up')}
+                                disabled={!!fbState || feedbackSubmitting[resultId]}
+                                className={`btn-small px-4 py-2 text-sm font-medium flex items-center gap-2 transition-all duration-200 ${
+                                  fbState === 'up' 
+                                    ? 'bg-green-100 border-2 border-green-500 text-green-800 cursor-default shadow-inner' 
+                                    : 'btn-outline hover:bg-green-50 hover:border-green-300 hover:scale-105'
+                                } ${fbState || feedbackSubmitting[resultId] ? 'cursor-not-allowed opacity-50' : ''}`}
+                              >
+                                <span className="text-base">👍</span>
+                                {fbState === 'up' ? 'Recorded' : 'Looks Good'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleFeedback('down')}
+                                disabled={!!fbState || feedbackSubmitting[resultId]}
+                                className={`btn-small px-4 py-2 text-sm font-medium flex items-center gap-2 transition-all duration-200 ${
+                                  fbState === 'down' 
+                                    ? 'bg-red-100 border-2 border-red-500 text-red-800 cursor-default shadow-inner' 
+                                    : 'btn-outline hover:bg-red-50 hover:border-red-300 hover:scale-105'
+                                } ${fbState || feedbackSubmitting[resultId] ? 'cursor-not-allowed opacity-50' : ''}`}
+                              >
+                                <span className="text-base">👎</span>
+                                {fbState === 'down' ? 'Captured' : 'Needs Fix'}
+                              </button>
+                              {feedbackSubmitting[resultId] && (
+                                <div className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-400 border-t-transparent"></div>
+                                  <span className="text-xs text-gray-500">Submitting...</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Export Controls */}
+                          <div className="flex-1 min-w-[280px]">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-sm font-bold tracking-wide text-gray-700 uppercase">
+                                📤 Export
+                              </span>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={handleExportCombinedPdf}
+                                disabled={exportingPdf[resultId]}
+                                className={`btn-primary btn-small flex items-center gap-2 px-4 py-2 ${
+                                  exportingPdf[resultId] ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105'
+                                } transition-transform duration-200`}
+                              >
+                                {exportingPdf[resultId] ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                    Exporting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>📄</span>
+                                    Export PDF
+                                  </>
+                                )}
+                              </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!r.text) {
+                                  alert('No OCR text available for flag analysis');
+                                  return;
+                                }
+                                try {
+                                  const response = await fetch('http://localhost:5001/ocr-flag-analysis', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                      text: r.text, 
+                                      avgConf: r.avg_conf || 0.8 
+                                    })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    const flagsText = result.flags.length > 0 ? result.flags.join(', ') : 'No flags detected';
+                                    const actionsText = result.actions.length > 0 ? result.actions.join(', ') : 'No actions needed';
+                                    alert(`OCR Flag Analysis Results:\n\nFlags: ${flagsText}\n\nActions: ${actionsText}\n\nConfidence: ${result.confidence}`);
+                                  } else {
+                                    alert(`Flag analysis failed: ${result.error}`);
+                                  }
+                                } catch (e) {
+                                  console.error('OCR flag analysis error:', e);
+                                  alert('Failed to analyze OCR text for flags');
+                                }
+                              }}
+                              className="btn-small bg-orange-500 hover:bg-orange-600 text-white border-orange-500 flex items-center gap-2 px-4 py-2 hover:scale-105 transition-transform duration-200"
+                            >
+                              <span>🏷️</span>
+                              OCR Flags
+                            </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
                       {/* Scan Preview */}
-                      <div className="compare-preview">
-                        <b>{r.filename || files[idx]?.name || `File ${idx+1}`}</b>
-                        <div className="preview-box">
-                          {files[idx] && files[idx].type?.startsWith('image/') ? (
-                            <img
-                              src={URL.createObjectURL(files[idx])}
-                              alt={files[idx].name}
-                              className="preview-img"
-                            />
-                          ) : (
-                            <div className="pdf-icon">
-                              <span role="img" aria-label="PDF">📄</span>
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between p-3 bg-gray-100 rounded-t-lg border border-gray-200">
+                          <h3 className="font-semibold text-gray-800">
+                            {r.filename || files[idx]?.name || `File ${idx+1}`}
+                          </h3>
+                          <button 
+                            className="btn-small btn-outline px-2 py-1 text-xs"
+                            onClick={() => toggleSectionCollapse(resultId, 'image')}
+                            title={isSectionCollapsed(resultId, 'image') ? 'Show image preview' : 'Hide image preview'}
+                          >
+                            {isSectionCollapsed(resultId, 'image') ? '▶' : '▼'}
+                          </button>
+                        </div>
+                        {!isSectionCollapsed(resultId, 'image') && (
+                        <div className="bg-gray-50 border border-t-0 border-gray-200 rounded-b-lg p-4">
+                          <div className="w-full aspect-[8.5/11] bg-white border border-gray-300 rounded-lg flex items-center justify-center overflow-hidden mb-4">
+                            {files[idx] && files[idx].type?.startsWith('image/') ? (
+                              <img
+                                src={URL.createObjectURL(files[idx])}
+                                alt={files[idx].name}
+                                className="max-w-full h-auto object-contain"
+                              />
+                            ) : (
+                              <div className="text-4xl text-gray-400">
+                                <span role="img" aria-label="PDF">📄</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {r.client_features && (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                              <h4 className="font-semibold text-gray-800 mb-3">Client Requirements</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div className={`flex items-center gap-2 p-2 rounded ${
+                                  r.client_features.individual_pdf_ready ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                                }`}>
+                                  <span>📄</span>
+                                  <span className="text-sm">
+                                    PDF Ready: {r.client_features.individual_pdf_ready ? 'Yes' : 'No'}
+                                  </span>
+                                </div>
+                                <div className={`flex items-center gap-2 p-2 rounded ${
+                                  r.client_features.quality_checked ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                                }`}>
+                                  <span>✅</span>
+                                  <span className="text-sm">
+                                    QC Checked: {r.client_features.quality_checked ? 'Yes' : 'No'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 p-2 bg-blue-50 text-blue-700 rounded">
+                                  <span>🏷️</span>
+                                  <span className="text-sm">
+                                    Suggested: {r.suggested_filename || 'None'}
+                                  </span>
+                                </div>
+                                <div className={`flex items-center gap-2 p-2 rounded ${
+                                  r.ready_to_schedule ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                                }`}>
+                                  <span>📅</span>
+                                  <span className="text-sm">
+                                    Status: {r.ready_to_schedule ? 'Ready to Schedule' : 'Actions Required'}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
-                        {r.client_features && (
-                          <div className="client-status">
-                            <h4>Client Requirements</h4>
-                            <div className="status-items">
-                              <div className={`status-item ${r.client_features.individual_pdf_ready ? 'ready' : 'pending'}`}>
-                                📄 PDF Ready: {r.client_features.individual_pdf_ready ? 'Yes' : 'No'}
-                              </div>
-                              <div className={`status-item ${r.client_features.quality_checked ? 'ready' : 'pending'}`}>
-                                ✅ QC Checked: {r.client_features.quality_checked ? 'Yes' : 'No'}
-                              </div>
-                              <div className="status-item">
-                                🏷️ Suggested: {r.suggested_filename || 'None'}
-                              </div>
-                              <div className={`status-item ${r.ready_to_schedule ? 'ready' : 'pending'}`}>
-                                📅 Status: {r.ready_to_schedule ? 'Ready to Schedule' : 'Actions Required'}
-                              </div>
-                            </div>
-                          </div>
                         )}
                       </div>
                       
@@ -1210,9 +1746,20 @@ function App() {
                                 <>
                                   <div className="ocr-col">
                                   <div className="col-title" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
-                                    <span>OCR Text</span>
+                                    <span style={{display:'flex', alignItems:'center', gap:8}}>
+                                      OCR Text
+                                      <button 
+                                        className="section-toggle-btn mini"
+                                        onClick={() => toggleSectionCollapse(resultId, 'ocr')}
+                                        title={isSectionCollapsed(resultId, 'ocr') ? 'Show OCR text' : 'Hide OCR text'}
+                                      >
+                                        {isSectionCollapsed(resultId, 'ocr') ? '▶' : '▼'}
+                                      </button>
+                                    </span>
                                     <button type="button" onClick={()=>{ setEditTarget({ idx, resultId, text: r.text||'' }); setEditText(r.text||''); }} style={{fontSize:12, padding:'2px 8px', border:'1px solid #ccc', borderRadius:4, background:'#fff', cursor:'pointer'}}>Edit OCR</button>
                                   </div>
+                                  {!isSectionCollapsed(resultId, 'ocr') && (
+                                  <>
                                   <pre className="ocr-text">{r.text}</pre>
                                     {recentChanges[resultId] && recentChanges[resultId].length > 0 && (
                                       <div style={{background:'#e8f5e9', border:'1px solid #a5d6a7', padding:'6px 8px', borderRadius:4, margin:'6px 0'}}>
@@ -1225,13 +1772,25 @@ function App() {
                                     {avgConfText !== null && (
                                       <div className="confidence">Average Confidence: <b>{avgConfText}</b></div>
                                     )}
-                                    {progress[idx] && (
-                                      <div className="progress-box">Status: {progress[idx].stage || 'processing'}</div>
-                                    )}
+                                    </>
+                                  )}
 
                                     {r.qc_results && (
                                       <div className="qc-section">
-                                        <div className="col-title">Quality Control</div>
+                                        <div className="col-title" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
+                                          <span style={{display:'flex', alignItems:'center', gap:8}}>
+                                            Quality Control
+                                            <button 
+                                              className="section-toggle-btn mini"
+                                              onClick={() => toggleSectionCollapse(resultId, 'qc')}
+                                              title={isSectionCollapsed(resultId, 'qc') ? 'Show QC results' : 'Hide QC results'}
+                                            >
+                                              {isSectionCollapsed(resultId, 'qc') ? '▶' : '▼'}
+                                            </button>
+                                          </span>
+                                        </div>
+                                        {!isSectionCollapsed(resultId, 'qc') && (
+                                        <>
                                         {(r.qc_results.errors?.length > 0 || r.qc_results.warnings?.length > 0) ? (
                                           <div className="qc-issues">
                                             {r.qc_results.errors?.map((error, i) => (
@@ -1244,52 +1803,10 @@ function App() {
                                         ) : (
                                           <div className="qc-pass">✅ All quality checks passed</div>
                                         )}
+                                        </>
+                                        )}
                                       </div>
                                     )}
-
-                                    {/* Feedback Controls */}
-                                    <div style={{marginTop:12, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-                                      <span style={{fontSize:12, fontWeight:600, letterSpacing:0.5, color:'#555'}}>Feedback:</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleFeedback('up')}
-                                        disabled={!!fbState || feedbackSubmitting[resultId]}
-                                        style={{
-                                          padding:'4px 10px', borderRadius:4, cursor: fbState ? 'default':'pointer',
-                                          border: fbState==='up' ? '2px solid #2e7d32':'1px solid #ccc',
-                                          background: fbState==='up' ? '#e8f5e9':'#fff', fontSize:12
-                                        }}
-                                      >👍 {fbState==='up' ? 'Recorded':'Looks Good'}</button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleFeedback('down')}
-                                        disabled={!!fbState || feedbackSubmitting[resultId]}
-                                        style={{
-                                          padding:'4px 10px', borderRadius:4, cursor: fbState ? 'default':'pointer',
-                                          border: fbState==='down' ? '2px solid #c62828':'1px solid #ccc',
-                                          background: fbState==='down' ? '#ffebee':'#fff', fontSize:12
-                                        }}
-                                      >👎 {fbState==='down' ? 'Captured':'Needs Fix'}</button>
-                                      {feedbackSubmitting[resultId] && <span style={{fontSize:12, color:'#888'}}>Submitting...</span>}
-                                      {fbState && <span style={{fontSize:12, color:'#666'}}>Thank you!</span>}
-                                    </div>
-
-                                    {/* Export Controls */}
-                                    <div style={{marginTop:8, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-                                      <span style={{fontSize:12, fontWeight:600, letterSpacing:0.5, color:'#555'}}>Export:</span>
-                                      <button
-                                        type="button"
-                                        onClick={handleExportCombinedPdf}
-                                        disabled={exportingPdf[resultId]}
-                                        style={{
-                                          padding:'6px 12px', borderRadius:4, cursor:exportingPdf[resultId] ? 'default':'pointer',
-                                          border:'1px solid #1976d2', background:'#1976d2', color:'#fff', fontSize:12,
-                                          opacity: exportingPdf[resultId] ? 0.6 : 1
-                                        }}
-                                      >
-                                        {exportingPdf[resultId] ? '📄 Exporting...' : '📄 Export Combined PDF'}
-                                      </button>
-                                    </div>
 
                                     {/* Optional: developer-only raw OCR for debugging */}
                                     <details style={{ marginTop: 12 }}>
@@ -1302,23 +1819,49 @@ function App() {
                                   <div className="side-col">
                                     {Array.isArray(r.flags) && r.flags.length > 0 && (
                                       <div className="flags-section">
-                                        <div className="col-title">Intelligent Flags</div>
+                                        <div className="col-title" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
+                                          <span style={{display:'flex', alignItems:'center', gap:8}}>
+                                            Intelligent Flags
+                                            <button 
+                                              className="section-toggle-btn mini"
+                                              onClick={() => toggleSectionCollapse(resultId, 'flags')}
+                                              title={isSectionCollapsed(resultId, 'flags') ? 'Show flags' : 'Hide flags'}
+                                            >
+                                              {isSectionCollapsed(resultId, 'flags') ? '▶' : '▼'}
+                                            </button>
+                                          </span>
+                                        </div>
+                                        {!isSectionCollapsed(resultId, 'flags') && (
                                         <div className="flags-grid">
                                           {r.flags.map((flag, i) => (
                                             <span key={i} className="flag-badge">{flag}</span>
                                           ))}
                                         </div>
+                                        )}
                                       </div>
                                     )}
 
                                     {Array.isArray(r.actions) && r.actions.length > 0 && (
                                       <div className="actions-section">
-                                        <div className="col-title">Required Actions</div>
+                                        <div className="col-title" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
+                                          <span style={{display:'flex', alignItems:'center', gap:8}}>
+                                            Required Actions
+                                            <button 
+                                              className="section-toggle-btn mini"
+                                              onClick={() => toggleSectionCollapse(resultId, 'actions')}
+                                              title={isSectionCollapsed(resultId, 'actions') ? 'Show actions' : 'Hide actions'}
+                                            >
+                                              {isSectionCollapsed(resultId, 'actions') ? '▶' : '▼'}
+                                            </button>
+                                          </span>
+                                        </div>
+                                        {!isSectionCollapsed(resultId, 'actions') && (
                                         <ul className="actions-list">
                                           {r.actions.map((action, i) => (
                                             <li key={i}>{action}</li>
                                           ))}
                                         </ul>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -1326,13 +1869,31 @@ function App() {
                               )}
                             </div>
 
-                            {/* Right column: Server-rendered template only */}
+                            {/* Right column: Server-rendered template only (HIDDEN - focusing on raw OCR) */}
                             {hasTemplate && (
-                              <div className="template-html client-pdf-format" dangerouslySetInnerHTML={{ __html: r.individual_pdf_content }} />
+                              <div className="template-section" style={{ display: 'none' }}>
+                                <div className="col-title" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
+                                  <span style={{display:'flex', alignItems:'center', gap:8}}>
+                                    Medical Template
+                                    <button 
+                                      className="section-toggle-btn mini"
+                                      onClick={() => toggleSectionCollapse(resultId, 'template')}
+                                      title={isSectionCollapsed(resultId, 'template') ? 'Show template' : 'Hide template'}
+                                    >
+                                      {isSectionCollapsed(resultId, 'template') ? '▶' : '▼'}
+                                    </button>
+                                  </span>
+                                </div>
+                                {!isSectionCollapsed(resultId, 'template') && (
+                                  <div className="template-html client-pdf-format" dangerouslySetInnerHTML={{ __html: r.individual_pdf_content }} />
+                                )}
+                              </div>
                             )}
                           </div>
                         );
                       })()}
+                      </div>
+                      </div>
                     </div>
                   );
             })}
@@ -1340,6 +1901,7 @@ function App() {
           </section>
         )}
         {activeView==='checklist' && renderChecklist()}
+        </div>
       </main>
       
       {/* Comment Modal for Down Feedback */}
@@ -1382,7 +1944,7 @@ function App() {
                   setCommentSending(true);
                   try {
                     const body = { ...commentTarget.payload, comment: commentText || undefined };
-                    const resp = await fetch('http://localhost:5000/feedback', { 
+                    const resp = await fetch('http://localhost:5001/feedback', { 
                       method:'POST', 
                       headers:{'Content-Type':'application/json'}, 
                       body: JSON.stringify(body) 
@@ -1474,7 +2036,7 @@ function App() {
                     onClick={async ()=>{
                       if (!rulePattern.trim()) { alert('Enter a regex pattern'); return; }
                       try {
-                        const resp = await fetch('http://localhost:5000/rules/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ field: ruleField, pattern: rulePattern, flags:'i', section: ruleSection||null, window: 500, postprocess: rulePost? [rulePost]:[], priority: 100 }) });
+                        const resp = await fetch('http://localhost:5001/rules/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ field: ruleField, pattern: rulePattern, flags:'i', section: ruleSection||null, window: 500, postprocess: rulePost? [rulePost]:[], priority: 100 }) });
                         const js = await resp.json();
                         if (js.success) {
                           alert('Rule saved. Re-run extraction to test.');
@@ -1493,7 +2055,7 @@ function App() {
                 if (!editTarget) return;
                 setEditSubmitting(true);
                 try {
-                  const resp = await fetch('http://localhost:5000/reextract-text', {
+                  const resp = await fetch('http://localhost:5001/reextract-text', {
                     method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: editText, avg_conf: results[editTarget.idx]?.avg_conf })
                   });
                   const js = await resp.json();

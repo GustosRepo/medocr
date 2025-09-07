@@ -5,11 +5,10 @@ import { spawn } from "child_process";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { EventEmitter } from "events";
 import { randomBytes } from "crypto";
 import os from "os";
 import { fileURLToPath } from "url";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import { normalizeOcr } from "./normalizer.js";
 // removed duplicate crypto imports; using named randomBytes above
 
@@ -64,11 +63,30 @@ const upload = multer({
   }
 });
 
-// simple in-memory progress map: uploadId -> EventEmitter
-const progressMap = new Map();
-
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// Helper function to run a child process and capture stdout/stderr
+function runCommand(cmd, args, options = {}, { timeoutMs = 120000 } = {}) {
+  return new Promise((resolve) => {
+    const p = spawn(cmd, args, options);
+    let out = '';
+    let err = '';
+    let timedOut = false;
+
+    const killer = setTimeout(() => {
+      timedOut = true;
+      try { p.kill('SIGKILL'); } catch {}
+    }, timeoutMs);
+
+    p.stdout.on('data', (d) => (out += d.toString()));
+    p.stderr.on('data', (d) => (err += d.toString()));
+    p.on('close', (code) => {
+      clearTimeout(killer);
+      if (timedOut) return resolve({ code: -1, out, err: (err || '') + ' [timeout]' });
+      resolve({ code, out, err });
+    });
+  });
+}
 
 app.post("/ocr", upload.array("file"), async (req, res) => {
   if (!req.files || req.files.length === 0) {
@@ -76,34 +94,6 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
   }
 
   const pythonCmd = process.env.PYTHON || "python3";
-
-  // Create an upload id for progress tracking
-  const uploadId = randomBytes(6).toString("hex");
-  const emitter = new EventEmitter();
-  progressMap.set(uploadId, emitter);
-
-  // helper to run a child process and capture stdout/stderr
-  function runCommand(cmd, args, options = {}, { timeoutMs = 120000 } = {}) {
-    return new Promise((resolve) => {
-      const p = spawn(cmd, args, options);
-      let out = '';
-      let err = '';
-      let timedOut = false;
-
-      const killer = setTimeout(() => {
-        timedOut = true;
-        try { p.kill('SIGKILL'); } catch {}
-      }, timeoutMs);
-
-      p.stdout.on('data', (d) => (out += d.toString()));
-      p.stderr.on('data', (d) => (err += d.toString()));
-      p.on('close', (code) => {
-        clearTimeout(killer);
-        if (timedOut) return resolve({ code: -1, out, err: (err || '') + ' [timeout]' });
-        resolve({ code, out, err });
-      });
-    });
-  }
 
   // process a single file (async)
   async function processFile(file, idx) {
@@ -114,7 +104,6 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
     const analysisPath = `${ocrOutPath}.analysis`;
     const filledPath = `${ocrOutPath}.filled`;
     const ocrTextPath = `${ocrOutPath}.enhanced_input`;
-    emitter.emit('progress', { stage: 'queued', filename: file.originalname, idx });
 
     const cleanup = () => {
       [imgPath, ocrOutPath, analysisPath, filledPath, ocrTextPath, ocrRawPath].forEach(f => {
@@ -125,7 +114,6 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
 
     try {
       // run OCR worker
-      emitter.emit('progress', { stage: 'ocr_start', filename: file.originalname, idx });
       // if user-words/patterns exist in ocr-worker, pass them to the CLI
       const userWords = path.join(ocrWorkerDir, 'config', 'user-words.txt');
       const userPatterns = path.join(ocrWorkerDir, 'config', 'user-patterns.txt');
@@ -133,9 +121,7 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
       if (fs.existsSync(userWords)) args.push('--user-words', userWords);
       if (fs.existsSync(userPatterns)) args.push('--user-patterns', userPatterns);
       const ocrRes = await runCommand(pythonCmd, args, { cwd: ocrWorkerDir });
-      emitter.emit('progress', { stage: 'ocr_done', filename: file.originalname, idx, code: ocrRes.code });
       if (ocrRes.code !== 0) {
-        emitter.emit('progress', { stage: 'error', filename: file.originalname, idx, error: ocrRes.err.trim() });
         return { filename: file.originalname, error: 'OCR failed', details: ocrRes.err.trim() };
       }
 
@@ -152,7 +138,6 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
       fs.writeFileSync(ocrRawPath, rawText);
 
       // analysis step - always run to detect keywords for template filling
-      emitter.emit('progress', { stage: 'analyze_start', filename: file.originalname, idx });
       try {
         const aRes = await runCommand(pythonCmd, ['analyze.py', ocrOutPath, '--avg_conf', String(ocrResult.avg_conf || -1)], { cwd: ocrWorkerDir });
         if (aRes.code === 0) {
@@ -161,14 +146,11 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
         } else {
           ocrResult.analysis = {};
         }
-        emitter.emit('progress', { stage: 'analyze_done', filename: file.originalname, idx, code: aRes.code });
       } catch (e) {
         ocrResult.analysis = {};
-        emitter.emit('progress', { stage: 'analyze_error', filename: file.originalname, idx, error: String(e) });
       }
 
       // Enhanced extraction with intelligent flagging and client requirements
-      emitter.emit('progress', { stage: 'enhanced_extract_start', filename: file.originalname, idx });
       let enhancedData = {};
       let clientFeatures = {
         individual_pdf_ready: false,
@@ -235,20 +217,16 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
           console.warn('Client integration exited non-zero', { code: clientRes.code, err: (clientRes.err || '').trim().slice(0, 200) });
         }
         
-        emitter.emit('progress', { stage: 'enhanced_extract_done', filename: file.originalname, idx, code: clientRes.code });
       } catch (e) {
         enhancedData = {};
-        emitter.emit('progress', { stage: 'enhanced_extract_error', filename: file.originalname, idx, error: String(e) });
       }
 
       // fill template
-      emitter.emit('progress', { stage: 'fill_start', filename: file.originalname, idx });
       
       // Save analysis to temp file for template filler
       fs.writeFileSync(analysisPath, JSON.stringify(ocrResult.analysis || {}));
       
       const fillRes = await runCommand(pythonCmd, ['fill_template.py', ocrOutPath, filledPath, analysisPath], { cwd: ocrWorkerDir });
-      emitter.emit('progress', { stage: 'fill_done', filename: file.originalname, idx, code: fillRes.code });
       let filledText = '';
       try {
         filledText = fs.readFileSync(filledPath, 'utf8');
@@ -335,13 +313,6 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
   const results = await Promise.all(req.files.map((f, i) => processFile(f, i)));
   const errorsCount = results.filter(r => r && r.error).length;
 
-  // after completion, emit complete and remove emitter after short timeout
-  const em = progressMap.get(uploadId);
-  if (em) {
-    em.emit("progress", { stage: "complete", resultsCount: results.length });
-    setTimeout(() => progressMap.delete(uploadId), 60 * 1000);
-  }
-
   // Clean up any remaining temporary files
   req.files.forEach(file => {
     if (fs.existsSync(file.path)) {
@@ -349,7 +320,7 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
     }
   });
 
-  res.json({ uploadId, results, errorsCount, preservedFiles });
+  res.json({ results, errorsCount, preservedFiles });
 });
 
 // Re-extract from edited OCR text (no file upload)
@@ -363,19 +334,6 @@ app.post('/reextract-text', async (req, res) => {
     const normalizedText = normalizeOcrServer(text);
     const tmpPath = path.join(uploadsDir, `edited_${Date.now()}_${Math.random().toString(36).slice(2)}.txt`);
     fs.writeFileSync(tmpPath, normalizedText);
-
-    function runCommand(cmd, args, options = {}, { timeoutMs = 120000 } = {}) {
-      return new Promise((resolve) => {
-        const p = spawn(cmd, args, options);
-        let out = '';
-        let err = '';
-        let timedOut = false;
-        const killer = setTimeout(() => { timedOut = true; try { p.kill('SIGKILL'); } catch {} }, timeoutMs);
-        p.stdout.on('data', (d) => (out += d.toString()));
-        p.stderr.on('data', (d) => (err += d.toString()));
-        p.on('close', (code) => { clearTimeout(killer); resolve({ code, out, err, timedOut }); });
-      });
-    }
 
     // Call backend integration in single mode
     const clientRes = await runCommand(
@@ -689,27 +647,6 @@ app.post("/batch-ocr", upload.array("file"), async (req, res) => {
 });
 
 
-
-// SSE endpoint to stream progress for an uploadId
-app.get('/progress/:id', (req, res) => {
-  const id = req.params.id;
-  const em = progressMap.get(id);
-  if (!em) {
-    return res.status(404).json({ error: 'Upload id not found' });
-  }
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  const onProgress = (data) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
-  const heartbeat = setInterval(() => res.write(`: ping\n\n`), 25000);
-  em.on('progress', onProgress);
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    em.off('progress', onProgress);
-  });
-});
 
 // Feedback endpoints
 const feedbackDir = path.join(__dirname, 'feedback');
@@ -1165,6 +1102,335 @@ app.post('/export-combined-data', async (req, res) => {
   } catch (err) {
     console.error('Server export-combined-data error:', err);
     res.status(500).json({ success: false, error: 'Internal error creating PDF' });
+  }
+});
+
+// OCR-Only Flag Analysis endpoint - applies flags directly to OCR text without template extraction
+app.post('/ocr-flag-analysis', async (req, res) => {
+  try {
+    const { text, avgConf } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'No OCR text provided' });
+    }
+    
+    const pythonCmd = process.env.PYTHON || "python3";
+    const ocrWorkerDir = path.join(__dirname, '..', 'ocr-worker');
+    
+    // Create temporary file for OCR text
+    const tempId = randomBytes(8).toString('hex');
+    const tempTextPath = path.join(uploadsDir, `${tempId}_ocr_text.txt`);
+    
+    try {
+      // Write OCR text to temporary file
+      fs.writeFileSync(tempTextPath, text);
+      
+      // Run flag analysis on OCR text
+      const flagResult = await runCommand(
+        pythonCmd, 
+        ['enhanced_extract.py', '--text-only-flags', tempTextPath, '--confidence', String(avgConf || 0.8)],
+        { cwd: ocrWorkerDir }
+      );
+      
+      let flagData = {};
+      if (flagResult.code === 0) {
+        try {
+          flagData = JSON.parse(flagResult.out || '{}');
+        } catch (e) {
+          console.error('Failed to parse flag analysis result:', e);
+          flagData = { flags: [], actions: [], confidence: 'Medium' };
+        }
+      } else {
+        console.error('Flag analysis failed:', flagResult.err);
+        flagData = { flags: [], actions: [], confidence: 'Medium' };
+      }
+      
+      // Clean up temp file
+      fs.unlink(tempTextPath, () => {});
+      
+      res.json({
+        success: true,
+        flags: flagData.flags || [],
+        actions: flagData.actions || [],
+        confidence: flagData.confidence || 'Medium'
+      });
+      
+    } catch (error) {
+      // Clean up temp file on error
+      if (fs.existsSync(tempTextPath)) {
+        fs.unlink(tempTextPath, () => {});
+      }
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('OCR flag analysis error:', error);
+    res.status(500).json({ success: false, error: 'Failed to analyze OCR text for flags' });
+  }
+});
+
+// Mass export endpoint - creates individual PDFs for each document
+app.post('/export-mass-combined', async (req, res) => {
+  try {
+    const { documents } = req.body;
+    
+    if (!documents || !Array.isArray(documents) || documents.length === 0) {
+      return res.status(400).json({ success: false, error: 'No documents provided for mass export' });
+    }
+    
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // Process each document individually
+    for (const doc of documents) {
+      try {
+        const { originalFilename, enhancedData, avgConf, flags = [], actions = [], text } = doc;
+        
+        if (!enhancedData && !text) {
+          results.push({ 
+            filename: originalFilename, 
+            success: false, 
+            error: 'Missing both enhancedData and OCR text' 
+          });
+          errorCount++;
+          continue;
+        }
+        
+        // Derive patientData for filename
+        const p = enhancedData.patient || {};
+        const ins = (enhancedData.insurance && enhancedData.insurance.primary) || {};
+        const patientData = {
+          last_name: p.last_name || 'Unknown',
+          first_name: p.first_name || 'Unknown',
+          insurance: ins.carrier || 'UnknownIns'
+        };
+        
+        // Create desktop export directory
+        const desktopPath = path.join(os.homedir(), 'Desktop');
+        const exportRoot = process.env.EXPORT_DIR || path.join(desktopPath, 'MEDOCR-Exports');
+        const safeCarrier = String(patientData.insurance).replace(/[<>:"/\\|?*]+/g, '_').replace(/\s+/g, '_').trim() || 'UnknownIns';
+        const exportDir = path.join(exportRoot, safeCarrier);
+        if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+        
+        // Generate patient-based filename
+        const baseFilename = createPatientFilename(patientData);
+        const outputPath = path.join(exportDir, `${baseFilename}.pdf`);
+        
+        // Create combined PDF for this document
+        const combinedPdf = await PDFDocument.create();
+        
+        // Generate patient form PDF using server-side rendering
+        const page = combinedPdf.addPage([612, 792]);
+        const { width, height } = page.getSize();
+        const margin = 50;
+        const lineGap = 20;
+        let y = height - margin;
+        
+        const drawLine = (text, fontSize = 11, opts = {}) => {
+          if (y < margin + 40) {
+            y = height - margin;
+            combinedPdf.addPage([612, 792]);
+            return drawLine(text, fontSize, opts);
+          }
+          const pageRef = combinedPdf.getPages()[combinedPdf.getPageCount() - 1];
+          pageRef.drawText(String(text || ''), {
+            x: margin,
+            y: y - fontSize,
+            size: fontSize,
+            ...opts
+          });
+          y -= lineGap;
+        };
+        
+        const section = (title) => {
+          drawLine('');
+          drawLine(title, 12, {});
+        };
+        
+        // Title and content - Use raw OCR text with better formatting
+        drawLine('OCR TEXT EXTRACTION', 18, { color: rgb(0.1, 0.3, 0.8) });
+        drawLine(`Generated: ${new Date().toLocaleString()}`, 10, { color: rgb(0.5, 0.5, 0.5) });
+        drawLine('', 12); // spacing
+        
+        // Check if we have raw OCR text available
+        if (text) {
+          // Header for OCR section
+          drawLine('RAW OCR TEXT (Unprocessed)', 14, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine('', 8); // spacing
+          
+          // Split OCR text into lines and render each line with better formatting
+          const textLines = text.split('\n');
+          let lineNumber = 1;
+          
+          for (const line of textLines) {
+            if (line.trim()) {
+              // Add line numbers for better readability
+              const linePrefix = `${lineNumber.toString().padStart(3, ' ')}: `;
+              
+              // Clean the line of problematic Unicode characters
+              const cleanLine = line.replace(/[\u{1F000}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+              
+              // Wrap long lines if needed
+              const maxCharsPerLine = 65; // Leave room for line numbers
+              if (cleanLine.length > maxCharsPerLine) {
+                const wrappedLines = cleanLine.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) || [];
+                let isFirstLine = true;
+                for (const wrappedLine of wrappedLines) {
+                  const prefix = isFirstLine ? linePrefix : '     '; // indent continuation lines
+                  drawLine(prefix + wrappedLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+                  isFirstLine = false;
+                }
+              } else {
+                drawLine(linePrefix + cleanLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+              }
+              lineNumber++;
+            } else {
+              drawLine('', 6); // preserve empty lines but smaller
+            }
+          }
+          
+          // Footer for OCR section
+          drawLine('', 8);
+          drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine(`Total OCR Lines: ${lineNumber - 1} | Characters: ${text.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
+          
+        } else if (enhancedData.ocr_text || enhancedData.raw_text) {
+          const ocrText = enhancedData.ocr_text || enhancedData.raw_text;
+          
+          // Header for OCR section
+          drawLine('RAW OCR TEXT (From Enhanced Data)', 14, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine('', 8); // spacing
+          
+          // Split OCR text into lines and render each line
+          const textLines = ocrText.split('\n');
+          let lineNumber = 1;
+          
+          for (const line of textLines) {
+            if (line.trim()) {
+              const linePrefix = `${lineNumber.toString().padStart(3, ' ')}: `;
+              
+              // Clean the line of problematic Unicode characters
+              const cleanLine = line.replace(/[\u{1F000}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+              
+              // Wrap long lines if needed
+              const maxCharsPerLine = 65;
+              if (cleanLine.length > maxCharsPerLine) {
+                const wrappedLines = cleanLine.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) || [];
+                let isFirstLine = true;
+                for (const wrappedLine of wrappedLines) {
+                  const prefix = isFirstLine ? linePrefix : '     ';
+                  drawLine(prefix + wrappedLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+                  isFirstLine = false;
+                }
+              } else {
+                drawLine(linePrefix + cleanLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+              }
+              lineNumber++;
+            } else {
+              drawLine('', 6);
+            }
+          }
+          
+          drawLine('', 8);
+          drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+          drawLine(`Total OCR Lines: ${lineNumber - 1} | Characters: ${ocrText.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
+          
+        } else {
+          // Fallback to structured data if no raw OCR text
+          drawLine('NO RAW OCR TEXT AVAILABLE - USING STRUCTURED DATA', 14, { color: rgb(0.8, 0.1, 0.1) });
+          drawLine('', 8);
+          
+          section('PATIENT');
+          drawLine(`Name: ${p.first_name || 'Not found'} ${p.last_name || ''}`);
+          drawLine(`DOB: ${p.dob || 'Not found'}`);
+          drawLine(`MRN: ${p.mrn || 'Not found'}`);
+          drawLine(`Phone(Home): ${p.phone_home || 'Not found'}`);
+          drawLine(`Blood Pressure: ${p.blood_pressure || 'Not found'}`);
+          drawLine(`BMI: ${p.bmi || 'Not found'} | Height: ${p.height || '—'} | Weight: ${p.weight || '—'}`);
+          
+          section('INSURANCE');
+          drawLine(`Carrier: ${ins.carrier || 'Not found'}`);
+          drawLine(`Member ID: ${ins.member_id || 'Not found'}`);
+          drawLine(`Authorization #: ${ins.authorization_number || 'Not found'}`);
+          drawLine(`Verified: ${ins.insurance_verified || 'No'}`);
+          
+          const phy = enhancedData.physician || {};
+          section('PHYSICIAN');
+          drawLine(`Name: ${phy.name || 'Not found'}`);
+          drawLine(`Specialty: ${phy.specialty || 'Not found'}`);
+          drawLine(`NPI: ${phy.npi || 'Not found'}`);
+          drawLine(`Clinic Phone: ${phy.clinic_phone || 'Not found'}`);
+          
+          const proc = enhancedData.procedure || {};
+          section('PROCEDURE');
+          drawLine(`Test: ${proc.test_type || 'Not found'}`);
+          drawLine(`ICD-10: ${proc.icd_10 || 'Not found'}`);
+          drawLine(`CPT: ${proc.cpt || 'Not found'}`);
+        }
+        // Add original file pages if available
+        if (originalFilename) {
+          const originalFilePath = path.join(uploadsDir, originalFilename);
+          if (fs.existsSync(originalFilePath)) {
+            try {
+              const ext = path.extname(originalFilename).toLowerCase();
+              if (ext === '.pdf') {
+                const origBytes = fs.readFileSync(originalFilePath);
+                const origDoc = await PDFDocument.load(origBytes);
+                const origPages = await combinedPdf.copyPages(origDoc, origDoc.getPageIndices());
+                origPages.forEach(p => combinedPdf.addPage(p));
+              } else if (['.png', '.jpg', '.jpeg', '.tiff'].includes(ext)) {
+                const imgPdfBytes = await convertImageToPdf(originalFilePath);
+                const imgDoc = await PDFDocument.load(imgPdfBytes);
+                const imgPages = await combinedPdf.copyPages(imgDoc, imgDoc.getPageIndices());
+                imgPages.forEach(p => combinedPdf.addPage(p));
+              }
+            } catch (error) {
+              console.log('Could not load original file for', originalFilename, ':', error.message);
+            }
+          }
+        }
+        
+        // Save individual PDF
+        const combinedPdfBytes = await combinedPdf.save();
+        fs.writeFileSync(outputPath, combinedPdfBytes);
+        
+        results.push({
+          filename: originalFilename,
+          success: true,
+          exportedAs: `${baseFilename}.pdf`,
+          path: outputPath,
+          carrier: safeCarrier
+        });
+        successCount++;
+        
+      } catch (error) {
+        console.error('Error processing document:', error);
+        results.push({
+          filename: doc.originalFilename || 'Unknown',
+          success: false,
+          error: error.message
+        });
+        errorCount++;
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Mass export completed: ${successCount} successful, ${errorCount} failed`,
+      results,
+      summary: {
+        total: documents.length,
+        successful: successCount,
+        failed: errorCount
+      }
+    });
+    
+  } catch (error) {
+    console.error('Mass export error:', error);
+    res.status(500).json({ success: false, error: 'Failed to perform mass export' });
   }
 });
 

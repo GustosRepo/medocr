@@ -25,7 +25,9 @@ try:
     PADDLE_AVAILABLE = True
 except ImportError:
     PADDLE_AVAILABLE = False
-    print("Warning: PaddleOCR not available. Install with: pip install paddleocr", file=sys.stderr)
+    # Only show warning in debug mode to avoid cluttering output
+    if '--debug' in sys.argv:
+        print("Warning: PaddleOCR not available. Install with: pip install paddleocr", file=sys.stderr)
 
 # PDF processing imports
 try:
@@ -82,7 +84,8 @@ class MedicalOCRProcessor:
         if self.engine == 'paddle' and PADDLE_AVAILABLE:
             self.paddle_ocr = PaddleOCR(use_angle_cls=True, lang='en')
         elif self.engine == 'paddle' and not PADDLE_AVAILABLE:
-            print("PaddleOCR not available, falling back to Tesseract", file=sys.stderr)
+            if '--debug' in sys.argv:
+                print("PaddleOCR not available, falling back to Tesseract", file=sys.stderr)
             self.engine = 'tesseract'
         
         # Load user vocabularies (extend with helpful defaults if empty)
@@ -569,10 +572,10 @@ class MedicalOCRProcessor:
         text = re.sub(r"[0-9OolISBG]{5}", finalize_match, text)
         return text
     
-    def process_image(self, image: np.ndarray) -> OCRResult:
+    def process_image(self, image: np.ndarray, fast_mode: bool = False) -> OCRResult:
         """Process entire image with region detection and validation"""
         # Apply preprocessing
-        processed_img, preprocessing_steps = advanced_preprocess(image)
+        processed_img, preprocessing_steps = advanced_preprocess(image, fast_mode)
         
         # Detect regions
         regions = self.detect_form_regions(processed_img)
@@ -633,33 +636,64 @@ class MedicalOCRProcessor:
             preprocessing_applied=preprocessing_steps
         )
 
-def pdf_to_images(pdf_path: str, dpi: int = 600) -> List[Image.Image]:
-    """Convert PDF to images with fallback to PyPDF2"""
+def pdf_to_images(pdf_path: str, dpi: int = 600, max_pages: Optional[int] = None) -> List[Image.Image]:
+    """Convert PDF to images with fallback to PyPDF2.
+
+    Honors env overrides:
+      - OCR_PDF_DPI: integer DPI (default 200)
+      - OCR_PDF_MAX_PAGES: max pages to process (default 3)
+    """
+    # Env-driven defaults
+    try:
+        env_dpi = int(os.environ.get('OCR_PDF_DPI', '200'))
+    except Exception:
+        env_dpi = 200
+    try:
+        env_max_pages = os.environ.get('OCR_PDF_MAX_PAGES')
+        env_max_pages = int(env_max_pages) if env_max_pages else 3
+    except Exception:
+        env_max_pages = 3
+
+    effective_dpi = dpi if dpi else env_dpi
+    page_limit = max_pages if (isinstance(max_pages, int) and max_pages > 0) else env_max_pages
+
     if PDF2IMAGE_AVAILABLE:
         try:
-            return convert_from_path(pdf_path, dpi=dpi)
+            last_page = page_limit if page_limit else None
+            return convert_from_path(
+                pdf_path,
+                dpi=effective_dpi,
+                first_page=1,
+                last_page=last_page
+            )
         except Exception as e:
             print(f"pdf2image failed: {e}. Attempting PyPDF2 fallback...", file=sys.stderr)
-    
+
     if PYPDF2_AVAILABLE:
         try:
             with open(pdf_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
+                num_pages = len(reader.pages)
+                limit = min(page_limit or num_pages, num_pages)
                 text_pages = []
-                for page in reader.pages:
-                    text = page.extract_text()
-                    if text.strip():
-                        # Create a simple text image
+                for i in range(limit):
+                    try:
+                        page = reader.pages[i]
+                        # Try text first; if none, still yield a blank canvas as placeholder
+                        _ = page.extract_text() or ''
                         img = Image.new('RGB', (800, 1000), 'white')
                         text_pages.append(img)
+                    except Exception:
+                        # Continue with remaining pages
+                        continue
                 return text_pages
         except Exception as e:
             print(f"PyPDF2 also failed: {e}", file=sys.stderr)
-    
-    print("No PDF processing libraries available", file=sys.stderr)
-    sys.exit(3)
 
-def advanced_preprocess(image: np.ndarray) -> Tuple[np.ndarray, List[str]]:
+    print("No PDF processing libraries available", file=sys.stderr)
+    return []  # Return empty list instead of sys.exit to allow graceful handling
+
+def advanced_preprocess(image: np.ndarray, fast_mode: bool = False) -> Tuple[np.ndarray, List[str]]:
     """Apply comprehensive preprocessing pipeline for medical documents"""
     steps_applied = []
     
@@ -670,6 +704,14 @@ def advanced_preprocess(image: np.ndarray) -> Tuple[np.ndarray, List[str]]:
     else:
         gray = image.copy()
     
+    if fast_mode:
+        # Fast mode: minimal processing for PDFs
+        # Basic threshold only
+        binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        steps_applied.append("otsu_threshold")
+        return binary, steps_applied
+    
+    # Full preprocessing for images
     # Apply CLAHE for contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     gray = clahe.apply(gray)
@@ -799,17 +841,27 @@ def run_file(file_path: str, engine: str = 'tesseract', user_words: str = None, 
     
     if is_pdf:
         # PDF processing: extract all pages
-        pages = pdf_to_images(file_path, dpi=400)
+        if debug:
+            print(f"[DEBUG] Processing PDF: {file_path}", file=sys.stderr)
+        
+        # Use env-configured DPI/page limits; see pdf_to_images docstring for details
+        pages = pdf_to_images(file_path, dpi=None, max_pages=None)
         if not pages:
             return {"error": "No pages extracted from PDF", "text": "", "avg_conf": 0}
+        
+        if debug:
+            print(f"[DEBUG] Extracted {len(pages)} pages from PDF", file=sys.stderr)
         
         all_results = []
         all_confidences = []
         
         for i, page in enumerate(pages):
+            if debug:
+                print(f"[DEBUG] Processing page {i+1}/{len(pages)}", file=sys.stderr)
+            
             # Convert PIL to numpy array
             page_array = np.array(page)
-            result = processor.process_image(page_array)
+            result = processor.process_image(page_array, fast_mode=True)  # Use fast mode for PDFs
             
             if result.text.strip():
                 all_results.append({
@@ -832,6 +884,9 @@ def run_file(file_path: str, engine: str = 'tesseract', user_words: str = None, 
         # Combine results
         combined_text = "\n\n".join([f"Page {r['page']}:\n{r['text']}" for r in all_results])
         avg_conf = sum(all_confidences) / len(all_confidences) if all_confidences else 0
+        
+        if debug:
+            print(f"[DEBUG] PDF processing complete. Combined text length: {len(combined_text)}", file=sys.stderr)
         
         return {
             "text": combined_text,
