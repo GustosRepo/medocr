@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { checklistImportScan as apiChecklistImportScan, checklistUpdate as apiChecklistUpdate, checklistList as apiChecklistList } from '../lib/api';
+import { checklistImportScan as apiChecklistImportScan, checklistUpdate as apiChecklistUpdate, checklistList as apiChecklistList, checklistArchive as apiChecklistArchive } from '../lib/api';
 
 export default function Checklist(props) {
   const {
@@ -26,7 +26,21 @@ export default function Checklist(props) {
   const [localStatusFilter, setLocalStatusFilter] = useState('all');
   const [localCarrierFilter, setLocalCarrierFilter] = useState('');
   const [localGroupBy, setLocalGroupBy] = useState('none');
+  const [showArchived, setShowArchived] = useState(false);
   const [localNoteDrafts, setLocalNoteDrafts] = useState({});
+
+  // Strong whole-row highlight styles
+  const ROW_COLORS = {
+    yellow: { bg: '#FEF3C7', border: '#F59E0B' }, // yellow-100 / amber-500
+    green:  { bg: '#DCFCE7', border: '#10B981' }, // green-100 / emerald-500
+    red:    { bg: '#FEE2E2', border: '#EF4444' }, // red-100 / red-500
+    blue:   { bg: '#DBEAFE', border: '#3B82F6' }, // blue-100 / blue-500
+    gray:   { bg: '#F3F4F6', border: '#9CA3AF' }, // gray-100 / gray-400
+  };
+  const rowStyleFor = (color, archived=false) => {
+    const c = ROW_COLORS[color] || ROW_COLORS.gray;
+    return { backgroundColor: c.bg, borderLeft: `6px solid ${c.border}`, opacity: archived ? 0.9 : 1 };
+  };
 
   const mapActionToCommon = pMapActionToCommon || ((a) => {
     const s = String(a || '').toLowerCase();
@@ -44,16 +58,16 @@ export default function Checklist(props) {
     return a;
   });
 
-  const loadChecklist = pLoadChecklist || (async () => {
+  const loadChecklist = pLoadChecklist || (async (includeArchived) => {
     try {
-      const js = await apiChecklistList();
+      const js = await apiChecklistList({ includeArchived: !!includeArchived });
       if (js.success) setLocalChecklistItems(js.items || []);
     } catch (_) {}
   });
 
   useEffect(() => {
-    if (!pLoadChecklist) loadChecklist();
-  }, []);
+    if (!pLoadChecklist) loadChecklist(showArchived);
+  }, [showArchived]);
 
   // Choose external vs local state
   const checklistItems = pChecklistItems ?? localChecklistItems;
@@ -80,7 +94,8 @@ export default function Checklist(props) {
     actions: Array.isArray(rec.actions) ? rec.actions.map(mapActionToCommon).filter(Boolean) : [],
     status: rec.status || 'new',
     color: rec.color || 'gray',
-    checklist: Array.isArray(rec.checklist) ? rec.checklist : []
+    checklist: Array.isArray(rec.checklist) ? rec.checklist : [],
+    archived: !!rec.archived
   })) : (results || []).map((r) => {
     const ed = r.enhanced_data || {};
     const p = ed.patient || {};
@@ -91,7 +106,7 @@ export default function Checklist(props) {
     const carrier = ins.carrier || 'Not found';
     const member = ins.member_id || 'Not found';
     const act = Array.isArray(r.actions) && r.actions.length ? r.actions.map(mapActionToCommon).filter(Boolean) : [];
-    return { id: r.id || `res-${Math.random()}`, last, first, dob, carrier, member, actions: act, status: 'new', color: 'gray', checklist: [] };
+    return { id: r.id || `res-${Math.random()}`, last, first, dob, carrier, member, actions: act, status: 'new', color: 'gray', checklist: [], archived: false };
   });
 
   const st = (searchTerm || '').toLowerCase();
@@ -208,13 +223,11 @@ export default function Checklist(props) {
             ) : (
               <div className="space-y-3">
                 {items.map((it, i) => (
-                  <div key={it.id || i} className={`card p-4 border-l-4 ${
-                    it.color === 'yellow' ? 'bg-yellow-50 border-l-yellow-400' :
-                    it.color === 'green' ? 'bg-green-50 border-l-green-500' :
-                    it.color === 'red' ? 'bg-red-50 border-l-red-500' :
-                    it.color === 'blue' ? 'bg-blue-50 border-l-blue-500' :
-                    'bg-gray-50 border-l-gray-400'
-                  }`}>
+                  <div
+                    key={it.id || i}
+                    className="p-4 rounded-xl shadow-lg border border-gray-200 overflow-hidden"
+                    style={rowStyleFor(it.color, it.archived)}
+                  >
                     <div className="flex justify-between items-center gap-4 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <span className="font-medium text-gray-800">□ {it.last}, {it.first}</span>
@@ -234,6 +247,11 @@ export default function Checklist(props) {
                             <option value="red">Red</option>
                             <option value="blue">Blue</option>
                           </select>
+                          {!it.archived ? (
+                            <button type="button" onClick={async ()=>{ try { const ok = await apiChecklistArchive({ id: it.id, archived: true }); if (ok.success) loadChecklist(showArchived); } catch(_){} }} className="btn-outline btn-small">Archive</button>
+                          ) : (
+                            <button type="button" onClick={async ()=>{ try { const ok = await apiChecklistArchive({ id: it.id, archived: false }); if (ok.success) loadChecklist(showArchived); } catch(_){} }} className="btn-outline btn-small">Restore</button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -264,9 +282,13 @@ export default function Checklist(props) {
           </div>
           {/* Removed static COMMON ADDITIONAL ACTIONS reference list per request */}
 
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-2 mt-4 items-center">
             <button type="button" onClick={() => { try { const el = document.querySelector('.card .template-html'); const text = el ? el.innerText : ''; navigator.clipboard.writeText(text); alert('Checklist copied to clipboard'); } catch(_){} }} className="btn-outline btn-small">Copy Checklist</button>
             <button type="button" onClick={()=>window.print()} className="btn-secondary btn-small">Print</button>
+            <label className="ml-auto flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!showArchived} onChange={(e)=> setShowArchived(!!e.target.checked)} />
+              <span>Show archived</span>
+            </label>
           </div>
         </div>
       </div>

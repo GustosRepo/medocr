@@ -13,6 +13,7 @@ export default function ProcessingPage({
   errorsCount: pErrorsCount,
   batchResults: pBatchResults,
   massExporting,
+  batchProgress,
   onMassExport,
   collapsedRows,
   collapsedSections,
@@ -66,6 +67,18 @@ export default function ProcessingPage({
                   </div>
                 )}
               </div>
+              {batchProgress && files.length > 1 && (
+                <div className="mt-3 text-sm text-gray-700">
+                  <div>Batch progress: <b>{batchProgress.done || 0}</b> / <b>{batchProgress.total || files.length}</b> {batchProgress.status === 'processing' ? '…' : ''}</div>
+                  {batchProgress.current && (
+                    <div className="text-xs text-gray-500 truncate">Current: {batchProgress.current}</div>
+                  )}
+                  {batchProgress.status === 'error' && batchProgress.error && (
+                    <div className="text-xs text-red-600">Error: {batchProgress.error}</div>
+                  )}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={!files.length || loading}
@@ -146,8 +159,32 @@ export default function ProcessingPage({
                   <span className="stat-number">{batchResults.additional_actions_required}</span>
                   <span className="stat-label">Actions Required</span>
                 </div>
+                {typeof batchResults.failed_count === 'number' && (
+                  <div className="stat-box error">
+                    <span className="stat-number">{batchResults.failed_count}</span>
+                    <span className="stat-label">Failed OCR</span>
+                  </div>
+                )}
               </div>
             </div>
+
+            {batchResults.failed_count > 0 && Array.isArray(batchResults.failed_files) && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="font-semibold text-red-700 mb-2">Failed files ({batchResults.failed_count})</div>
+                <ul className="list-disc pl-6 text-sm text-red-800">
+                  {batchResults.failed_files.slice(0, 25).map((ff, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{ff.filename || 'Unknown'}</span>
+                      {ff.error && <span className="opacity-80"> — {String(ff.error).slice(0, 180)}</span>}
+                      {ff.saved_to && <span className="opacity-60"> (saved: {ff.saved_to})</span>}
+                    </li>
+                  ))}
+                </ul>
+                {batchResults.failed_files.length > 25 && (
+                  <div className="text-xs text-red-600 mt-2">…and {batchResults.failed_files.length - 25} more</div>
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}
