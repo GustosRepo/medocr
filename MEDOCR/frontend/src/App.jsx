@@ -31,6 +31,8 @@ function App() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [batchResults, setBatchResults] = useState(null);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const batchProgressTimerRef = useRef(null);
   const [errorsCount, setErrorsCount] = useState(0);
   const [intakeDate] = useState(() => {
     const t = new Date();
@@ -102,11 +104,44 @@ function App() {
     const formData = new FormData();
     files.forEach(f => formData.append('file', f));
     const isBatch = files.length > 1;
-    if (isBatch) formData.append('intake_date', intakeDate);
+    let jobId = null;
+    if (isBatch) {
+      formData.append('intake_date', intakeDate);
+      // create a client-side job id so we can poll progress while upload is processing
+      jobId = Math.random().toString(36).slice(2);
+      formData.append('job_id', jobId);
+      setBatchProgress({ id: jobId, total: files.length, done: 0, status: 'processing' });
+      // start polling progress
+      const tick = async () => {
+        try {
+          const js = await api.batchOcrProgress(jobId);
+          if (js && js.success && js.progress) {
+            setBatchProgress(js.progress);
+            if (js.progress.status === 'complete' || js.progress.status === 'error') {
+              if (batchProgressTimerRef.current) { clearInterval(batchProgressTimerRef.current); batchProgressTimerRef.current = null; }
+            }
+          }
+        } catch (_) {}
+      };
+      batchProgressTimerRef.current = setInterval(tick, 1000);
+    }
     try {
       const data = isBatch ? await apiBatchOcr(formData) : await apiOcr(formData);
       if (isBatch) {
-        if (data.success) setBatchResults(data); else setError(data.error || 'Batch processing failed');
+        if (data.success) {
+          setBatchResults(data);
+          if (Array.isArray(data.results)) setResults(data.results);
+          // ensure progress shows complete
+          if (data.job_id && batchProgress?.id === data.job_id) {
+            setBatchProgress(p => p ? { ...p, done: p.total, status: 'complete' } : p);
+          }
+        } else {
+          let msg = data.error || 'Batch processing failed';
+          if (data.details) msg += ` — ${data.details}`;
+          if (data.preview) msg += ` (preview: ${data.preview})`;
+          setError(msg);
+          if (data.job_id) setBatchProgress(p => p ? { ...p, status: 'error' } : p);
+        }
       } else {
         if (typeof data.errorsCount === 'number') setErrorsCount(data.errorsCount);
         if (data.error) setError(data.details || data.error);
@@ -117,6 +152,7 @@ function App() {
       setError('Network or server error');
     } finally {
       setLoading(false);
+      if (batchProgressTimerRef.current) { clearInterval(batchProgressTimerRef.current); batchProgressTimerRef.current = null; }
     }
   };
 
@@ -152,7 +188,9 @@ function App() {
         enhancedData: r.enhanced_data || {},
         avgConf: r.avg_conf,
         flags: r.flags || [],
-        actions: r.actions || []
+        actions: r.actions || [],
+        text: r.text || '',
+        highlight: true
       };
       const result = await apiExportCombinedData(payload);
       if (result.success) alert(`Combined PDF exported!\nSaved as: ${result.filename}`); else alert(`Export failed: ${result.error}`);
@@ -209,6 +247,7 @@ function App() {
               results={results}
               errorsCount={errorsCount}
               batchResults={batchResults}
+              batchProgress={batchProgress}
               massExporting={massExporting}
               onMassExport={async () => {
                 if (massExporting) return;
@@ -220,7 +259,8 @@ function App() {
                     text: r.text,
                     avgConf: r.avg_conf,
                     flags: r.flags || [],
-                    actions: r.actions || []
+                    actions: r.actions || [],
+                    highlight: true
                   }));
                   const result = await apiExportMassCombined({ batchExport: true, documents: allExportData });
                   if (result.success) {
@@ -374,4 +414,3 @@ function App() {
 }
 
 export default App;
-
