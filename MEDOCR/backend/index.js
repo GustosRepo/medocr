@@ -8,7 +8,7 @@ import fs from "fs";
 import { randomBytes } from "crypto";
 import os from "os";
 import { fileURLToPath } from "url";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { normalizeOcr } from "./normalizer.js";
 // removed duplicate crypto imports; using named randomBytes above
 
@@ -36,6 +36,11 @@ function getLedgerDir() {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
+function getLedgerArchiveDir() {
+  const dir = path.join(getLedgerDir(), 'archive');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 const app = express();
 const allowed = (process.env.CORS_ORIGIN || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -50,7 +55,8 @@ if (!fs.existsSync(uploadsDir)) {
 
 const upload = multer({
   dest: uploadsDir,
-  limits: { fileSize: 15 * 1024 * 1024, files: 50 },
+  // Allow larger batches; multer writes to disk so memory impact is limited
+  limits: { fileSize: 15 * 1024 * 1024, files: 200 },
   fileFilter: (_req, file, cb) => {
     const ok = [
       "image/png",
@@ -64,6 +70,16 @@ const upload = multer({
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// In-memory batch progress registry
+const batchProgress = new Map(); // id -> { id, total, done, status, startedAt, updatedAt, current, error }
+
+app.get('/batch-ocr/progress/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  const prog = batchProgress.get(id);
+  if (!prog) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, progress: prog });
+});
 
 // Helper function to run a child process and capture stdout/stderr
 function runCommand(cmd, args, options = {}, { timeoutMs = 120000 } = {}) {
@@ -462,18 +478,26 @@ app.post('/rules/toggle', (req, res) => {
 });
 
 // Checklist ledger API
-app.get('/checklist/list', async (_req, res) => {
+app.get('/checklist/list', async (req, res) => {
   try {
-    const dir = getLedgerDir();
-    const files = await fs.promises.readdir(dir);
+    const q = (s) => String(s || '').toLowerCase();
+    const includeArchived = ['1','true','yes'].includes(q(req.query.include_archived));
+    const archivedOnly = ['1','true','yes'].includes(q(req.query.archived_only)) || q(req.query.archived) === '1';
     const items = [];
-    for (const f of files) {
-      if (!f.endsWith('.json')) continue;
-      try {
-        const js = JSON.parse(await fs.promises.readFile(path.join(dir, f), 'utf8'));
-        items.push(js);
-      } catch (_) {}
+    async function readDir(dir, archivedFlag) {
+      let files = [];
+      try { files = await fs.promises.readdir(dir); } catch { return; }
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const js = JSON.parse(await fs.promises.readFile(path.join(dir, f), 'utf8'));
+          if (archivedFlag) js.archived = true; else js.archived = false;
+          items.push(js);
+        } catch (_) {}
+      }
     }
+    if (!archivedOnly) await readDir(getLedgerDir(), false);
+    if (includeArchived || archivedOnly) await readDir(getLedgerArchiveDir(), true);
     items.sort((a,b)=> new Date(b.export_time) - new Date(a.export_time));
     res.json({ success: true, items });
   } catch (e) {
@@ -485,8 +509,11 @@ app.post('/checklist/update', async (req, res) => {
   try {
     const { id, status, color, checklist, note } = req.body || {};
     if (!id) return res.status(400).json({ success: false, error: 'Missing id' });
-    const fp = path.join(getLedgerDir(), `${id}.json`);
-    if (!fs.existsSync(fp)) return res.status(404).json({ success: false, error: 'Record not found' });
+    let fp = path.join(getLedgerDir(), `${id}.json`);
+    if (!fs.existsSync(fp)) {
+      const alt = path.join(getLedgerArchiveDir(), `${id}.json`);
+      if (fs.existsSync(alt)) fp = alt; else return res.status(404).json({ success: false, error: 'Record not found' });
+    }
     const js = JSON.parse(await fs.promises.readFile(fp, 'utf8'));
     if (status) js.status = status;
     if (color) js.color = color;
@@ -509,6 +536,28 @@ app.post('/checklist/update', async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Failed to update record' });
+  }
+});
+
+// Archive or restore a checklist record
+app.post('/checklist/archive', async (req, res) => {
+  try {
+    const { id, archived } = req.body || {};
+    if (!id) return res.status(400).json({ success: false, error: 'Missing id' });
+    const inPath = path.join(getLedgerDir(), `${id}.json`);
+    const archPath = path.join(getLedgerArchiveDir(), `${id}.json`);
+    if (archived === false) {
+      // restore from archive
+      if (!fs.existsSync(archPath)) return res.status(404).json({ success: false, error: 'Record not archived' });
+      await fs.promises.rename(archPath, inPath);
+      return res.json({ success: true, archived: false });
+    }
+    // default: archive true
+    if (!fs.existsSync(inPath)) return res.status(404).json({ success: false, error: 'Record not found' });
+    await fs.promises.rename(inPath, archPath);
+    res.json({ success: true, archived: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to archive/restore record' });
   }
 });
 
@@ -609,25 +658,189 @@ app.post("/batch-ocr", upload.array("file"), async (req, res) => {
 
   const pythonCmd = process.env.PYTHON || "python3";
   const intakeDate = req.body.intake_date || new Date().toLocaleDateString('en-US');
+  const jobId = String((req.body && req.body.job_id) || randomBytes(6).toString('hex'));
+  const startedAt = new Date().toISOString();
+  batchProgress.set(jobId, { id: jobId, total: req.files.length, done: 0, status: 'processing', startedAt, updatedAt: startedAt, current: null, error: null });
 
+  // Prepare optional user dictionaries for OCR bias
+  const userWords = path.join(ocrWorkerDir, 'config', 'user-words.txt');
+  const userPatterns = path.join(ocrWorkerDir, 'config', 'user-patterns.txt');
+
+  const tempTextFiles = [];
   try {
-    const filePaths = req.files.map(file => path.resolve(file.path));
+    // Preserve original uploads for later export-combine (store under uploads/ by original name)
+    try {
+      for (const file of req.files) {
+        const permanentPath = path.join(uploadsDir, file.originalname);
+        if (fs.existsSync(file.path)) {
+          try { fs.copyFileSync(file.path, permanentPath); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    // 1) OCR each uploaded file to normalized text files (with controlled concurrency)
+    const cpuCount = (os.cpus && os.cpus().length) ? os.cpus().length : 4;
+    const defaultLimit = Math.max(1, Math.min(4, Math.floor(cpuCount / 2) || 1));
+    const limit = Math.max(1, Number(process.env.BATCH_OCR_CONCURRENCY || defaultLimit));
+    const tempFilesArr = new Array(req.files.length);
+    const ocrSummaryArr = new Array(req.files.length); // { text, avg_conf, originalFilename }
+    const failedItems = [];
+    const perFileTimeoutMs = Number(process.env.BATCH_OCR_TIMEOUT_MS || 180000);
+    let idx = 0;
+    const worker = async () => {
+      while (true) {
+        const i = idx++;
+        if (i >= req.files.length) break;
+        const f = req.files[i];
+        const srcPath = path.resolve(f.path);
+        const args = ['main.py', srcPath];
+        if (fs.existsSync(userWords)) args.push('--user-words', userWords);
+        if (fs.existsSync(userPatterns)) args.push('--user-patterns', userPatterns);
+        const ocrRes = await runCommand(pythonCmd, args, { cwd: ocrWorkerDir }, { timeoutMs: perFileTimeoutMs });
+        if (ocrRes.code !== 0) {
+          const msg = `OCR failed: ${f.originalname} — ${(ocrRes.err || '').trim().slice(0, 160)}`;
+          // Persist failed original to failed folder
+          try {
+            const failedDir = getFailedDir();
+            const safeName = String(f.originalname || 'upload').replace(/[^A-Za-z0-9._-]+/g, '_');
+            const dest = path.join(failedDir, `${Date.now()}_${safeName}`);
+            if (fs.existsSync(srcPath)) fs.copyFileSync(srcPath, dest);
+            failedItems.push({ filename: f.originalname, error: (ocrRes.code === -1 ? 'timeout' : (ocrRes.err || 'error')), saved_to: dest });
+          } catch (_) {
+            failedItems.push({ filename: f.originalname, error: (ocrRes.code === -1 ? 'timeout' : (ocrRes.err || 'error')) });
+          }
+          // Update progress and continue (do not abort batch)
+          const prog = batchProgress.get(jobId);
+          if (prog) {
+            prog.done = Math.min(prog.total, (prog.done || 0) + 1);
+            prog.current = f.originalname;
+            prog.updatedAt = new Date().toISOString();
+            prog.errors = Array.isArray(prog.errors) ? prog.errors : [];
+            prog.errors.push({ filename: f.originalname, reason: (ocrRes.code === -1 ? 'timeout' : 'error') });
+            batchProgress.set(jobId, prog);
+          }
+          continue;
+        }
+        let ocr;
+        try { ocr = JSON.parse(ocrRes.out); }
+        catch (_) { ocr = { text: ocrRes.out || '' }; }
+        const normalized = normalizeOcrServer(ocr.text || '');
+        const textPath = path.join(uploadsDir, `batch_${Date.now()}_${i}.txt`);
+        fs.writeFileSync(textPath, normalized, 'utf8');
+        tempFilesArr[i] = textPath;
+        ocrSummaryArr[i] = { text: normalized, avg_conf: (typeof ocr.avg_conf === 'number' ? ocr.avg_conf : null), originalFilename: f.originalname };
+        // Update progress
+        const prog = batchProgress.get(jobId);
+        if (prog) {
+          prog.done = Math.min(prog.total, (prog.done || 0) + 1);
+          prog.current = f.originalname;
+          prog.updatedAt = new Date().toISOString();
+          batchProgress.set(jobId, prog);
+        }
+      }
+    };
+    const workers = Array.from({ length: limit }, () => worker());
+    await Promise.all(workers);
+    // Rebuild list preserving input order and align summaries to the same order
+    const ocrSuccArr = [];
+    for (let i = 0; i < tempFilesArr.length; i++) {
+      const p = tempFilesArr[i];
+      if (p) {
+        tempTextFiles.push(p);
+        ocrSuccArr.push(ocrSummaryArr[i]);
+      }
+    }
+
+    // 2) Run client requirements batch on produced OCR text files
+    // Use manifest file to avoid OS arg limits when many files are present
+    const manifestPath = path.join(uploadsDir, `batch_manifest_${Date.now()}.txt`);
+    fs.writeFileSync(manifestPath, tempTextFiles.join('\n'), 'utf8');
     const batchArgs = [
-      'backend_integration.py', '--mode', 'batch', '--files', ...filePaths,
+      'backend_integration.py', '--mode', 'batch', '--files-manifest', manifestPath,
       '--intake-date', intakeDate
     ];
-    const batchRes = await runCommand(pythonCmd, batchArgs, { cwd: ocrWorkerDir });
+    const batchRes = await runCommand(pythonCmd, batchArgs, { cwd: ocrWorkerDir }, { timeoutMs: 180000 });
     if (batchRes.code !== 0) {
-      return res.status(500).json({ error: 'Batch processing failed', details: batchRes.err.trim() });
+      const prog = batchProgress.get(jobId);
+      if (prog) { prog.status = 'completed_with_errors'; prog.updatedAt = new Date().toISOString(); batchProgress.set(jobId, prog); }
+      return res.status(500).json({ error: 'Batch processing failed', details: (batchRes.err || '').trim().slice(0, 500), job_id: jobId, failed_files: failedItems, failed_count: failedItems.length, processed_count: tempTextFiles.length });
     }
     let batchResults;
-    try { batchResults = JSON.parse(batchRes.out); }
-    catch (e) { return res.status(500).json({ error: 'Failed to parse batch results', details: e.message }); }
-    if (!batchResults.success) {
-      return res.status(500).json({ error: batchResults.error || 'Batch processing failed' });
+    try {
+      const out = batchRes.out || '';
+      const brace = out.indexOf('{');
+      if (brace < 0) throw new Error('no JSON object in stdout');
+      const jsonText = out.slice(brace);
+      batchResults = JSON.parse(jsonText);
+    } catch (e) {
+      const prog = batchProgress.get(jobId);
+      if (prog) { prog.status = 'error'; prog.error = `Failed to parse batch results: ${e.message}`; prog.updatedAt = new Date().toISOString(); batchProgress.set(jobId, prog); }
+      return res.status(500).json({ error: 'Failed to parse batch results', details: e.message, preview: (batchRes.out || '').slice(0, 200), job_id: jobId, failed_files: failedItems, failed_count: failedItems.length, processed_count: tempTextFiles.length });
     }
+    if (!batchResults.success) {
+      const prog = batchProgress.get(jobId);
+      if (prog) { prog.status = 'completed_with_errors'; prog.error = batchResults.error || 'Batch processing failed'; prog.updatedAt = new Date().toISOString(); batchProgress.set(jobId, prog); }
+      return res.status(500).json({ error: batchResults.error || 'Batch processing failed', job_id: jobId, failed_files: failedItems, failed_count: failedItems.length, processed_count: tempTextFiles.length });
+    }
+    // Mark progress complete (with or without errors)
+    const prog = batchProgress.get(jobId);
+    if (prog) { prog.status = failedItems.length ? 'completed_with_errors' : 'complete'; prog.updatedAt = new Date().toISOString(); batchProgress.set(jobId, prog); }
+    // Build per-file results similar to /ocr output so UI can render rows
+    const perFileResults = (batchResults.individual_results || []).map((ind, i) => {
+      const sum = ocrSuccArr[i] || {};
+      const enhancedData = ind.extracted_data || {};
+      const overallConf = (typeof enhancedData.overall_confidence === 'number') ? enhancedData.overall_confidence
+                         : (typeof ind.confidence_score === 'number' ? ind.confidence_score : (sum.avg_conf || null));
+      const proc = enhancedData.procedure || {};
+      const analysis = proc ? {
+        cpt_code: Array.isArray(proc.cpt) ? proc.cpt.join(';') : (proc.cpt || 'UNKNOWN'),
+        confidence_bucket: (() => {
+          const v = (typeof overallConf === 'number') ? overallConf : undefined;
+          if (typeof v !== 'number') return 'high';
+          const vv = v > 1 ? v : v; // tolerant of 0-1 or 0-100 scales
+          if (vv >= 0.8 || vv >= 80) return 'high';
+          if (vv >= 0.6 || vv >= 60) return 'medium';
+          return 'low';
+        })(),
+        contract_valid: null,
+        insurance: {
+          accepted: enhancedData.insurance?.primary?.carrier ? [enhancedData.insurance.primary.carrier] : [],
+          auto_flag: [],
+          contract_end: 'N/A'
+        },
+        dme: [],
+        symptoms: { detected_symptoms: enhancedData.clinical?.symptoms || [] }
+      } : {};
+
+      const filenameOut = sum.originalFilename || ind.source_file || `file_${i+1}`;
+      return {
+        filename: filenameOut,
+        original_saved_name: filenameOut, // preserved under uploads/ by original name
+        text: sum.text || '',
+        avg_conf: (typeof ind.confidence_score === 'number' ? ind.confidence_score : sum.avg_conf || null),
+        analysis,
+        filled_template: '',
+        enhanced_data: enhancedData,
+        client_features: {
+          individual_pdf_ready: !!(ind.individual_pdf_ready || ind.individual_pdf_content),
+          quality_checked: true,
+          flags_applied: Array.isArray(ind.flags) ? ind.flags.length : 0,
+          actions_required: ind.status && ind.status !== 'ready_to_schedule' ? 1 : 0,
+          pdf_content: ind.individual_pdf_content || undefined,
+        },
+        suggested_filename: ind.filename || '',
+        processing_status: ind.status || 'unknown',
+        flags: ind.flags || [],
+        actions: ind.actions || [],
+        qc_results: ind.qc_results || {},
+        individual_pdf_content: ind.individual_pdf_content || undefined,
+        ready_to_schedule: ind.status === 'ready_to_schedule'
+      };
+    });
+
     res.json({
       success: true,
+      job_id: jobId,
       batch_type: 'client_requirements',
       intake_date: intakeDate,
       total_documents: batchResults.batch_summary.total_documents,
@@ -637,12 +850,23 @@ app.post("/batch-ocr", upload.array("file"), async (req, res) => {
       cover_sheet_content: batchResults.cover_sheet_content,
       filename_suggestions: batchResults.filename_suggestions,
       client_features: batchResults.client_features,
-      processing_statistics: batchResults.batch_summary.statistics
+      processing_statistics: batchResults.batch_summary.statistics,
+      processed_count: tempTextFiles.length,
+      failed_count: failedItems.length,
+      failed_files: failedItems,
+      results: perFileResults
     });
   } catch (error) {
-    res.status(500).json({ error: 'Server error during batch processing', details: error.message });
+    const prog = batchProgress.get(jobId);
+    if (prog) { prog.status = 'error'; prog.error = error.message || 'Server error'; prog.updatedAt = new Date().toISOString(); batchProgress.set(jobId, prog); }
+    res.status(500).json({ error: 'Server error during batch processing', details: error.message, job_id: jobId });
   } finally {
-    req.files.forEach(file => { fs.unlink(file.path, () => {}); });
+    // Cleanup temp upload binaries and temp text files
+    req.files.forEach(file => { if (file && file.path) fs.unlink(file.path, () => {}); });
+    tempTextFiles.forEach(p => { try { fs.unlinkSync(p); } catch(_){} });
+    try {
+      if (manifestPath && fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath);
+    } catch(_){}
   }
 });
 
@@ -828,6 +1052,8 @@ app.post('/export-combined', async (req, res) => {
     
     // Create new PDF document
     const combinedPdf = await PDFDocument.create();
+    // Embed a monospaced font for accurate text width and highlighting
+    const monoFont = await combinedPdf.embedFont(StandardFonts.Courier);
     
     // Add Individual Patient PDF Form FIRST (the processed data)
     try {
@@ -893,7 +1119,7 @@ app.post('/export-combined', async (req, res) => {
 // NEW: Server-side generation of patient form PDF (avoids html2canvas blank issues)
 app.post('/export-combined-data', async (req, res) => {
   try {
-    const { originalFilename, enhancedData, avgConf, flags = [], actions = [] } = req.body;
+    const { originalFilename, enhancedData, avgConf, flags = [], actions = [], text = '' } = req.body;
     if (!enhancedData) {
       return res.status(400).json({ success: false, error: 'Missing enhancedData' });
     }
@@ -909,7 +1135,7 @@ app.post('/export-combined-data', async (req, res) => {
       member_id: ins.member_id || 'Unknown'
     };
 
-    // Helper to build patient form PDF using pdf-lib
+    // Helper to build Client Summary PDF using pdf-lib
     function buildPatientFormPdf(data) {
       return PDFDocument.create().then(async pdf => {
         const page = pdf.addPage([612, 792]); // Letter size
@@ -958,7 +1184,7 @@ app.post('/export-combined-data', async (req, res) => {
         };
 
         // Title
-        drawLine('Individual Patient PDF Form', 16);
+        drawLine('Client Summary', 16);
         drawLine(`Generated: ${new Date().toLocaleString()}`, 8);
 
         section('PATIENT');
@@ -1006,6 +1232,16 @@ app.post('/export-combined-data', async (req, res) => {
           : (typeof avgConf === 'number' ? (avgConf > 1 ? avgConf / 100 : avgConf) : null);
         drawLine(`Overall Confidence: ${ocVal === null ? 'N/A' : formatPercent(ocVal)}`);
 
+        // FLAGS & ACTIONS
+        if (Array.isArray(flags) && flags.length) {
+          section('FLAGS');
+          flags.forEach(f => drawLine(`• ${String(f)}`));
+        }
+        if (Array.isArray(actions) && actions.length) {
+          section('ACTIONS');
+          actions.forEach(a => drawLine(`• ${String(a)}`));
+        }
+
         return pdf.save();
       });
     }
@@ -1029,6 +1265,141 @@ app.post('/export-combined-data', async (req, res) => {
       pfPages.forEach(p => combinedPdf.addPage(p));
     } catch (e) {
       return res.status(500).json({ success: false, error: 'Failed to build patient form PDF' });
+    }
+
+    // Optionally add OCR TEXT pages (split by form feed or explicit page markers)
+    if (text && typeof text === 'string' && text.trim()) {
+      // Build highlight terms from flags/actions and key extracted fields
+      const shouldHighlight = (req.body.highlight !== false); // default to true unless explicitly disabled
+      const collectTerms = () => {
+        const terms = new Set();
+        const add = (v) => { if (!v) return; const s = String(v).trim(); if (s.length >= 3) terms.add(s); };
+        (flags || []).forEach(add);
+        (actions || []).forEach(add);
+        try {
+          const p = (enhancedData && enhancedData.patient) || {};
+          add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob); add(p.phone_home);
+          const ins = (enhancedData && enhancedData.insurance && enhancedData.insurance.primary) || {};
+          add(ins.carrier); add(ins.member_id); add(ins.authorization_number); add(ins.group);
+          const phy = (enhancedData && enhancedData.physician) || {};
+          add(phy.name); add(phy.npi); add(phy.clinic_phone); add(phy.fax);
+          const proc = (enhancedData && enhancedData.procedure) || {};
+          if (Array.isArray(proc.cpt)) proc.cpt.forEach(add); else add(proc.cpt);
+          add(proc.study_requested); add(proc.indication);
+          const clin = (enhancedData && enhancedData.clinical) || {};
+          add(clin.primary_diagnosis);
+        } catch (_) {}
+        // Limit size to avoid huge regexps
+        return Array.from(terms).slice(0, 50);
+      };
+      const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const highlightTerms = shouldHighlight ? collectTerms() : [];
+      const highlightRe = (highlightTerms && highlightTerms.length)
+        ? new RegExp(`(${highlightTerms.map(escapeRe).join('|')})`, 'ig')
+        : null;
+
+      const addOcrPage = (doc, header, lines) => {
+        const page = doc.addPage([612, 792]);
+        const { height } = page.getSize();
+        const margin = 40;
+        let y = height - margin;
+        const lineGap = 14;
+        const draw = (t, size = 10) => {
+          if (y < margin + 40) { y = height - margin; doc.addPage([612,792]); return draw(t, size); }
+          const pg = doc.getPages()[doc.getPageCount()-1];
+          pg.drawText(String(t||''), { x: margin, y: y - size, size, font: monoFont });
+          y -= lineGap;
+        };
+        const drawSegmented = (prefix, content, size = 10) => {
+          if (y < margin + 40) { y = height - margin; doc.addPage([612,792]); }
+          const pg = doc.getPages()[doc.getPageCount()-1];
+          let x = margin;
+          // draw prefix first (line number, etc.)
+          if (prefix) {
+            pg.drawText(prefix, { x, y: y - size, size, font: monoFont });
+            x += monoFont.widthOfTextAtSize(prefix, size);
+          }
+          if (!highlightRe) {
+            pg.drawText(content, { x, y: y - size, size, font: monoFont });
+            y -= lineGap;
+            return;
+          }
+          let idx = 0;
+          content.replace(highlightRe, (m, _g1, offset) => {
+            const before = content.slice(idx, offset);
+            if (before) {
+              pg.drawText(before, { x, y: y - size, size, font: monoFont });
+              x += monoFont.widthOfTextAtSize(before, size);
+            }
+            // highlighted match
+            pg.drawText(m, { x, y: y - size, size, font: monoFont, color: rgb(0.85, 0.1, 0.1) });
+            x += monoFont.widthOfTextAtSize(m, size);
+            idx = offset + m.length;
+            return m;
+          });
+          const rest = content.slice(idx);
+          if (rest) pg.drawText(rest, { x, y: y - size, size, font: monoFont });
+          y -= lineGap;
+        };
+
+        draw(header, 12);
+        draw('');
+        let n = 1;
+        for (const rawLine of lines) {
+          const line = String(rawLine || '');
+          if (!line.trim()) { draw(''); continue; }
+          // Basic wrap at ~90 chars
+          const max = 90;
+          const chunks = line.match(new RegExp(`.{1,${max}}`, 'g')) || [line];
+          let first = true;
+          for (const c of chunks) {
+            const prefix = first ? String(n).padStart(3,' ') + ': ' : '     ';
+            drawSegmented(prefix, c, 10);
+            first = false;
+          }
+          n++;
+        }
+      };
+
+      // Helper to split text into page-like segments
+      const splitIntoPages = (txt) => {
+        // Highest priority: explicit form-feed characters
+        const ffSegs = String(txt).split('\f');
+        if (ffSegs.length > 1) {
+          return ffSegs.map((seg, i) => ({ header: `OCR Page ${i+1}`, lines: String(seg).split(/\r?\n/) }));
+        }
+        // Next: lines that begin with "Page N:" which our OCR emits for PDFs
+        const lines = String(txt).split(/\r?\n/);
+        const pages = [];
+        let cur = [];
+        let curHeader = null;
+        let sawMarker = false;
+        for (const ln of lines) {
+          const m = /^\s*Page\s*(\d+)\s*:\s*(.*)$/i.exec(ln);
+          if (m) {
+            // flush previous page
+            if (cur.length) pages.push({ header: curHeader || `OCR Page ${pages.length+1}`, lines: cur });
+            cur = [];
+            curHeader = `OCR Page ${m[1]}`;
+            if (m[2]) cur.push(m[2]);
+            sawMarker = true;
+          } else {
+            cur.push(ln);
+          }
+        }
+        if (cur.length) pages.push({ header: curHeader || (sawMarker ? `OCR Page ${pages.length+1}` : 'OCR Text'), lines: cur });
+        if (sawMarker && pages.length) return pages;
+        // Next: split on decorative page marker lines like === Page N ===
+        const parts = String(txt).split(/\n\s*[-=]{3,}\s*Page\s*\d+\s*[-=]{3,}\s*\n/i);
+        if (parts.length > 1) {
+          return parts.map((seg, i) => ({ header: `OCR Page ${i+1}`, lines: String(seg).split(/\r?\n/) }));
+        }
+        // Fallback: single page
+        return [{ header: 'OCR Text', lines: String(txt).split(/\r?\n/) }];
+      };
+
+      const pages = splitIntoPages(text);
+      pages.forEach(p => addOcrPage(combinedPdf, p.header, p.lines));
     }
 
     // Add original file pages
@@ -1219,27 +1590,83 @@ app.post('/export-mass-combined', async (req, res) => {
         
         // Create combined PDF for this document
         const combinedPdf = await PDFDocument.create();
-        
+        const monoFont = await combinedPdf.embedFont(StandardFonts.Courier);
+
         // Generate patient form PDF using server-side rendering
         const page = combinedPdf.addPage([612, 792]);
         const { width, height } = page.getSize();
         const margin = 50;
         const lineGap = 20;
         let y = height - margin;
-        
+
+        const newPage = () => { combinedPdf.addPage([612, 792]); y = height - margin; };
+
         const drawLine = (text, fontSize = 11, opts = {}) => {
-          if (y < margin + 40) {
-            y = height - margin;
-            combinedPdf.addPage([612, 792]);
-            return drawLine(text, fontSize, opts);
-          }
+          if (y < margin + 40) { newPage(); }
           const pageRef = combinedPdf.getPages()[combinedPdf.getPageCount() - 1];
           pageRef.drawText(String(text || ''), {
             x: margin,
             y: y - fontSize,
             size: fontSize,
+            font: monoFont,
             ...opts
           });
+          y -= lineGap;
+        };
+
+        // Optional highlight terms pulled from flags/actions and key fields
+        const shouldHighlight = (doc.highlight !== false);
+        const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const collectTerms = () => {
+          const terms = new Set();
+          const add = (v) => { if (!v) return; const s = String(v).trim(); if (s.length >= 3) terms.add(s); };
+          (flags || []).forEach(add);
+          (actions || []).forEach(add);
+          try {
+            const p = (enhancedData && enhancedData.patient) || {};
+            add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob); add(p.phone_home);
+            const ins = (enhancedData && enhancedData.insurance && enhancedData.insurance.primary) || {};
+            add(ins.carrier); add(ins.member_id); add(ins.authorization_number); add(ins.group);
+            const phy = (enhancedData && enhancedData.physician) || {};
+            add(phy.name); add(phy.npi); add(phy.clinic_phone); add(phy.fax);
+            const proc = (enhancedData && enhancedData.procedure) || {};
+            if (Array.isArray(proc.cpt)) proc.cpt.forEach(add); else add(proc.cpt);
+            add(proc.study_requested); add(proc.indication);
+          } catch (_) {}
+          return Array.from(terms).slice(0, 50);
+        };
+        const highlightTerms = shouldHighlight ? collectTerms() : [];
+        const highlightRe = (highlightTerms && highlightTerms.length)
+          ? new RegExp(`(${highlightTerms.map(escapeRe).join('|')})`, 'ig')
+          : null;
+
+        const drawSegmented = (prefix, content, size = 10) => {
+          if (y < margin + 40) { newPage(); }
+          const pageRef = combinedPdf.getPages()[combinedPdf.getPageCount() - 1];
+          let x = margin;
+          if (prefix) {
+            pageRef.drawText(prefix, { x, y: y - size, size, font: monoFont });
+            x += monoFont.widthOfTextAtSize(prefix, size);
+          }
+          if (!highlightRe) {
+            pageRef.drawText(content, { x, y: y - size, size, font: monoFont });
+            y -= lineGap;
+            return;
+          }
+          let idx = 0;
+          content.replace(highlightRe, (m, _g1, offset) => {
+            const before = content.slice(idx, offset);
+            if (before) {
+              pageRef.drawText(before, { x, y: y - size, size, font: monoFont });
+              x += monoFont.widthOfTextAtSize(before, size);
+            }
+            pageRef.drawText(m, { x, y: y - size, size, font: monoFont, color: rgb(0.85, 0.1, 0.1) });
+            x += monoFont.widthOfTextAtSize(m, size);
+            idx = offset + m.length;
+            return m;
+          });
+          const rest = content.slice(idx);
+          if (rest) pageRef.drawText(rest, { x, y: y - size, size, font: monoFont });
           y -= lineGap;
         };
         
@@ -1255,46 +1682,81 @@ app.post('/export-mass-combined', async (req, res) => {
         
         // Check if we have raw OCR text available
         if (text) {
-          // Header for OCR section
-          drawLine('RAW OCR TEXT (Unprocessed)', 14, { color: rgb(0.8, 0.3, 0.1) });
-          drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
-          drawLine('', 8); // spacing
-          
-          // Split OCR text into lines and render each line with better formatting
-          const textLines = text.split('\n');
-          let lineNumber = 1;
-          
-          for (const line of textLines) {
-            if (line.trim()) {
-              // Add line numbers for better readability
-              const linePrefix = `${lineNumber.toString().padStart(3, ' ')}: `;
-              
-              // Clean the line of problematic Unicode characters
-              const cleanLine = line.replace(/[\u{1F000}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
-              
-              // Wrap long lines if needed
-              const maxCharsPerLine = 65; // Leave room for line numbers
-              if (cleanLine.length > maxCharsPerLine) {
-                const wrappedLines = cleanLine.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) || [];
-                let isFirstLine = true;
-                for (const wrappedLine of wrappedLines) {
-                  const prefix = isFirstLine ? linePrefix : '     '; // indent continuation lines
-                  drawLine(prefix + wrappedLine, 9, { color: rgb(0.2, 0.2, 0.2) });
-                  isFirstLine = false;
-                }
+          // Helper to split into page-like segments
+          const splitIntoPages = (txt) => {
+            const ffSegs = String(txt).split('\f');
+            if (ffSegs.length > 1) return ffSegs.map((seg, i) => ({ header: `OCR Page ${i+1}`, lines: String(seg).split(/\r?\n/) }));
+            const linesSrc = String(txt).split(/\r?\n/);
+            const pages = [];
+            let cur = [];
+            let curHeader = null;
+            let sawMarker = false;
+            for (const ln of linesSrc) {
+              const m = /^\s*Page\s*(\d+)\s*:\s*(.*)$/i.exec(ln);
+              if (m) {
+                if (cur.length) pages.push({ header: curHeader || `OCR Page ${pages.length+1}`, lines: cur });
+                cur = [];
+                curHeader = `OCR Page ${m[1]}`;
+                if (m[2]) cur.push(m[2]);
+                sawMarker = true;
               } else {
-                drawLine(linePrefix + cleanLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+                cur.push(ln);
               }
-              lineNumber++;
-            } else {
-              drawLine('', 6); // preserve empty lines but smaller
             }
-          }
-          
-          // Footer for OCR section
+            if (cur.length) pages.push({ header: curHeader || (sawMarker ? `OCR Page ${pages.length+1}` : 'OCR Text'), lines: cur });
+            if (sawMarker && pages.length) return pages;
+            const parts = String(txt).split(/\n\s*[-=]{3,}\s*Page\s*\d+\s*[-=]{3,}\s*\n/i);
+            if (parts.length > 1) return parts.map((seg, i) => ({ header: `OCR Page ${i+1}`, lines: String(seg).split(/\r?\n/) }));
+            return [{ header: 'OCR Text', lines: String(txt).split(/\r?\n/) }];
+          };
+
+          const pages = splitIntoPages(text);
+          pages.forEach((seg, i) => {
+            if (i === 0) {
+              // Header for OCR section on first page
+              drawLine('RAW OCR TEXT (Unprocessed)', 14, { color: rgb(0.8, 0.3, 0.1) });
+              drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+              drawLine('', 8);
+            } else {
+              // Force a new PDF page for each OCR page segment
+              combinedPdf.addPage([612, 792]);
+              // Reset Y for the newly added page
+              y = height - margin;
+              drawLine('RAW OCR TEXT (Unprocessed)', 14, { color: rgb(0.8, 0.3, 0.1) });
+              drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
+              drawLine('', 8);
+            }
+            // Per-page header
+            drawLine(seg.header, 12, { color: rgb(0.2, 0.2, 0.2) });
+            drawLine('', 6);
+            let lineNumber = 1;
+            for (const raw of seg.lines) {
+              const line = String(raw || '');
+              if (line.trim()) {
+                const linePrefix = `${lineNumber.toString().padStart(3, ' ')}: `;
+                const cleanLine = line.replace(/[\u{1F000}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+                const maxCharsPerLine = 65;
+                if (cleanLine.length > maxCharsPerLine) {
+                  const wrappedLines = cleanLine.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) || [];
+                  let isFirstLine = true;
+                  for (const wrappedLine of wrappedLines) {
+                    const prefix = isFirstLine ? linePrefix : '     ';
+                    drawSegmented(prefix, wrappedLine, 9);
+                    isFirstLine = false;
+                  }
+                } else {
+                  drawSegmented(linePrefix, cleanLine, 9);
+                }
+                lineNumber++;
+              } else {
+                drawLine('', 6);
+              }
+            }
+          });
+          // Footer for OCR section (counts for entire text body)
           drawLine('', 8);
           drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
-          drawLine(`Total OCR Lines: ${lineNumber - 1} | Characters: ${text.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
+          drawLine(`Characters: ${text.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
           
         } else if (enhancedData.ocr_text || enhancedData.raw_text) {
           const ocrText = enhancedData.ocr_text || enhancedData.raw_text;
@@ -1322,11 +1784,11 @@ app.post('/export-mass-combined', async (req, res) => {
                 let isFirstLine = true;
                 for (const wrappedLine of wrappedLines) {
                   const prefix = isFirstLine ? linePrefix : '     ';
-                  drawLine(prefix + wrappedLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+                  drawSegmented(prefix, wrappedLine, 9);
                   isFirstLine = false;
                 }
               } else {
-                drawLine(linePrefix + cleanLine, 9, { color: rgb(0.2, 0.2, 0.2) });
+                drawSegmented(linePrefix, cleanLine, 9);
               }
               lineNumber++;
             } else {

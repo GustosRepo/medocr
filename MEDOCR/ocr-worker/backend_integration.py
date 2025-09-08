@@ -619,6 +619,7 @@ def run_batch(files: List[Path], intake_date: Optional[str]) -> dict:
             "qc_results": qc,
             "individual_pdf_ready": True,
             "individual_pdf_content": pdf_html,
+            "extracted_data": data,
         })
         if status == 'ready_to_schedule':
             ready += 1
@@ -658,6 +659,7 @@ def main():
     ap.add_argument("--mode", choices=["single", "batch"], required=True)
     ap.add_argument("--text-file")
     ap.add_argument("--files", nargs="*")
+    ap.add_argument("--files-manifest")
     ap.add_argument("--confidence", type=float)
     ap.add_argument("--intake-date")
     args = ap.parse_args()
@@ -671,10 +673,24 @@ def main():
         return
 
     if args.mode == "batch":
-        if not args.files:
+        # Support large batches via manifest file to avoid OS arg limits
+        file_list: list[str] = []
+        if args.files_manifest:
+            try:
+                with open(args.files_manifest, 'r', encoding='utf-8') as mf:
+                    for line in mf:
+                        p = line.strip()
+                        if p:
+                            file_list.append(p)
+            except Exception as e:
+                print(json.dumps({"success": False, "error": f"failed to read files-manifest: {e}"}))
+                return
+        if args.files:
+            file_list.extend(args.files)
+        if not file_list:
             print(json.dumps({"success": False, "error": "files required"}))
             return
-        out = run_batch([Path(f) for f in args.files], args.intake_date)
+        out = run_batch([Path(f) for f in file_list], args.intake_date)
         print(json.dumps(out))
         return
 

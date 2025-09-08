@@ -22,6 +22,11 @@ export async function batchOcr(formData) {
   return toJson(resp);
 }
 
+export async function batchOcrProgress(jobId) {
+  const resp = await fetch(`${API_BASE}/batch-ocr/progress/${encodeURIComponent(jobId)}`);
+  return toJson(resp);
+}
+
 export async function reextractText(payload) {
   const resp = await fetch(`${API_BASE}/reextract-text`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -60,13 +65,24 @@ export async function addRule(payload) {
   return toJson(resp);
 }
 
-export async function checklistList() {
-  const resp = await fetch(`${API_BASE}/checklist/list`);
+export async function checklistList(opts) {
+  let url = `${API_BASE}/checklist/list`;
+  const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  if (opts && opts.includeArchived) u.searchParams.set('include_archived', '1');
+  if (opts && opts.archivedOnly) u.searchParams.set('archived_only', '1');
+  const resp = await fetch(u.toString().replace(u.origin, API_BASE));
   return toJson(resp);
 }
 
 export async function checklistUpdate(payload) {
   const resp = await fetch(`${API_BASE}/checklist/update`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  return toJson(resp);
+}
+
+export async function checklistArchive(payload) {
+  const resp = await fetch(`${API_BASE}/checklist/archive`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
   });
   return toJson(resp);
@@ -96,6 +112,7 @@ export default {
   reextractText,
   exportCombinedData, exportMassCombined,
   rulesListFields, listAllowedFields, addRule,
-  checklistList, checklistUpdate, checklistImportScan,
+  checklistList, checklistUpdate, checklistImportScan, checklistArchive,
   feedback, ocrFlagAnalysis,
+  batchOcrProgress,
 };
