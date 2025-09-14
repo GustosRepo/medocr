@@ -6,5 +6,35 @@
   {"hcpcs": "E0470", "provider": ""},
   {"hcpcs": "", "provider": "apria"},
   {"hcpcs": "", "provider": "lincare"},
-  {"hcpcs": "", "provider": "rotech"}
+  {"hcpcs": "", "provider": "rotech"},
+  { "hcpcs": "E0601", "description": "CPAP device", "provider": "" },
+  { "hcpcs": "E0561", "description": "Humidifier, heated, used with PAP", "provider": "" },
+  { "hcpcs": "E0562", "description": "Humidifier, non-heated, used with PAP", "provider": "" },
+
+  { "hcpcs": "E0470", "description": "BiPAP without backup rate", "provider": "" },
+  { "hcpcs": "E0471", "description": "BiPAP with backup rate", "provider": "" },
+  { "hcpcs": "E0472", "description": "BiPAP adaptive servo ventilation", "provider": "" },
+
+  { "hcpcs": "A7030", "description": "Full face mask", "provider": "" },
+  { "hcpcs": "A7031", "description": "Full face cushion", "provider": "" },
+  { "hcpcs": "A7032", "description": "Nasal cushion", "provider": "" },
+  { "hcpcs": "A7033", "description": "Nasal pillows", "provider": "" },
+  { "hcpcs": "A7034", "description": "Nasal mask", "provider": "" },
+  { "hcpcs": "A7035", "description": "Headgear", "provider": "" },
+  { "hcpcs": "A7036", "description": "Chinstrap", "provider": "" },
+  { "hcpcs": "A7037", "description": "Tubing", "provider": "" },
+  { "hcpcs": "A7038", "description": "Filter, disposable", "provider": "" },
+  { "hcpcs": "A7039", "description": "Filter, non-disposable", "provider": "" },
+  { "hcpcs": "A7046", "description": "Humidifier chamber", "provider": "" },
+
+  { "hcpcs": "E1390", "description": "Oxygen concentrator, stationary", "provider": "" },
+  { "hcpcs": "E1392", "description": "Oxygen concentrator, portable", "provider": "" },
+  { "hcpcs": "E0445", "description": "Oxygen contents, gaseous, portable", "provider": "" },
+
+  { "hcpcs": "", "description": "", "provider": "apria" },
+  { "hcpcs": "", "description": "", "provider": "lincare" },
+  { "hcpcs": "", "description": "", "provider": "rotech" },
+  { "hcpcs": "", "description": "", "provider": "adapthealth" },
+  { "hcpcs": "", "description": "", "provider": "philips respironics" },
+  { "hcpcs": "", "description": "", "provider": "resmed" }
 ]
