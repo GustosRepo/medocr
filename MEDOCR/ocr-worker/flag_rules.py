@@ -6,7 +6,7 @@ Provides intelligent flagging and routing for medical document processing
 
 import json
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 import os, json
 from difflib import SequenceMatcher
@@ -32,9 +32,10 @@ def severity(flag_id: str) -> str:
     
     if flag_id in core_flags or flag_id in insurance_flags:
         return 'high'
-    elif flag_id in {'DME_MENTIONED', 'CPAP_COMPLIANCE_ISSUE', 'PEDIATRIC_SPECIAL_HANDLING', 
-                     'MOBILITY_ALERT', 'SAFETY_ALERT', 'LOW_OCR_CONFIDENCE', 
-                     'CONTRADICTORY_INFO', 'MANUAL_REVIEW_REQUIRED', 'FUTURE_REFERRAL_DATE'}:
+    elif flag_id in {'DME_PRESENT_REVIEW_REQUIRED', 'CPAP_COMPLIANCE_ISSUE', 'PEDIATRIC_SPECIAL_HANDLING',
+                     'MOBILITY_ALERT', 'SAFETY_ALERT', 'LOW_OCR_CONFIDENCE',
+                     'CONTRADICTORY_INFO', 'MANUAL_REVIEW_REQUIRED', 'FUTURE_REFERRAL_DATE',
+                     'SELF_PAY_WORKFLOW'}:
         return 'medium'
     else:
         return 'low'
@@ -123,14 +124,35 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
         List of flag IDs
     """
     flags = []
-    # Load external insurance rules if not provided
+    # Load external insurance & DME rules (and normalize keys) if not provided
     try:
-        if not rules or not rules.get('denied_carriers'):
-            rules_dir = os.path.join(os.path.dirname(__file__), 'rules')
-            ins_path = os.path.join(rules_dir, 'insurance.json')
-            if os.path.exists(ins_path):
-                data = json.load(open(ins_path,'r'))
-                rules = { **(rules or {}), **data }
+        rules_dir = os.path.join(os.path.dirname(__file__), 'rules')
+
+        # --- Insurance rules ---
+        ins_path = os.path.join(rules_dir, 'insurance.json')
+        if os.path.exists(ins_path):
+            ins_data = json.load(open(ins_path, 'r'))
+            rules = { **(rules or {}), **ins_data }
+            # Normalize: support either 'doNotAccept' or 'denied_carriers'
+            if 'doNotAccept' in ins_data and 'denied_carriers' not in rules:
+                rules['denied_carriers'] = ins_data['doNotAccept']
+            # Normalize: map sunset for Prominence if present
+            if 'sunsets' in ins_data and 'prominence_contract_end' not in rules:
+                prom = ins_data['sunsets'].get('Prominence') or ins_data['sunsets'].get('prominence')
+                if prom:
+                    rules['prominence_contract_end'] = prom
+
+        # --- DME rules ---
+        dme_path = os.path.join(rules_dir, 'dme.json')
+        if os.path.exists(dme_path):
+            dme_items = json.load(open(dme_path, 'r'))
+            hcpcs = [item['hcpcs'] for item in dme_items if item.get('hcpcs')]
+            providers = [item['provider'] for item in dme_items if item.get('provider')]
+            # Merge only if not already provided at call-site
+            if not rules or not rules.get('hcpcs'):
+                rules = { **(rules or {}), 'hcpcs': hcpcs }
+            if not rules or not rules.get('dme_providers'):
+                rules = { **(rules or {}), 'dme_providers': providers }
     except Exception:
         pass
     text_lower = ocr_text.lower()
@@ -200,19 +222,34 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     insurance = parsed.get('insurance', {}).get('primary', {})
     carrier = insurance.get('carrier', '').lower()
     
-    # INSURANCE_NOT_ACCEPTED (config-driven)
     denied_defaults = ['culinary','intermountain','p3 health','select health','wellcare']
-    denied_carriers = [d.lower() for d in rules.get('denied_carriers', [])] or denied_defaults
+    # Support either 'denied_carriers' or 'doNotAccept' in rules
+    denied_carriers = [d.lower() for d in (rules.get('denied_carriers') or rules.get('doNotAccept') or [])] or denied_defaults
     if any(dc in carrier for dc in denied_carriers):
         flags.append('INSURANCE_NOT_ACCEPTED')
-    
-    # PROMINENCE_CONTRACT_ENDED
+
+    # SELF_PAY workflow
+    self_pay = [s.lower() for s in rules.get('selfPay', [])]
+    if any(sp in carrier for sp in self_pay):
+        flags.append('SELF_PAY_WORKFLOW')
+
+    # PROMINENCE_CONTRACT_ENDED / SUNSET WARNING (30-day window)
     prominence_end = rules.get('prominence_contract_end')
+    if not prominence_end and isinstance(rules.get('sunsets'), dict):
+        prom = rules['sunsets'].get('Prominence') or rules['sunsets'].get('prominence')
+        if prom:
+            prominence_end = prom
+
     if prominence_end and 'prominence' in carrier:
         referral_date = _parse_date(parsed.get('referral', {}).get('date', ''))
         end_date = _parse_date(prominence_end)
-        if referral_date and end_date and referral_date > end_date:
-            flags.append('PROMINENCE_CONTRACT_ENDED')
+        if referral_date and end_date:
+            if referral_date > end_date:
+                flags.append('PROMINENCE_CONTRACT_ENDED')
+            else:
+                delta_days = (end_date - referral_date).days
+                if 0 <= delta_days <= 30:
+                    flags.append('INSURANCE_SUNSET_WARNING')
     
     # INSURANCE_EXPIRED
     # Look for coverage dates in text
@@ -240,7 +277,7 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     
     if (any(hcpcs in rule_hcpcs for hcpcs in hcpcs_codes) or 
         any(provider.lower() in [p.lower() for p in rule_dme_providers] for provider in dme_providers)):
-        flags.append('DME_MENTIONED')
+        flags.append('DME_PRESENT_REVIEW_REQUIRED')
     
     # CPAP_COMPLIANCE_ISSUE
     cpap_issues = [

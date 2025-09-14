@@ -7,10 +7,12 @@
 
     { "id": "INSURANCE_NOT_ACCEPTED", "category": "insurance", "route": "Out of network — fax UTS" },
     { "id": "PROMINENCE_CONTRACT_ENDED", "category": "insurance", "route": "Out of network — Prominence cutoff" },
+    { "id": "INSURANCE_SUNSET_WARNING", "category": "insurance", "route": "Prominence nearing cutoff — plan scheduling" },
+    { "id": "SELF_PAY_WORKFLOW", "category": "insurance", "route": "Self-pay workflow: quote/consent/deposit" },
     { "id": "INSURANCE_EXPIRED", "category": "insurance", "route": "Verify coverage dates" },
     { "id": "AUTHORIZATION_REQUIRED", "category": "insurance", "route": "Submit prior auth" },
 
-    { "id": "DME_MENTIONED", "category": "clinical", "route": "DME evaluation before test" },
+    { "id": "DME_PRESENT_REVIEW_REQUIRED", "category": "clinical", "route": "DME evaluation before test" },
     { "id": "CPAP_COMPLIANCE_ISSUE", "category": "clinical", "route": "Schedule titration consult" },
     { "id": "PEDIATRIC_SPECIAL_HANDLING", "category": "clinical", "route": "Route to pediatric workflow" },
     { "id": "MOBILITY_ALERT", "category": "clinical", "route": "Room/equipment check" },

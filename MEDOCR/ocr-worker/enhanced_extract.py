@@ -12,6 +12,13 @@ from ocr_preprocessing import OCRPreprocessor, FuzzyPatternMatcher, enhance_extr
 from semantic_template_mapper import SemanticTemplateMapper
 import os
 
+# Optional deterministic CPT selector (safe import)
+try:
+    from rules.cpt_selector import select_cpt
+except Exception:
+    def select_cpt(extracted_text: str, patient_age: int = None, prior_positive_test: bool = False, cpap_issues: list = None):
+        return {"code": None, "reason": "cpt_selector not available"}
+
 def _load_json_safe(p):
     try:
         import json
@@ -216,6 +223,29 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
     if split_night_requested and not cpt_list:
         cpt_list = ['95811' if titration_auto_criteria else '95810']
 
+    # --- CPT selector (deterministic final choice) ---
+    # Map detected CPAP issues into canonical flags expected by the selector
+    cpap_flags = []
+    if 'pressure too high' in text_l:
+        cpap_flags.append('cpap_issue_pressure_too_high')
+    if 'pressure too low' in text_l:
+        cpap_flags.append('cpap_issue_pressure_too_low')
+    if 'not tolerating' in text_l or 'cannot tolerate' in text_l or 'not tolerating cpap' in text_l:
+        cpap_flags.append('cpap_issue_not_tolerating')
+    if 'not feeling better' in text_l or 'still tired' in text_l:
+        cpap_flags.append('cpap_issue_not_feeling_better')
+
+    cpt_decision = select_cpt(
+        extracted_text=corrected_text,
+        patient_age=form.get('patient', {}).get('age'),
+        prior_positive_test=bool(has_prior_results),
+        cpap_issues=cpap_flags
+    )
+    selected_code = cpt_decision.get('code')
+    if selected_code:
+        # Enforce single CPT decision from selector
+        cpt_list = [selected_code]
+
     study_type = determine_study_type(cpt_list or extracted_fields.get('cpt_codes', ''))
     form["procedure"] = {
         "cpt": cpt_list,
@@ -223,7 +253,8 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
         "description": extracted_fields.get('cpt_descriptions', []),
         "priority": extracted_fields.get('priority', '') or "routine",
         "indication": extracted_fields.get('indication', '') or extracted_fields.get('primary_diagnosis', ''),
-        "titration_auto_criteria": titration_auto_criteria
+        "titration_auto_criteria": titration_auto_criteria,
+        "cpt_decision": cpt_decision
     }
     if form["procedure"]["indication"]:
         form["clinical"]["primary_diagnosis"] = form["procedure"]["indication"]

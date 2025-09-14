@@ -1,5 +1,134 @@
 {
-  "accepted": ["aetna", "anthem", "cigna", "humana", "united healthcare", "medicare", "medicaid"],
   "auto_flag": ["culinary", "intermountain", "p3 health", "select health", "wellcare"],
-  "contract_end": { "prominence": "2025-10-31" }
+  "contract_end": { "prominence": "2025-10-31" },
+  "accepted": [
+     "medicare", 
+     "medicaid",
+     "aetna",
+     "anthem",
+     "bcbs",
+     "cigna",
+     "humana",
+     "united healthcare",
+     "uhc",
+     "uhg",
+    "AARP",
+    "AARP Medicare",
+    "Aetna",
+    "Aetna Medicare",
+    "Anthem BCBS",
+    "Anthem BCBS Medicaid",
+    "Anthem BCBS Medicare",
+    "Anthem MediBlue",
+    "Blue Cross/Blue Shield",
+    "BCBS Federal",
+    "Cigna",
+    "Humana",
+    "United Healthcare",
+    "United AARP Medicare",
+    "United Medicare Focus",
+    "UMR",
+    "UniCare",
+    "Medicare",
+    "Medicare Advantage",
+    "Medicaid (SAMI)",
+    "Molina Medicaid",
+    "HPN Medicaid",
+    "Tricare",
+    "TriWest",
+    "VA Choice",
+    "Champ VA",
+    "HPN (HMO)",
+    "HPN (PPO)",
+    "HPN (POS)",
+    "Blue HPN",
+    "Sierra Health & Life",
+    "Sierra Healthcare Options",
+    "Silver Summit Health Plan",
+    "Hometown Health",
+    "The Health Plan",
+    "APWU",
+    "Carpenters Health",
+    "Southwest Carpenters",
+    "Clark County Firefighters",
+    "Las Vegas Fire Fighters",
+    "Clark County Self-Funded",
+    "Electrical Workers",
+    "GEHA",
+    "Mailhandler's",
+    "NALC",
+    "Operating Engineers",
+    "PEBP",
+    "Sheet Metal Workers",
+    "Teachers Health Trust",
+    "Teamsters",
+    "UFCW Local 711",
+    "Allegiance Benefits",
+    "Allied Benefits",
+    "AmBetter",
+    "Assurant Health",
+    "Beech Street",
+    "Department of Labor",
+    "DEEOIC",
+    "DCMWC",
+    "EBMS",
+    "GHI (Emblem Health)",
+    "Great West Health Care",
+    "Healthscope",
+    "John Alden",
+    "Loomis",
+    "Lucent Health",
+    "Medi-Share",
+    "Meritain Health",
+    "MGM Direct",
+    "Multiplan/PHCS",
+    "PHCS",
+    "Mutual of Omaha",
+    "One Health",
+    "OptumCare",
+    "Principal Life",
+    "Prominence",
+    "Trustmark",
+    "US Health Group",
+    "Venetian"
+  ],
+  "doNotAccept": [
+    "Culinary",
+    "Intermountain Health Plans",
+    "P3 Health Partners",
+    "Select Health",
+    "WellCare"
+  ],
+  "selfPay": [
+    "Cash Pay",
+    "No Insurance",
+    "Uninsured"
+  ],
+  "sunsets": {
+    "Prominence": "2025-10-31"
+  },
+  "planNotes": {
+    "Anthem BCBS": [
+      "Authorization may be required for titration (95811)",
+      "Check plan product for HSAT (G0399) precert"
+    ],
+    "Aetna": [
+      "Precert varies by product for split-night (95810→95811)",
+      "Some plans require in-lab criteria before HSAT"
+    ],
+    "United Healthcare": [
+      "May require prior diagnostic evidence before titration",
+      "Check network status of sleep facility"
+    ],
+    "Cigna": [
+      "HSAT (G0399) allowed for uncomplicated suspected OSA",
+      "Titration (95811) often needs prior positive diagnostic"
+    ],
+    "Humana": [
+      "Confirm authorization for pediatric codes (95782/95783)"
+    ],
+    "Prominence": [
+      "Monitor contract end date; warn within 30 days"
+    ]
+  }
 }
