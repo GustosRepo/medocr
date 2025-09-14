@@ -1,0 +1,19 @@
+ {
+   "G47.33": {"label": "Obstructive Sleep Apnea (Adult)", "keywords": ["osa","obstructive sleep apnea","apnea (obstructive)"]},
+   "G47.30": {"label": "Sleep Apnea, Unspecified", "keywords": ["sleep apnea","apnea unspecified"]},
+   "G47.10": {"label": "Hypersomnia, Unspecified", "keywords": ["hypersomnia","excessive daytime sleepiness","eds"]},
+   "R06.83": {"label": "Snoring", "keywords": ["snoring","loud snoring"]},
+   "G25.81": {"label": "Restless Legs Syndrome", "keywords": ["restless legs","rls"]},
+   "G47.00": {"label": "Insomnia, Unspecified", "keywords": ["insomnia"]},
+   "G47.21": {"label": "CRSD, Delayed Sleep Phase", "keywords": ["delayed sleep phase","dsps"]},
+   "G47.26": {"label": "CRSD, Shift Work Type", "keywords": ["shift work disorder","shift-work"]},
+   "G47.52": {"label": "REM Sleep Behavior Disorder", "keywords": ["rem behavior disorder","rbd"]},
+   "Z99.81": {"label": "Dependence on Supplemental Oxygen", "keywords": ["on oxygen","supplemental oxygen","oxygen dependent"]},
+   "I10": {"label": "Essential Hypertension", "keywords": ["hypertension","htn"]},
+   "E66.9": {"label": "Obesity, Unspecified", "keywords": ["obesity","obese","bmi >","morbid obesity"]},
+   "G47.411": {"label": "Narcolepsy with Cataplexy", "keywords": ["narcolepsy with cataplexy"]},
+   "G47.419": {"label": "Narcolepsy without Cataplexy", "keywords": ["narcolepsy"]},
+   "G47.62": {"label": "Sleep Related Leg Cramps", "keywords": ["leg cramps at night","nocturnal leg cramps"]},
+   "F90.9": {"label": "ADHD, Unspecified Type (Peds)", "keywords": ["adhd","attention deficit"]},
+   "F98.0": {"label": "Enuresis", "keywords": ["bedwetting","enuresis"]}
+ }

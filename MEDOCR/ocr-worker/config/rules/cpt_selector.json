@@ -1,0 +1,30 @@
+{
+  "splitNight": {
+    "blockDualCodes": true,
+    "preferred": "95811",
+    "notes": "Never approve both 95810 and 95811 at the same time"
+  },
+  "titrationAutoApproval": {
+    "requiresAny": [
+      "prior_positive_test",
+      "cpap_issue_pressure_too_high",
+      "cpap_issue_pressure_too_low",
+      "cpap_issue_not_feeling_better"
+    ],
+    "notes": "Only approve 95811 automatically if one of these conditions is documented"
+  },
+  "diagnosticRouting": {
+    "home_keywords": ["home sleep", "hst", "at home", "portable monitor"],
+    "lab_keywords": ["in-lab", "polysomnogram", "overnight lab", "PSG"],
+    "notes": "If home keywords present, map to G0399 or 95806; if lab keywords, map to 95810"
+  },
+  "pediatricRouting": {
+    "ageUnder": 18,
+    "codes": ["95782", "95783"],
+    "notes": "If patient under 18, force to pediatric CPT codes"
+  },
+  "fallback": {
+    "code": "95810",
+    "notes": "If nothing else matches, default to in-lab diagnostic PSG"
+  }
+}
