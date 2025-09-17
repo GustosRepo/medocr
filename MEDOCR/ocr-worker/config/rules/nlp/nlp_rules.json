@@ -1,0 +1,9 @@
+{
+  "proximityWindow": 8,
+  "subjectHints": ["patient", "pt", "he", "she", "they", "i"],
+  "thirdPartyHints": ["father", "mother", "spouse", "wife", "husband", "partner", "son", "daughter", "child", "kids", "brother", "sister", "coworker", "roommate"],
+  "temporalCues": {
+    "history": ["hx of", "history of", "previously", "prior", "years ago", "past medical history", "pmh"],
+    "resolved": ["resolved", "no longer", "discontinued", "stopped", "quit", "off cpap"]
+  }
+}

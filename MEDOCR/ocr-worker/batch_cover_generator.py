@@ -5,12 +5,41 @@ Generate a batch cover sheet HTML matching the client's checklist-oriented spec.
 from typing import List, Dict
 from datetime import datetime
 import html
+import json, os
+
+# --- helpers to load insurance plan notes ---
+def _load_json(path: str):
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+_INS_PATH = os.path.join(os.path.dirname(__file__), 'config', 'rules', 'insurance.json')
+_INS_CACHE = _load_json(_INS_PATH) or {}
+_PLAN_NOTES = _INS_CACHE.get('planNotes', {})
+
+
+def _auth_notes_for(carrier: str):
+    if not carrier:
+        return []
+    if carrier in _PLAN_NOTES:
+        return _PLAN_NOTES[carrier]
+    lc = carrier.lower()
+    for k, v in _PLAN_NOTES.items():
+        if k.lower() == lc:
+            return v
+    return []
 
 ACTION_KEYWORDS = {
-    'auth': ['Submit prior auth', 'Authorization required'],
-    'uts': ['Out of network — fax UTS', 'UTS referral'],
+    'ins_verify': ['Insurance verification', 'Verify insurance'],
+    'auth': ['Submit prior auth', 'Authorization required', 'Precert required'],
+    'uts': ['Out of network — fax UTS', 'UTS referral', 'OON'],
     'provider_followup': ['Request chart notes', 'Call provider for demographics', 'Provider follow-up'],
-    'patient_contact': ['Contact patient', 'Patient contact']
+    'patient_contact': ['Contact patient', 'Patient contact', 'Call patient'],
+    'self_pay': ['Self-pay workflow'],
+    'sunset': ['Plan sunset approaching', 'Sunset warning'],
+    'manual_review': ['Manual review required']
 }
 
 def _fmt_patient_line(d: Dict) -> str:
@@ -46,17 +75,36 @@ def render_cover_sheet(individuals: List[Dict], intake_date: str) -> Dict[str, s
             issues.extend(actions)
         if qc:
             issues.extend(qc.get('errors', []) + qc.get('warnings', []))
+        flags = item.get('flags', []) or []
+        if flags:
+            issues.extend(flags)
         if issues:
             addl_text = '; '.join(sorted(set(issues)))
+
+        # Tally forms by actions
         counts = _classify_counts(actions)
         for k, v in counts.items():
             form_counts[k] += v
-        if status == 'ready_to_schedule':
+
+        # Ready status: consider both provided status and blocking flags
+        blocking = {'MANUAL_REVIEW_REQUIRED','MISSING_CHART_NOTES','INSURANCE_NOT_ACCEPTED','SELF_PAY_WORKFLOW','INSURANCE_SUNSET_WARNING'}
+        is_ready = (status == 'ready_to_schedule') and not (set(flags) & blocking)
+        if is_ready:
             total_ready += 1
+
+        # Authorization notes from planNotes
+        carrier = (item.get('extracted_data', {}) or item).get('insurance', {}).get('primary', {}).get('carrier') if 'extracted_data' in item else (item.get('insurance', {}) or {}).get('primary', {}).get('carrier')
+        notes = _auth_notes_for(carrier or '')
+        notes_html = ""
+        if notes:
+            safe = '; '.join([html.escape(str(n)) for n in notes])
+            notes_html = f"\n  <div style='padding-left:18px'><i>Authorization Notes:</i> {safe}</div>\n"
+
         lines_html.append(
             f"<div>\n"
             f"  <div>□ {_fmt_patient_line(item)}</div>\n"
-            f"  <div style='padding-left:18px'>Additional Actions Required: {html.escape(addl_text)}</div>\n"
+            f"  <div style='padding-left:18px'>Additional Actions Required: {html.escape(addl_text)}</div>" +
+            notes_html +
             f"</div>"
         )
 
@@ -65,7 +113,7 @@ def render_cover_sheet(individuals: List[Dict], intake_date: str) -> Dict[str, s
     intake_disp = intake_date or datetime.today().strftime('%m/%d/%Y')
 
     forms_html = (
-        f"<div>□ Insurance verification forms: {form_counts['auth']}</div>\n"
+        f"<div>□ Insurance verification forms: {form_counts['ins_verify']}</div>\n"
         f"<div>□ Authorization request forms: {form_counts['auth']}</div>\n"
         f"<div>□ UTS referral forms: {form_counts['uts']}</div>\n"
         f"<div>□ Provider follow-up requests: {form_counts['provider_followup']}</div>\n"
@@ -88,4 +136,3 @@ def render_cover_sheet(individuals: List[Dict], intake_date: str) -> Dict[str, s
 </div>
 """
     return { 'html': html_out }
-
