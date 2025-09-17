@@ -1,0 +1,14 @@
+{
+  "thresholds": { "high": 90, "medium": 80, "low": 70 },
+  "criticalFields": [
+    "patient.name",
+    "patient.dob",
+    "insurance.primary.carrier",
+    "procedure.cpt"
+  ],
+  "manualTriggers": [
+    "contradictions",
+    "handwriting_blocked",
+    "missing_required"
+  ]
+}

@@ -8,7 +8,7 @@ import json
 import re
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
-import os, json
+import os
 from difflib import SequenceMatcher
 
 
@@ -207,8 +207,9 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     
     # MISSING_CHART_NOTES
     clinical = parsed.get('clinical', {})
-    icd10_codes = clinical.get('icd10_all', [])
-    if not icd10_codes and not symptoms:
+    icd10_codes = clinical.get('icd10_codes') or clinical.get('icd10_all') or []
+    primary_dx = clinical.get('primary_diagnosis')
+    if not primary_dx and not icd10_codes and not symptoms:
         flags.append('MISSING_CHART_NOTES')
     
     # MISSING_PATIENT_INFO
@@ -367,6 +368,15 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     if len(high_severity_flags) >= 2:
         flags.append('MANUAL_REVIEW_REQUIRED')
     
+    # --- ICD completeness flags ---
+    try:
+        if not primary_dx:
+            flags.append('ICD_PRIMARY_MISSING')
+        elif isinstance(icd10_codes, list) and len(icd10_codes) < 1:
+            flags.append('ICD_SUPPORTING_MISSING')
+    except Exception:
+        pass
+
     return flags
 
 
