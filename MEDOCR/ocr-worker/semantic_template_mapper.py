@@ -5,17 +5,354 @@ Uses semantic analysis and contextual pattern matching for better extraction.
 
 import re
 import json
+import os
 from typing import Dict, List, Any, Optional
 from difflib import SequenceMatcher
 from collections import defaultdict
+from typing import TYPE_CHECKING
+import importlib, importlib.util
 
-# Try to import spacy, but continue without it if not available
-try:
-    import spacy
+# --- Fallback line-by-line mappers (robust, non-destructive) ---
+_WS = r"[ \t]*"
+_SEP = r"[:#\-–\|]"
+_LINE = r"[^\n\r]*"
+
+DOB_RE       = re.compile(rf"(?i)\bD\s*O\s*B\b{_WS}{_SEP}?{_WS}([0-9]{{1,2}}[\/-][0-9]{{1,2}}[\/-][0-9]{{2,4}})")
+CARRIER_RE   = re.compile(rf"(?i)\b(?:Insurance|Carrier|Payer)\b{_WS}{_SEP}?{_WS}({_LINE})")
+MEMBER_RE    = re.compile(rf"(?i)\b(?:Member|Subscriber)\s*(?:ID|#)?{_WS}{_SEP}?{_WS}([A-Za-z0-9\-]{{4,24}})")
+GROUP_RE     = re.compile(rf"(?i)\b(?:Group|Grp)\s*(?:ID|#)?{_WS}{_SEP}?{_WS}([A-Za-z0-9\-]{{2,24}})")
+MDNAME_RE    = re.compile(rf"(?i)\bReferr(?:ing)?\s*Physician\b{_WS}{_SEP}?{_WS}({_LINE})")
+MDNAME2_RE   = re.compile(rf"(?i)\bProvider\b{_WS}{_SEP}?{_WS}({_LINE})")
+NPI_RE       = re.compile(rf"(?i)\bNPI\b{_WS}{_SEP}?{_WS}([0-9]{{10}})")
+
+CPT_LINE_RE  = re.compile(rf"(?i)^({_LINE}?(?:CPT|Procedure){_LINE})$")
+CPT_TOKEN_RE = re.compile(r"[0-9OolISBG]{4,5}")
+
+# --- Extended fallback patterns ---
+DOB_ALT_RE    = re.compile(rf"(?i)\b(?:date\s*of\s*birth|d\.\s*o\.\s*b\.|d\.o\.b\.){_WS}{_SEP}?{_WS}([0-9]{{1,2}}[\/-][0-9]{{1,2}}[\/-][0-9]{{2,4}})")
+DOB_ISO_RE    = re.compile(r"(?i)\b(\d{4}[\/-](?:0?[1-9]|1[0-2])[\/-](?:0?[1-9]|[12][0-9]|3[01]))\b")
+NPI_FUZZY_RE  = re.compile(rf"(?i)\bNP[Il1]\b{_WS}{_SEP}?{_WS}([0-9\-\s]{{10,20}})")
+CPT_KNOWN_RE  = re.compile(r"\b(95806|95810|95811|95782|95783|G0399)\b", re.IGNORECASE)
+
+ICD_TOKEN_RE  = re.compile(r"\b([A-TV-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?)\b")
+
+# Multiline label → value (value appears on next line)
+CARRIER_NL_RE = re.compile(rf"(?is)\b(?:Insurance|Carrier|Payer|Plan)(?:\s*Name)?\b{_WS}{_SEP}?{_WS}\n{_WS}({_LINE})")
+MEMBER_NL_RE  = re.compile(rf"(?is)\b(?:Member|Subscriber)\s*(?:ID|#)?\b{_WS}{_SEP}?{_WS}\n{_WS}([A-Za-z0-9\-]{4,24})")
+GROUP_NL_RE   = re.compile(rf"(?is)\b(?:Group|Grp)\s*(?:ID|#)?\b{_WS}{_SEP}?{_WS}\n{_WS}([A-Za-z0-9\-]{2,24})")
+
+# NPI multiline / fuzzy next-line
+NPI_NL_RE     = re.compile(rf"(?is)\bNP[Il1]\b{_WS}{_SEP}?{_WS}\n{_WS}([0-9\-\s]{10,20})")
+
+# Collapsing spaced digits (e.g., 9 5 8 1 0 in tables)
+# Collapsing spaced digits (e.g., 9 5 8 1 0 in tables)
+SPACED5_RE    = re.compile(r"(?<!\d)(?:\d\s+){4}\d(?!\d)")
+
+def _collapse_spaced_digits(s: str) -> str:
+    return re.sub(r"\s+", "", s)
+
+# Generic/alternate insurance ID & group patterns (line or next-line)
+SUBSCR_ID_ANY_RE   = re.compile(rf"(?is)\b(?:Member|Subscriber|Subscr\.?|Policy)\s*(?:ID|No\.?|#|Number)?\b{_WS}{_SEP}?{_WS}(?:\n{_WS})?([A-Za-z0-9\-]{{4,24}})")
+GROUP_ANY_RE       = re.compile(rf"(?is)\b(?:Group|Grp|Group\s*No\.?|Grp\s*No\.?)\s*(?:ID|No\.?|#|Number)?\b{_WS}{_SEP}?{_WS}(?:\n{_WS})?([A-Za-z0-9\-]{{2,24}})")
+
+ # Window search around Insurance header for downstream Member/Group
+INSURANCE_HEADER_RE = re.compile(r"(?im)^(?:\s*(?:Primary\s*)?(?:Insurance|Carrier|Payer|Plan)\b.*)$")
+
+# Label-only lines where value appears 1-3 lines below
+LABEL_MEMBER_LINE = re.compile(r"(?im)^\s*(?:Member|Subscriber|Policy)\s*(?:ID|No\.?|#|Number)?\s*(?::|#|\-|–)?\s*$")
+LABEL_GROUP_LINE  = re.compile(r"(?im)^\s*(?:Group|Grp|Group\s*No\.?|Grp\s*No\.?)\s*(?:ID|No\.?|#|Number)?\s*(?::|#|\-|–)?\s*$")
+
+# Compact tokens like 'AB 12 - 345 678' -> 'AB12-345678'
+def _compact_id_token(s: str) -> str:
+    s = s.strip()
+    # preserve hyphens, drop spaces around them; compress internal spaces
+    s = re.sub(r"\s+\-\s+", "-", s)
+    s = re.sub(r"\s+", "", s)
+    return s
+
+# Soft carrier list if insurance.json not available
+_SOFT_CARRIERS = [
+    'Anthem', 'Anthem BCBS', 'Blue Cross', 'Blue Cross Blue Shield', 'BCBS',
+    'Aetna', 'Cigna', 'UnitedHealthcare', 'United Health', 'UHC', 'Humana',
+    'Medicare', 'Medicaid', 'Kaiser', 'Kaiser Permanente', 'Prominence', 'Molina', 'HPN'
+]
+
+def _clean_digits(s: str) -> str:
+    return re.sub(r"\D", "", s or "")
+
+def _guess_carrier_from_text(text: str) -> str:
+    # Try to use insurance.json if present
+    possible = set()
+    try:
+        for pth in ("insurance.json", "../insurance.json", "../../insurance.json"):
+            try:
+                with open(pth, 'r') as fh:
+                    data = json.load(fh)
+                    for bucket in ("accepted", "specialty", "doNotAccept"):
+                        vals = data.get(bucket) or []
+                        for v in vals:
+                            if isinstance(v, str):
+                                possible.add(v)
+            except FileNotFoundError:
+                continue
+    except Exception:
+        pass
+    if not possible:
+        possible.update(_SOFT_CARRIERS)
+    low = text.lower()
+    best = None
+    best_len = 0
+    for name in possible:
+        if not name:
+            continue
+        nlow = name.lower()
+        if nlow in low and len(nlow) > best_len:
+            best = name
+            best_len = len(nlow)
+    return best or ""
+
+def _clean_fallback(s: str) -> str:
+    return (s or "").strip(" •:*–-").strip()
+
+def _normalize_cpt_token(tok: str) -> str:
+    table = str.maketrans({"O":"0","o":"0","I":"1","l":"1","i":"1","S":"5","s":"5","B":"8","G":"6"})
+    return tok.translate(table)
+
+def apply_fallback_mappings(ocr_text: str, patient: dict, insurance: dict, physician: dict, procedure: dict) -> None:
+    lines = (ocr_text or "").splitlines()
+
+    # DOB
+    if not patient.get("dob"):
+        for ln in lines:
+            m = DOB_RE.search(ln)
+            if m:
+                patient["dob"] = _clean_fallback(m.group(1))
+                break
+    if not patient.get("dob"):
+        for ln in lines:
+            m = DOB_ALT_RE.search(ln)
+            if m:
+                patient["dob"] = _clean_fallback(m.group(1))
+                break
+    if not patient.get("dob"):
+        m2 = DOB_ISO_RE.search(ocr_text or "")
+        if m2:
+            patient["dob"] = _clean_fallback(m2.group(1))
+
+    # Insurance
+    insurance.setdefault("primary", {})
+    pri = insurance["primary"]
+    if not pri.get("carrier"):
+        for ln in lines:
+            m = CARRIER_RE.search(ln)
+            if m:
+                pri["carrier"] = _clean_fallback(m.group(1))
+                break
+    if not pri.get("carrier"):
+        guess = _guess_carrier_from_text(ocr_text or "")
+        if guess:
+            pri["carrier"] = guess
+    # Carrier on next line
+    if not pri.get("carrier"):
+        m = CARRIER_NL_RE.search(ocr_text or "")
+        if m:
+            pri["carrier"] = _clean_fallback(m.group(1))
+    if not pri.get("member_id"):
+        for ln in lines:
+            m = MEMBER_RE.search(ln)
+            if m:
+                pri["member_id"] = _clean_fallback(m.group(1))
+                break
+    # Member ID on next line
+    if not pri.get("member_id"):
+        m = MEMBER_NL_RE.search(ocr_text or "")
+        if m:
+            pri["member_id"] = _clean_fallback(m.group(1))
+    # Broader catch-all for Member/Subscriber/Policy IDs (same line or next line)
+    if not pri.get("member_id"):
+        m = SUBSCR_ID_ANY_RE.search(ocr_text or "")
+        if m:
+            pri["member_id"] = _clean_fallback(m.group(1))
+    if not pri.get("group"):
+        for ln in lines:
+            m = GROUP_RE.search(ln)
+            if m:
+                pri["group"] = _clean_fallback(m.group(1))
+                break
+    # Group on next line
+    if not pri.get("group"):
+        m = GROUP_NL_RE.search(ocr_text or "")
+        if m:
+            pri["group"] = _clean_fallback(m.group(1))
+    # Broader catch-all for Group IDs (same line or next line)
+    if not pri.get("group"):
+        m = GROUP_ANY_RE.search(ocr_text or "")
+        if m:
+            pri["group"] = _clean_fallback(m.group(1))
+
+    # Windowed scan: if either member_id or group is still missing, look for Insurance/Carrier header and scan next 5 lines
+    if (not pri.get("member_id") or not pri.get("group")) and (ocr_text):
+        lines_enum = (ocr_text or "").splitlines()
+        for idx, ln in enumerate(lines_enum):
+            if INSURANCE_HEADER_RE.match(ln):
+                window = "\n".join(lines_enum[idx+1: idx+6])
+                if not pri.get("member_id"):
+                    m1 = SUBSCR_ID_ANY_RE.search(window)
+                    if m1:
+                        pri["member_id"] = _clean_fallback(m1.group(1))
+                if not pri.get("group"):
+                    m2 = GROUP_ANY_RE.search(window)
+                    if m2:
+                        pri["group"] = _clean_fallback(m2.group(1))
+                if pri.get("member_id") and pri.get("group"):
+                    break
+
+    # Final multi-line lookahead: label on its own line, value 1-3 lines below
+    if (not pri.get("member_id") or not pri.get("group")) and (ocr_text):
+        lines_enum = (ocr_text or "").splitlines()
+        n = len(lines_enum)
+        for idx, ln in enumerate(lines_enum):
+            # Member ID
+            if not pri.get("member_id") and LABEL_MEMBER_LINE.match(ln):
+                for j in range(1, 4):
+                    if idx + j >= n: break
+                    cand = lines_enum[idx + j].strip()
+                    m = re.search(r"([A-Za-z0-9][A-Za-z0-9\-\s]{2,30}[A-Za-z0-9])", cand)
+                    if m:
+                        pri["member_id"] = _clean_fallback(_compact_id_token(m.group(1)))
+                        break
+            # Group
+            if not pri.get("group") and LABEL_GROUP_LINE.match(ln):
+                for j in range(1, 4):
+                    if idx + j >= n: break
+                    cand = lines_enum[idx + j].strip()
+                    m = re.search(r"([A-Za-z0-9][A-Za-z0-9\-\s]{1,30}[A-Za-z0-9])", cand)
+                    if m:
+                        pri["group"] = _clean_fallback(_compact_id_token(m.group(1)))
+                        break
+            if pri.get("member_id") and pri.get("group"):
+                break
+
+    # Physician
+    if not physician.get("name"):
+        for ln in lines:
+            m = MDNAME_RE.search(ln) or MDNAME2_RE.search(ln)
+            if m:
+                physician["name"] = _clean_fallback(m.group(1))
+                break
+    if not physician.get("npi"):
+        for ln in lines:
+            m = NPI_RE.search(ln)
+            if m:
+                physician["npi"] = _clean_fallback(m.group(1))
+                break
+    if not physician.get("npi"):
+        for ln in lines:
+            m = NPI_FUZZY_RE.search(ln)
+            if m:
+                digits = _clean_digits(m.group(1))
+                if len(digits) >= 10:
+                    physician["npi"] = digits[-10:]
+                    break
+
+    # NPI appearing on the next line after label
+    if not physician.get("npi"):
+        m = NPI_NL_RE.search(ocr_text or "")
+        if m:
+            digits = _clean_digits(m.group(1))
+            if len(digits) >= 10:
+                physician["npi"] = digits[-10:]
+
+    # Paragraph-based NPI fallback (unlabeled but in provider paragraph)
+    if not physician.get("npi"):
+        paragraphs = re.split(r"\n\s*\n", ocr_text or "")
+        for p in paragraphs:
+            if re.search(r"(?i)provider|physician|doctor|dr\.", p):
+                digits = _clean_digits(p)
+                if len(digits) >= 10:
+                    physician["npi"] = digits[-10:]
+                    break
+
+    # CPT codes
+    if not procedure.get("cpt"):
+        candidates = []
+        for ln in lines:
+            if CPT_LINE_RE.match(ln) or ("cpt" in ln.lower()) or ("procedure" in ln.lower()):
+                for tok in CPT_TOKEN_RE.findall(ln):
+                    norm = _normalize_cpt_token(tok)
+                    digits = re.sub(r"\D", "", norm)
+                    if len(digits) in (4,5):
+                        if len(digits) == 4:
+                            digits = "0" + digits
+                        candidates.append(digits)
+        seen = set(); codes = []
+        for c in candidates:
+            if c not in seen:
+                seen.add(c); codes.append(c)
+        if codes:
+            procedure["cpt"] = codes if len(codes) > 1 else codes[0]
+    # Spaced CPT digits anywhere (tables often space digits out)
+    if not procedure.get("cpt"):
+        spaced = []
+        for m in SPACED5_RE.finditer(ocr_text or ""):
+            packed = _collapse_spaced_digits(m.group(0))
+            if packed in ("95806","95810","95811","95782","95783","03999"):
+                spaced.append("G0399" if packed == "03999" else packed)
+        if spaced:
+            uniq = []
+            for c in spaced:
+                if c not in uniq:
+                    uniq.append(c)
+            procedure["cpt"] = uniq if len(uniq) > 1 else uniq[0]
+    if not procedure.get("cpt"):
+        found = []
+        for m in CPT_KNOWN_RE.finditer(ocr_text or ""):
+            code = m.group(1).upper()
+            if code not in found:
+                found.append(code)
+        if found:
+            procedure["cpt"] = found if len(found) > 1 else found[0]
+    # Contextual inference: if not found, infer from context
+    if not procedure.get("cpt"):
+        tl = (ocr_text or "").lower()
+        inferred = []
+        # split-night and titration are strongest signals
+        if re.search(r"\bsplit[-\s]*night\b", tl):
+            inferred.append("95811")
+        if re.search(r"\btitration\b|cpap\s*[/|]?\s*bi\s*p\s*ap|cpap\s*bi\s*pap|cpapbipap", tl):
+            if "95811" not in inferred:
+                inferred.append("95811")
+        # in-lab PSG or explicit polysomnography/PSG
+        if re.search(r"in[-\s]?lab.*?(polysom|psg)|\bpolysomnograph|\bpsg\b|\bpolysom\b", tl):
+            if "95810" not in inferred:
+                inferred.append("95810")
+        # home study / HSAT variants
+        if re.search(r"home\s+sleep\s+(apnea\s+)?(test|study)|\bhsat\b|h\s*s\s*a\s*t|home\s+sleep\s+apnea\s+test", tl):
+            if "G0399" not in inferred and "95806" not in inferred:
+                inferred.append("95806")
+        # type codes common on HST forms
+        if re.search(r"type\s*iii|type\s*3\b", tl) and "G0399" not in inferred:
+            inferred.append("G0399")
+        if re.search(r"type\s*ii|type\s*2\b", tl) and "G0398" not in inferred:
+            inferred.append("G0398")
+        # choose single best based on priority
+        priority = ["95811", "95810", "G0399", "95806", "G0398"]
+        for p in priority:
+            if p in inferred:
+                procedure["cpt"] = p
+                break
+
+
+# spaCy optional import (satisfies type-checkers without requiring dependency)
+if TYPE_CHECKING:
+    import spacy as _spacy  # type: ignore[reportMissingImports]
+
+spacy = None  # runtime name
+SPACY_AVAILABLE = False
+_spec = importlib.util.find_spec("spacy")
+if _spec is not None:
+    spacy = importlib.import_module("spacy")  # type: ignore[reportMissingImports]
     SPACY_AVAILABLE = True
-except ImportError:
-    SPACY_AVAILABLE = False
-    spacy = None
 
 
 class SemanticTemplateMapper:
@@ -76,7 +413,9 @@ class SemanticTemplateMapper:
             'member_id': {
                 'patterns': [
                     r'(?:member|policy).*?id.*?([A-Z]{2,4}[-\s]?\d{6,12})',
-                    r'\b(?:subscriber|policy)\s*id[:\s]*([A-Z0-9\-]{4,20})'
+                    r'\b(?:subscriber|policy)\s*id[:\s]*([A-Z0-9\-]{4,20})',
+                    r'\b(?:member|subscriber)\s*#?[:\s]*([0-9]{6,20})',
+                    r'\b(?:member|subscriber|policy)\s*id\s*#?[:\s]*([A-Za-z0-9\-]{4,24})'
                 ],
                 'context_words': ['member', 'policy', 'identification'],
                 'required': False
@@ -129,7 +468,10 @@ class SemanticTemplateMapper:
                     r"\b(mw['’]?t|maintenance\s+of\s+wakefulness\s+test)\b",
                     r'cpap\s*[/|]?\s*bi\s*p\s*ap',
                     r'cpap\s*bi\s*pap',
-                    r'cpapbipap'
+                    r'cpapbipap',
+                    r'\bsleep\s+evaluation\b',
+                    r'\bovernight\s+(?:testing|study)\b',
+                    r'\bcomplete\s+sleep\s+study\b'
                 ],
                 'context_words': ['psg', 'hsat', 'mslt', 'mwt', 'study', 'requested'],
                 'required': False
@@ -229,8 +571,7 @@ class SemanticTemplateMapper:
                     r'phone:\s*\((\d{3})\)\s*(\d{3})-(\d{4})',
                     r'phone\s+\((\d{3})\)\s*(\d{3})[-\s]?(\d{4})',
                     r'Phone:\s*\((\d{3})\)\s*(\d{3})[-\s]?(\d{4})',
-                    r'(?:phone|tel|telephone)[:\s]*?(\d{3})[-\s]?(\d{3})[-\s]?(\d{4})',
-                    r'\b(\d{3})[-\s]?(\d{3})[-\s]?(\d{4})\b'
+                    r'(?:phone|tel|telephone)[:\s]*?(\d{3})[-\s]?(\d{3})[-\s]?(\d{4})'
                 ],
                 'context_words': ['phone', 'telephone', 'contact'],
                 'required': False
@@ -292,8 +633,6 @@ class SemanticTemplateMapper:
 
         # Conservative corrections
         corrections = {
-            r"\bIll\b": 'III',
-            r"\b0(\d+)\b": r"\1",
             r"\bIbs\b": 'lbs',
             r"\boln-lab\b": 'in-lab',
             r"5°(\d+)": r"5'\1",
@@ -570,10 +909,12 @@ def enhanced_template_extraction(ocr_text: str, ocr_confidence: float = 0.0) -> 
 
     # Patient
     if 'patient_name' in extracted:
-        parts = extracted['patient_name'].split()
+        full = ' '.join(extracted['patient_name'].split())
+        parts = full.split()
         if len(parts) >= 2:
             patient_data['first_name'] = parts[0]
             patient_data['last_name'] = ' '.join(parts[1:])
+        patient_data['name'] = full
     if 'date_of_birth' in extracted:
         patient_data['dob'] = extracted['date_of_birth']
     if 'mrn' in extracted:
@@ -613,7 +954,8 @@ def enhanced_template_extraction(ocr_text: str, ocr_confidence: float = 0.0) -> 
             'G0398': 'Home sleep study type II',
             'G0399': 'Home sleep study type III'
         }
-        procedure_data['description'] = [cpt_descriptions.get(c, 'Sleep Study') for c in codes]
+        desc_list = [cpt_descriptions.get(c, 'Sleep Study') for c in codes]
+        procedure_data['description'] = desc_list[0] if len(desc_list) == 1 else desc_list
     if 'indication' in extracted:
         procedure_data['indication'] = extracted['indication']
 
@@ -651,6 +993,89 @@ def enhanced_template_extraction(ocr_text: str, ocr_confidence: float = 0.0) -> 
 
     # Overall confidence
     overall_conf = result['overall_confidence'] if result['overall_confidence'] else (ocr_confidence or 0.0)
+
+    # Fallback fill for missing core fields (non-destructive)
+    try:
+        apply_fallback_mappings(ocr_text, patient_data, insurance_data, physician_data, procedure_data)
+    except Exception:
+        pass
+
+    # Promote ICD primary from list if present but primary_diagnosis missing
+    if not clinical_data.get("primary_diagnosis"):
+        icds = clinical_data.get("icd10_codes") or []
+        if icds and isinstance(icds, list):
+            first = icds[0]
+            if isinstance(first, dict) and first.get("code"):
+                clinical_data["primary_diagnosis"] = f"{first.get('code')} — {first.get('label') or ''}".strip(" —")
+            elif isinstance(first, str):
+                clinical_data["primary_diagnosis"] = first
+
+    # ICD fallback: harvest tokens from text if none found
+    if not clinical_data.get('icd10_codes'):
+        tokens = []
+        seen = set()
+        for m in ICD_TOKEN_RE.finditer(ocr_text or ""):
+            code = m.group(1)
+            # Prefer sleep/respiratory-related groups, but keep all unique
+            if code not in seen:
+                seen.add(code)
+                tokens.append(code)
+        if tokens:
+            clinical_data['icd10_codes'] = tokens
+            if not clinical_data.get('primary_diagnosis'):
+                clinical_data['primary_diagnosis'] = tokens[0]
+
+    # Backfill description if CPT found only via fallback
+    if procedure_data.get('cpt') and not procedure_data.get('description'):
+        cpt_map = {
+            '95810': 'In-lab polysomnography (diagnostic, 6+ hours)',
+            '95811': 'In-lab CPAP/BiPAP titration or split-night',
+            '95808': 'Polysomnography; 1-3 parameters',
+            '95807': 'PSG; 4 or more parameters',
+            '95806': 'Home sleep apnea test (HSAT)',
+            '95805': 'MSLT/MWT (sleepiness/wakefulness testing)',
+            '95782': 'PSG pediatric under 6',
+            '95783': 'PSG pediatric with titration',
+            'G0398': 'Home sleep study type II',
+            'G0399': 'Home sleep study type III'
+        }
+        codes = procedure_data['cpt'] if isinstance(procedure_data['cpt'], list) else [procedure_data['cpt']]
+        desc_list = [cpt_map.get(c, 'Sleep Study') for c in codes]
+        procedure_data['description'] = desc_list[0] if len(desc_list) == 1 else desc_list
+
+    # --- BEGIN: HIPAA-safe debug trace ---
+    if os.getenv("MEDOCR_DEBUG", "0") == "1":
+        def _has(d, path):
+            cur = d
+            for part in path.split("."):
+                if isinstance(cur, list):
+                    return len(cur) > 0
+                if not isinstance(cur, dict) or part not in cur:
+                    return False
+                cur = cur[part]
+            return cur not in (None, "", [], {})
+
+        record = {
+            'patient': patient_data,
+            'insurance': insurance_data,
+            'procedure': procedure_data,
+            'physician': physician_data,
+            'clinical': clinical_data,
+        }
+        want = [
+            "patient.name","patient.first_name","patient.last_name","patient.dob",
+            "insurance.primary.carrier","insurance.primary.member_id","insurance.primary.group",
+            "procedure.cpt","procedure.description",
+            "physician.name","physician.npi",
+            "clinical.primary_diagnosis","clinical.icd10_codes"
+        ]
+        present = [k for k in want if _has(record, k)]
+        missing = [k for k in want if not _has(record, k)]
+        print("=== MEDOCR TRACE ===")
+        print("present:", ", ".join(present) if present else "(none)")
+        print("missing:", ", ".join(missing) if missing else "(none)")
+        print("method:", result.get("extraction_method"), "| overall_conf:", f"{overall_conf:.1f}")
+    # --- END: HIPAA-safe debug trace ---
 
     return {
         'patient': patient_data,

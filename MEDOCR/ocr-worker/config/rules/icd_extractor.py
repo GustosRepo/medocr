@@ -1,12 +1,36 @@
 # rules/icd_extractor.py
 import json, os, re
 
+
 BASE = os.path.dirname(__file__)
+
+# Optional external NLP rules (proximity/subject/temporal)
+NLP_BASE = os.path.join(BASE, "nlp")
+RULE_PATH = os.path.join(NLP_BASE, "nlp_rules.json")
+try:
+    with open(RULE_PATH, "r") as f:
+        _NLP_RULES = json.load(f)
+except Exception:
+    _NLP_RULES = {
+        "proximityWindow": 8,
+        "subjectHints": ["patient", "pt", "he", "she", "they", "i"],
+        "thirdPartyHints": [
+            "father","mother","spouse","wife","husband","partner",
+            "son","daughter","child","kids","brother","sister",
+            "coworker","roommate","grandfather","grandmother","grandparent"
+        ],
+        "temporalCues": {
+            "history": ["hx of","history of","previously","prior","years ago","past medical history","pmh"],
+            "resolved": ["resolved","no longer","discontinued","stopped","quit","off cpap"]
+        }
+    }
+
+# Convert proximity (words) to an approximate char window for legacy char-scanning
+WINDOW = int((_NLP_RULES.get("proximityWindow", 8) or 8) * 8)
 
 ICD_PATH = os.path.join(BASE, "icd10.json")
 NEG_PATH = os.path.join(BASE, "negations.json")
 
-WINDOW = 48  # chars of context around a match to check negation
 
 # Load ICD and negations
 try:
@@ -27,50 +51,77 @@ def _negated(ctx: str) -> bool:
     return any(n in lc for n in NEG)
 
 
-def extract_icd(text: str):
-    """Negation-aware keyword → ICD matching.
+def extract_icd(text: str, patient_age: int = None):
+    """Negation/subject/temporal‑aware keyword → ICD matching.
     Returns {"primary": {code,label}|None, "supporting": [{code,label}, ...]}
-    Ranking pref: G-codes > R-codes > others; then by frequency.
+    Ranking pref: G-codes > R-codes > others; then by weighted frequency.
     """
     tl = (text or "").lower()
     if not tl or not ICD:
         return {"primary": None, "supporting": []}
 
-    hits = []
+    hits = []  # (code, label, weight)
     for code, spec in ICD.items():
         lbl = spec.get("label", code)
         kws = [k.lower() for k in spec.get("keywords", [])]
         if not kws:
             continue
         for kw in kws:
-            for m in re.finditer(re.escape(kw), tl):
+            # Use word boundaries to avoid partial hits (e.g., 'osa' inside 'mimosa')
+            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(kw) + r"(?![A-Za-z0-9])")
+            for m in pattern.finditer(tl):
                 s, e = m.span()
                 ctx = tl[max(0, s-WINDOW):min(len(tl), e+WINDOW)]
                 if _negated(ctx):
                     continue
-                hits.append((code, lbl))
+                if _is_third_party(ctx):
+                    # skip third‑party mentions like 'father snores'
+                    continue
+                weight = 1.0
+                if _has_history(ctx):
+                    weight *= 0.6  # de‑prioritize historical mentions
+                if _is_resolved(ctx):
+                    weight *= 0.4  # strongly de‑prioritize resolved mentions
+                hits.append((code, lbl, weight))
                 break  # one hit per kw is enough
 
     if not hits:
         return {"primary": None, "supporting": []}
 
-    # Count & rank
-    counts = {}
-    for c, lbl in hits:
-        counts.setdefault(c, {"label": lbl, "count": 0})
-        counts[c]["count"] += 1
+    # Accumulate weighted scores per code
+    scores = {}
+    for code, label, w in hits:
+        meta = scores.setdefault(code, {"label": label, "score": 0.0})
+        meta["score"] += w
 
     def rank_key(item):
         c, meta = item
         lead = c[0].upper()
         lead_rank = 0 if lead == 'G' else (1 if lead == 'R' else 2)
-        return (lead_rank, -meta["count"])  # lower is better
+        return (lead_rank, -meta["score"])  # lower is better
 
-    ranked = sorted(counts.items(), key=rank_key)
+    ranked = sorted(scores.items(), key=rank_key)
     primary_code, meta = ranked[0]
     supporting = [{"code": c, "label": v["label"]} for c, v in ranked[1:4]]
 
     return {"primary": {"code": primary_code, "label": meta["label"]}, "supporting": supporting}
+
+
+# Heuristics for subject/temporal context (rule-driven)
+
+def _is_third_party(ctx: str) -> bool:
+    lc = (ctx or "").lower()
+    return any(tp in lc for tp in _NLP_RULES.get("thirdPartyHints", []))
+
+
+def _has_history(ctx: str) -> bool:
+    lc = (ctx or "").lower()
+    return any(h in lc for h in _NLP_RULES.get("temporalCues", {}).get("history", []))
+
+
+def _is_resolved(ctx: str) -> bool:
+    lc = (ctx or "").lower()
+    return any(r in lc for r in _NLP_RULES.get("temporalCues", {}).get("resolved", []))
 
 
 # ---- Place this JSON at rules/icd10.json ----

@@ -19,6 +19,21 @@ import numpy as np
 import pytesseract
 from PIL import Image
 
+# --- Import for post-OCR normalization pipeline ---
+
+from semantic_template_mapper import enhanced_template_extraction
+
+# Optional decision/quality modules (loaded if available)
+try:
+    from flag_rules import apply_flags as _apply_flags  # expected to return list or {flags, actions}
+except Exception:
+    _apply_flags = None
+
+try:
+    from quality.assess import compute_confidence as _compute_confidence  # expected to return {label, detail}
+except Exception:
+    _compute_confidence = None
+
 # PaddleOCR import (conditionally loaded)
 try:
     from paddleocr import PaddleOCR
@@ -988,6 +1003,63 @@ def main():
     
     try:
         result = run_file(args.input_path, args.engine, args.user_words, args.user_patterns, debug=args.debug, lang=args.lang, quality=args.quality)
+
+        # --- Begin: Normalize & enrich (wire-in extraction pipeline) ---
+        try:
+            ocr_text = result.get("text") or ""
+            ocr_conf = float(result.get("avg_conf") or 0)
+            normalized = enhanced_template_extraction(ocr_text, ocr_conf)
+            result["normalized"] = normalized
+            if os.getenv("MEDOCR_DEBUG", "0") == "1":
+                print("=== MEDOCR TRACE HOOK === main attached normalized record", flush=True)
+        except Exception as norm_err:
+            # Do not fail OCR if enrichment fails; attach error for visibility
+            result["normalized_error"] = str(norm_err)
+        # --- End: Normalize & enrich ---
+
+        # --- Begin: Flags & Confidence (optional modules) --- 
+        try:
+            normalized = result.get("normalized") or {}
+            # Attach flags/actions
+            if _apply_flags and isinstance(normalized, dict):
+                try:
+                    flags_out = _apply_flags(normalized)
+                    if isinstance(flags_out, dict):
+                        # expect keys: flags (list), actions (optional list)
+                        if isinstance(flags_out.get("flags"), list):
+                            normalized.setdefault("flags", flags_out["flags"])
+                        if isinstance(flags_out.get("actions"), list):
+                            normalized["actions"] = flags_out["actions"]
+                    elif isinstance(flags_out, list):
+                        normalized.setdefault("flags", flags_out)
+                except Exception as e:
+                    normalized["flags_error"] = str(e)
+
+            # Attach confidence label & details
+            if _compute_confidence and isinstance(normalized, dict):
+                try:
+                    conf_out = _compute_confidence(normalized, ocr_percent=float(result.get("avg_conf") or 0))
+                    if isinstance(conf_out, dict):
+                        # expected keys: label, detail/details
+                        normalized["confidence_label"] = conf_out.get("label")
+                        normalized["confidence_detail"] = conf_out.get("detail") or conf_out.get("details")
+                    else:
+                        # if module returns just a string label
+                        normalized["confidence_label"] = str(conf_out)
+                except Exception as e:
+                    normalized["confidence_error"] = str(e)
+
+            result["normalized"] = normalized
+            if os.getenv("MEDOCR_DEBUG", "0") == "1":
+                if isinstance(normalized, dict):
+                    print("=== MEDOCR TRACE HOOK === flags/conf attached:",
+                          f"flags={len(normalized.get('flags', []) ) if isinstance(normalized.get('flags'), list) else 0}",
+                          f"label={normalized.get('confidence_label')}", flush=True)
+        except Exception as e:
+            # Non-fatal; continue emitting OCR result
+            result["post_normalization_error"] = str(e)
+        # --- End: Flags & Confidence (optional modules) ---
+
         # Fallback: if no text extracted, try quick full-image preprocess + tesseract
         if not result.get('text') or not str(result.get('text')).strip():
             try:

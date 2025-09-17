@@ -8,9 +8,12 @@ import re
 import json
 from datetime import date, datetime
 from typing import Dict, List, Any, Optional, Tuple
+import os
+
 from ocr_preprocessing import OCRPreprocessor, FuzzyPatternMatcher, enhance_extraction_confidence
 from semantic_template_mapper import SemanticTemplateMapper
-import os
+from flag_rules import load_flags_catalog, derive_flags, flags_to_actions, compute_confidence_bucket
+from quality.assess import compute_confidence
 
 # Optional deterministic CPT selector (safe import)
 try:
@@ -391,18 +394,34 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
         print(f"Flag analysis failed: {e}")
         flags, actions, conf_bucket = [], [], "Medium"
 
+    # Confidence assessment (rule-driven tiers)
+    manual_signals = [s for s in ["contradictions", "handwriting_blocked", "missing_required"] if s in flags]
+    confdetail = compute_confidence(
+        parsed=form,
+        ocr_percent=(ocr_confidence or overall_conf),
+        manual_signals=manual_signals
+    )
+
     form["flags"] = flags
     form["actions"] = actions
-    form["confidence"] = conf_bucket
+
+    # Attach detailed confidence and maintain legacy string for UI back-compat
+    form.setdefault("confidence_detail", {})
+    try:
+        form["confidence_detail"] = confdetail
+        form["confidence_label"] = confdetail.get("label")
+        # Prefer label; fall back to previous bucket if missing
+        form["confidence"] = form.get("confidence_label") or conf_bucket
+        if form["confidence"] == "Manual Review" and "MANUAL_REVIEW_REQUIRED" not in form["flags"]:
+            form["flags"].append("MANUAL_REVIEW_REQUIRED")
+    except Exception:
+        form["confidence"] = conf_bucket
+
     form.setdefault("missing_critical_fields", [])
 
     return form
 
-import re
-import json
-from datetime import datetime, date
-from typing import Dict, Any, Optional
-from flag_rules import load_flags_catalog, derive_flags, flags_to_actions, compute_confidence_bucket
+
 
 
 def extract_patient_form(ocr_text: str, ocr_confidence: Optional[float] = None, 
@@ -780,109 +799,6 @@ def derive_flags_enhanced(text: str, form: Dict, current_date: date, rules: Dict
     return list(set(flags))  # Remove duplicates
 
 
-def flags_to_actions_enhanced(flags: List[str], catalog: Dict, confidence_analysis: Dict) -> List[str]:
-    """Enhanced action generation with confidence considerations"""
-    actions = []
-    
-    # Get base actions
-    base_actions = flags_to_actions(flags, catalog)
-    actions.extend(base_actions)
-    
-    # Add confidence-based actions
-    if confidence_analysis['manual_review_required']:
-        actions.append("Manual review required - low extraction confidence")
-    
-    if "LOW_OCR_QUALITY" in flags:
-        actions.append("Consider re-scanning document for better quality")
-    
-    if "MISSING_CRITICAL_DATA" in flags:
-        missing = confidence_analysis['missing_critical_fields']
-        actions.append(f"Verify missing critical data: {', '.join(missing)}")
-    
-    return list(set(actions))  # Remove duplicates
-    
-    # Enhanced name extraction - handle various formats including OCR without line breaks
-    name_patterns = [
-        r'(?:PATIENT\s+INFORMATION\s+)?Name:\s*([A-Za-z\s]+?)(?:\s+DOB|\s+MRN|\s+Phone|$)',  # Name: John Doe DOB:
-        r'patient:\s*([A-Za-z\s]+?)(?:\s+dob|\s+mrn|\s+phone|$)',  # PATIENT: Name format
-        r'(?:patient\s+)?name:\s*([A-Za-z\s]+?)(?:\s+dob|\s+mrn|\s+phone|$)',
-        r'patient\s+information[^\n]*\s+name:\s*([A-Za-z\s]+)',
-        r'name:\s*([A-Za-z\s,]+?)(?:\s+dob|\s+mrn|\n)',
-        r'patient\s+name:\s*([A-Za-z\s]+)',
-        r'full\s+name:\s*([A-Za-z\s]+)'
-    ]
-    
-    for pattern in name_patterns:
-        name_match = re.search(pattern, text, re.IGNORECASE)
-        if name_match:
-            full_name = name_match.group(1).strip()
-            # Handle "Last, First" or "First Last" formats
-            if ',' in full_name:
-                parts = [p.strip() for p in full_name.split(',')]
-                if len(parts) >= 2:
-                    patient["last_name"] = parts[0]
-                    patient["first_name"] = parts[1]
-            else:
-                name_parts = full_name.split()
-                if len(name_parts) >= 2:
-                    patient["first_name"] = name_parts[0]
-                    patient["last_name"] = ' '.join(name_parts[1:])
-            break
-    
-    # Enhanced DOB extraction
-    dob_patterns = [
-        r'(?:dob|date of birth):\s*(\d{1,2}/\d{1,2}/\d{4})',
-        r'(?:dob|date of birth):\s*(\d{1,2}-\d{1,2}-\d{4})',
-        r'born:?\s*(\d{1,2}/\d{1,2}/\d{4})'
-    ]
-    
-    for pattern in dob_patterns:
-        dob_match = re.search(pattern, text, re.IGNORECASE)
-        if dob_match:
-            patient["dob"] = dob_match.group(1)
-            break
-    
-    # MRN extraction with multiple formats
-    mrn_patterns = [
-        r'(?:mrn|medical record|patient id):\s*([A-Z0-9-]+)',
-        r'id:\s*([A-Z0-9-]+)',
-        r'patient\s+id:\s*([A-Z0-9-]+)'
-    ]
-    
-    for pattern in mrn_patterns:
-        mrn_match = re.search(pattern, text, re.IGNORECASE)
-        if mrn_match:
-            patient["mrn"] = mrn_match.group(1)
-            break
-    
-    # Enhanced phone extraction
-    phone_patterns = [
-        r'phone:\s*(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})',
-        r'tel:\s*(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})',
-        r'contact:\s*(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})'
-    ]
-    
-    for pattern in phone_patterns:
-        phone_match = re.search(pattern, text, re.IGNORECASE)
-        if phone_match:
-            patient["phone_home"] = phone_match.group(1)
-            break
-    
-    # Extract additional demographics from physical exam
-    height_match = re.search(r'height:\s*(\d+[\'"]?\d*[\'"]?|\d+\'\s*\d+"|[56]\s*[\']\s*\d+)', text, re.IGNORECASE)
-    if height_match:
-        patient["height"] = height_match.group(1)
-    
-    weight_match = re.search(r'weight:\s*(\d+)\s*(?:lbs?|pounds?)', text, re.IGNORECASE)
-    if weight_match:
-        patient["weight"] = weight_match.group(1) + " lbs"
-    
-    # BMI extraction
-    bmi_match = re.search(r'bmi:\s*(\d+\.?\d*)', text, re.IGNORECASE)
-    if bmi_match:
-        patient["bmi"] = bmi_match.group(1)
-    
-    return patient
 
 
 def extract_referral_info(text: str) -> Dict[str, Any]:
