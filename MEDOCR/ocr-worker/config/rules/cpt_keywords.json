@@ -1,10 +1,4 @@
 {
-  "95810": ["sleep study", "sleep evaluation", "diagnostic study"],
-  "95811": ["titration", "cpap titration"],
-  "G0399": ["home sleep test", "hst"],
-  "95806": ["home sleep test alternative"],
-  "95782": ["pediatric sleep study"],
-  "95783": ["pediatric cpap"],
   "97110": ["physical therapy", "therapeutic exercise", "pt", "exercise therapy"],
   "97112": ["neuromuscular reeducation", "balance training"],
   "97116": ["gait training", "walking therapy"],
@@ -17,5 +11,141 @@
   "20610": ["joint injection", "cortisone injection"],
   "72148": ["mri lumbar", "lumbar mri", "lower back mri"],
   "72158": ["mri cervical", "neck mri"],
-  "73721": ["mri knee", "knee imaging"]
+  "73721": ["mri knee", "knee imaging"],
+
+  "95810": [
+    "sleep study",
+    "sleep evaluation",
+    "diagnostic study",
+    "diagnostic sleep study",
+    "baseline sleep study",
+    "in-lab sleep study",
+    "in lab sleep study",
+    "full-night study",
+    "full night study",
+    "nocturnal polysomnography",
+    "nocturnal study",
+    "polysomnography",
+    "polysomnogram",
+    "psg",
+    "npsg",
+    "overnight sleep study",
+    "overnight testing",
+    "overnight evaluation",
+    "overnight polysomnography",
+    "complete sleep study",
+    "evaluate & treat",
+    "evaluation and treatment",
+    "r/o osa",
+    "rule out osa",
+    "osa evaluation",
+    "sleep disorder evaluation",
+    "diagnostic polysomnography",
+    "estudio del sueño",
+    "polisomnografía",
+    "evaluación del sueño"
+  ],
+
+  "95811": [
+    "titration",
+    "cpap titration",
+    "pap titration",
+    "psg with titration",
+    "psg titration",
+    "split-night",
+    "split night",
+    "split-night study",
+    "split night study",
+    "split-night psg",
+    "split night psg",
+    "psg split-night",
+    "bipap titration",
+    "bi-level titration",
+    "bilevel titration",
+    "cpap/bipap titration",
+    "cpap bi pap titration",
+    "cpap bipap titration",
+    "pressure adjustment",
+    "optimize cpap",
+    "pressure too high",
+    "pressure too low",
+    "not tolerating pressure",
+    "not tolerating cpap",
+    "still tired on cpap",
+    "increase pressure",
+    "decrease pressure",
+    "cpap intolerance",
+    "pap intolerance",
+    "auto-cpap titration",
+    "autocpap titration"
+  ],
+
+  "G0399": [
+    "home sleep test",
+    "hst",
+    "hsat",
+    "home sleep apnea test",
+    "type iii sleep study",
+    "type 3 sleep study",
+    "type 3 hsat",
+    "type iii hsat",
+    "portable monitor",
+    "out-of-center sleep test",
+    "out of center sleep test",
+    "ocst",
+    "watchpat",
+    "home sleep test type iii",
+    "estudio del sueño en casa",
+    "prueba del sueño en casa"
+  ],
+
+  "95806": [
+    "home sleep test",
+    "hsat",
+    "unattended sleep study",
+    "type iii sleep study",
+    "type 3 sleep study",
+    "type 3 hsat",
+    "portable monitor",
+    "out of center sleep test",
+    "out-of-center sleep test"
+  ],
+
+  "G0398": [
+    "type ii sleep study",
+    "type 2 sleep study",
+    "home sleep test type ii",
+    "type ii hsat",
+    "type 2 hsat"
+  ],
+
+  "95782": [
+    "pediatric sleep study",
+    "pediatric polysomnography",
+    "child sleep study",
+    "under 6 sleep study",
+    "peds sleep study",
+    "pediatric overnight study"
+  ],
+
+  "95783": [
+    "pediatric cpap",
+    "pediatric titration",
+    "child titration",
+    "pediatric split-night",
+    "pediatric split night",
+    "pediatric pap titration"
+  ],
+
+  "95805": [
+    "mslt",
+    "multiple sleep latency test",
+    "mwt",
+    "maintenance of wakefulness test",
+    "sleepiness test",
+    "wakefulness test",
+    "daytime sleepiness test",
+    "mslt protocol",
+    "mwt protocol"
+  ]
 }
