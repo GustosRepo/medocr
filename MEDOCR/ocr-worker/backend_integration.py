@@ -114,16 +114,102 @@ def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
     t = normalize(text)
     out = {"patient": {}, "insurance": {"primary": {}}, "physician": {}, "procedure": {}, "clinical": {}}
 
-    m = RX["dob"].search(t)
+    def _clean_text(value: str) -> str:
+        if value is None:
+            return ""
+        s = str(value)
+        s = s.replace('\r', ' ')
+        s = s.replace('\n', ' ')
+        s = s.replace('\f', ' ')
+        s = s.replace('\t', ' ')
+        s = s.replace('\\N', ' ')
+        s = re.sub(r"\\[nNrRt]", " ", s)
+        s = re.sub(r"\s+", " ", s)
+        return s.strip()
+
+    def _trim_subscriber(value: str) -> str:
+        s = _clean_text(value)
+        s = re.split(r"\b(?:Subscriber|Member|Address|Phone)\b", s, 1)[0]
+        return s.strip(' ,;:')
+
+    def _trim_physician_block(value: str) -> str:
+        s = _clean_text(value)
+        s = re.split(r"\bProvider\s+(?:Facility|Speciality|NPI|UPIN|1D Number)\b", s, 1)[0]
+        s = re.split(r"\bAddress\b", s, 1)[0]
+        return s.strip(' ,;:')
+
+    def _normalize_patient_names(first: str, last: str) -> tuple[str, str]:
+        first = _clean_text(first)
+        last = _clean_text(last)
+        if last.lower().endswith(' patient'):
+            last = last[:-7].strip()
+        if first.lower().endswith(' patient') and not last:
+            first = first[:-7].strip()
+        return first, last
+
+    def _split_name(raw: str):
+        if not raw:
+            return "", ""
+        cleaned = _clean_text(raw)
+        if "," in cleaned:
+            last, first = [p.strip() for p in cleaned.split(",", 1)]
+        else:
+            parts = cleaned.split()
+            if len(parts) == 1:
+                return cleaned.title(), ""
+            first, last = parts[0], " ".join(parts[1:])
+        return first.title(), last.title()
+
+    def _section(start_pattern: str, end_patterns: List[str]) -> str:
+        start = re.search(start_pattern, t, flags=re.I)
+        if not start:
+            return ""
+        start_idx = start.start()
+        end_idx = len(t)
+        for pat in end_patterns:
+            mloc = re.search(pat, t[start_idx:], flags=re.I)
+            if mloc:
+                candidate = start_idx + mloc.start()
+                if candidate > start_idx:
+                    end_idx = min(end_idx, candidate)
+        return t[start_idx:end_idx]
+
+    patient_section = _section(r"Patient Information", [r"Insurance Information", r"Secondary Insurance", r"Referral From Information"])
+    insurance_section = _section(r"Insurance Information", [r"Secondary Insurance", r"Referral From Information"])
+    secondary_ins_section = _section(r"Secondary Insurance", [r"Referral From Information"])
+    referring_section = _section(r"Referral From Information", [r"Referral To Information"])
+
+    search_space = patient_section or t
+
+    m = RX["dob"].search(search_space)
     if m: out["patient"]["dob"] = m.group(1)
-    m = RX["mrn"].search(t)
+    m = RX["mrn"].search(search_space)
     if m: out["patient"]["mrn"] = m.group(1)
-    m = RX["patient_name"].search(t)
+    m = re.search(r"Patient Name[:\s]*([^\n]+?)(?=\s*(?:Patient\s+)?(?:DOB|Date of Birth)[:\s]|\bDOB\b|$)", search_space, flags=re.I)
     if m:
-        parts = m.group(1).split()
-        out["patient"]["first_name"] = parts[0]
-        out["patient"]["last_name"] = " ".join(parts[1:])
-    m = RX["vitals_line"].search(t)
+        first, last = _split_name(m.group(1))
+        if first:
+            out["patient"]["first_name"] = first
+        if last:
+            out["patient"]["last_name"] = last
+    else:
+        m = re.search(r"\bPATIENT\s*[:\-]\s*([^\n]+)", search_space, flags=re.I)
+        if m:
+            first, last = _split_name(m.group(1))
+            if first:
+                out["patient"]["first_name"] = first
+            if last:
+                out["patient"]["last_name"] = last
+
+    if out["patient"].get("first_name") or out["patient"].get("last_name"):
+        first, last = _normalize_patient_names(
+            out["patient"].get("first_name", ""),
+            out["patient"].get("last_name", "")
+        )
+        out["patient"]["first_name"] = first
+        out["patient"]["last_name"] = last
+        out["patient"]["name"] = _clean_text(f"{first} {last}")
+    m = RX["vitals_line"].search(search_space)
     if m:
         out["patient"]["height"] = m.group(1).strip()
         out["patient"]["weight"] = m.group(2).strip()
@@ -133,27 +219,44 @@ def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
         m = RX["bp"].search(t)
         if m: out["patient"]["blood_pressure"] = m.group(1)
 
-    m = RX["phone_any"].search(t)
-    if m: out["patient"]["phone_home"] = _fmt_phone(m.group(1))
-    m = RX["fax"].search(t)
-    if m: out["physician"]["fax"] = _fmt_phone(m.group(1))
-
-    m = RX["provider_block"].search(t)
+    m = re.search(r"Patient Phone[:\s]*([()\-\s\.\d]{10,20})", search_space, flags=re.I)
     if m:
-        out["physician"]["name"] = re.sub(r"\s+Specialty$", "", m.group(1).strip(), flags=re.I)
-        out["physician"]["specialty"] = m.group(2).strip()
-    m = RX["npi"].search(t)
-    if m: out["physician"]["npi"] = m.group(1)
-    m = re.search(r"Clinic phone[:\s]*([()\-\s\.\d]{10,20})", t, flags=re.I)
-    if m: out["physician"]["clinic_phone"] = _fmt_phone(m.group(1))
+        out["patient"]["phone_home"] = _fmt_phone(m.group(1))
+    else:
+        m = RX["phone_any"].search(search_space)
+        if m:
+            out["patient"]["phone_home"] = _fmt_phone(m.group(1))
+    m = RX["fax"].search(referring_section or t)
+    if m:
+        out["physician"]["fax"] = _fmt_phone(m.group(1))
 
-    blk = RX["insurance_primary"].search(t)
-    ib = blk.group(0) if blk else ""
+    m = RX["provider_block"].search(referring_section or t)
+    if m:
+        out["physician"]["name"] = _trim_physician_block(m.group(1))
+        out["physician"]["specialty"] = _clean_text(m.group(2))
+    m = RX["npi"].search(referring_section or t)
+    if m: out["physician"]["npi"] = m.group(1)
+    m = re.search(r"Phone[:\s]*([()\-\s\.\d]{10,20})", referring_section or t, flags=re.I)
+    if m: out["physician"]["clinic_phone"] = _fmt_phone(m.group(1))
+    if referring_section and not out["physician"].get("name"):
+        m = re.search(r"Provider Name[:\s]*([^\n]+)", referring_section, flags=re.I)
+        if m:
+            out["physician"]["name"] = _trim_physician_block(m.group(1))
+    if referring_section and not out["physician"].get("practice"):
+        m = re.search(r"Provider Facility[:\s]*([^\n]+)", referring_section, flags=re.I)
+        if m:
+            out["physician"]["practice"] = _trim_physician_block(m.group(1))
+    if out["physician"].get("practice"):
+        out["physician"]["practice"] = _trim_physician_block(out["physician"]["practice"])
+
+    blk = RX["insurance_primary"].search(insurance_section or t)
+    ib = blk.group(0) if blk else (insurance_section or "")
     # Primary carrier
     m = RX["carrier"].search(ib)
     if m:
         carrier = re.sub(r"Member\s*Id$", "", m.group(1), flags=re.I).strip()
-        out["insurance"]["primary"]["carrier"] = carrier
+        carrier = re.split(r"\bSubscriber\b", carrier, 1)[0].strip(" ,")
+        out["insurance"]["primary"]["carrier"] = _trim_subscriber(carrier)
     else:
         # Fallback 1: line right after header like: \nProminence: Prominence
         m2 = re.search(r"Insurance\s*\(Primary\)[^\n]*\n\s*([A-Za-z][A-Za-z0-9 &\-]{2,})(?::\s*([A-Za-z][A-Za-z0-9 &\-]{2,}))?", t, flags=re.I)
@@ -163,20 +266,51 @@ def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
             parts = [p.strip() for p in re.split(r"[:\s]+", name) if p.strip()]
             if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
                 name = parts[0]
-            out["insurance"]["primary"]["carrier"] = name
+            out["insurance"]["primary"]["carrier"] = _trim_subscriber(name)
         else:
             # Fallback 2: any uppercase-first token before Member ID within block
             m3 = re.search(r"\b([A-Z][A-Za-z0-9 &\-]{2,})\b(?=[\s\S]{0,120}Member\s*ID)" , ib, flags=re.I)
             if m3:
-                out["insurance"]["primary"]["carrier"] = m3.group(1).strip()
+                out["insurance"]["primary"]["carrier"] = _trim_subscriber(m3.group(1))
+            elif not out["insurance"]["primary"].get("carrier"):
+                inline_carrier = re.search(r"Primary\s+Insurance\s*[:\-]\s*([^\n]+)", insurance_section or t, flags=re.I)
+                if inline_carrier:
+                    carrier = inline_carrier.group(1).strip()
+                    carrier = re.split(r"\bSubscriber\b", carrier, 1)[0].strip(" ,")
+                    out["insurance"]["primary"]["carrier"] = _trim_subscriber(carrier)
+    if not out["insurance"]["primary"].get("carrier"):
+        carrier_source = insurance_section or patient_section or t
+        m = re.search(r"Insurance Name[:\s]*([^\n]+)", carrier_source, flags=re.I)
+        if m:
+            carrier = re.split(r"\bSubscriber\b", m.group(1).strip(), 1)[0].strip(" ,")
+            out["insurance"]["primary"]["carrier"] = _trim_subscriber(carrier)
+        else:
+            m = re.search(r"Patient Insurance[:\s]*([^\n]+)", carrier_source, flags=re.I)
+            if m:
+                carrier = re.split(r"\bSubscriber\b", m.group(1).strip(), 1)[0].strip(" ,")
+                out["insurance"]["primary"]["carrier"] = _trim_subscriber(carrier)
     # Member ID
     m = RX["member_id"].search(ib)
     if m: out["insurance"]["primary"]["member_id"] = re.sub(r"\s+", "", m.group(1))
+    elif not out["insurance"]["primary"].get("member_id"):
+        member_source = insurance_section or patient_section or t
+        m = re.search(r"(?:Subscriber|Patient) (?:No|Number)[:\s]*([A-Z0-9]{4,})", member_source, flags=re.I)
+        if m:
+            out["insurance"]["primary"]["member_id"] = re.sub(r"\s+", "", m.group(1))
     m = RX["auth"].search(ib)
     if m: out["insurance"]["primary"]["authorization_number"] = m.group(1)
 
     if RX["verified"].search(t):
         out["insurance"]["primary"]["insurance_verified"] = "Yes"
+
+    if secondary_ins_section:
+        sec = out["insurance"].setdefault("secondary", {})
+        m = re.search(r"Insurance Name[:\s]*([^\n]+)", secondary_ins_section, flags=re.I)
+        if m:
+            sec.setdefault("carrier", _trim_subscriber(m.group(1)))
+        m = re.search(r"Subscriber No[:\s]*([A-Z0-9]{4,})", secondary_ins_section, flags=re.I)
+        if m:
+            sec.setdefault("member_id", re.sub(r"\s+", "", m.group(1)))
 
     m = RX["doc_date"].search(t)
     if m: out["document_date"] = m.group(1)
@@ -185,6 +319,12 @@ def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
 
     cpts = RX["cpt_all"].findall(t)
     if cpts: out["procedure"]["cpt"] = list(dict.fromkeys(cpts))
+    else:
+        inline_cpt = re.search(r"\b(?:CPT|Procedure(?:\s*Codes?)?)\b[:\s]*([^\n]+)", t, flags=re.I)
+        if inline_cpt:
+            tokens = re.findall(r"\b(?:[A-Z]\d{4}|9\d{4})\b", inline_cpt.group(1))
+            if tokens:
+                out["procedure"]["cpt"] = tokens
     m = RX["study_requested"].search(t)
     if m: out["procedure"]["study_requested"] = m.group(1)
     m = RX["indication"].search(t)
@@ -419,12 +559,42 @@ def make_client_pdf_html(data: dict, flags: Optional[List[str]] = None) -> str:
     dob = p.get("dob", "Not found")
     ref_date = data.get("document_date", "Not found")
 
-    cpt_text = ", ".join(proc.get("cpt", []) or []) or "Not found"
-    desc_text = ", ".join(proc.get("description", []) or []) or "Not found"
+    # CPT: accept list or string
+    cpt_raw = proc.get("cpt")
+    if isinstance(cpt_raw, list):
+        cpt_text = ", ".join([str(x) for x in cpt_raw if str(x).strip()]) or "Not found"
+    else:
+        cpt_text = str(cpt_raw).strip() if cpt_raw else "Not found"
+
+    # Description: prefer flat description_text, then fall back to description; accept list or string
+    desc_raw = proc.get("description_text") or proc.get("description")
+    if isinstance(desc_raw, list):
+        desc_text = ", ".join([str(x) for x in desc_raw if str(x).strip()]) or "Not found"
+    else:
+        desc_text = str(desc_raw).strip() if desc_raw else "Not found"
     symptoms = ", ".join(clin.get("symptoms", []) or []) or "Not found"
-    diag = clin.get("primary_diagnosis") or proc.get("indication") or "Not found"
-    bmi_bp = (p.get("bmi") or (f"{p.get('height','—')} // {p.get('weight','—')}" if p.get("height") or p.get("weight") else "Not found"))
-    bp = p.get("blood_pressure") or "Not found"
+    # Diagnosis: prefer explicit primary; then procedure indication; then first ICD token
+    diag = clin.get("primary_diagnosis") or proc.get("indication")
+    if not diag:
+        icds = clin.get("icd10_codes") or []
+        if isinstance(icds, list) and icds:
+            first = icds[0]
+            if isinstance(first, dict):
+                code = first.get("code")
+                label = first.get("label")
+                diag = f"{code} — {label}" if code and label else (code or "")
+            elif isinstance(first, str):
+                diag = first
+    if not diag:
+        diag = "Not found"
+    # Show BMI if present on patient or clinical; otherwise show height/weight if available
+    bmi_bp = (
+        p.get("bmi")
+        or clin.get("bmi")
+        or (f"{p.get('height','—')} // {p.get('weight','—')}" if p.get("height") or p.get("weight") else "Not found")
+    )
+    # Prefer patient BP; fall back to clinical aliases
+    bp = p.get("blood_pressure") or clin.get("blood_pressure") or clin.get("bp") or "Not found"
 
     flags_list = [] if flags is None else [f for f in flags if f]
     flags_html = "None" if len(flags_list) == 0 else ", ".join(flags_list)
@@ -564,9 +734,18 @@ def run_single(text_file: Path, confidence: Optional[float]) -> dict:
     status = _compute_status_from_flags(flags)
     if (qc.get('errors')) and status == 'ready_to_schedule':
         status = 'additional_actions_required'
+    # Compatibility aliases so the frontend can read either key
+    enhanced = data  # prefer this name in Node/Next responses
     return {
         "success": True,
         "extracted_data": data,
+        # Aliases for various frontends
+        "enhanced_data": enhanced,
+        "normalized": enhanced,
+        # Canonical names preferred going forward
+        "structured": enhanced,
+        "record": enhanced,
+        "ready_to_schedule": (status == 'ready_to_schedule'),
         # Client features summary
         "client_features": {
             "individual_pdf_ready": True,
@@ -620,6 +799,12 @@ def run_batch(files: List[Path], intake_date: Optional[str]) -> dict:
             "individual_pdf_ready": True,
             "individual_pdf_content": pdf_html,
             "extracted_data": data,
+            # Aliases for various frontends
+            "enhanced_data": data,
+            "normalized": data,
+            "structured": data,
+            "record": data,
+            "ready_to_schedule": (status == 'ready_to_schedule'),
         })
         if status == 'ready_to_schedule':
             ready += 1

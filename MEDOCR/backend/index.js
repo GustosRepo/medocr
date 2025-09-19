@@ -240,7 +240,18 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
       // fill template
       
       // Save analysis to temp file for template filler
-      fs.writeFileSync(analysisPath, JSON.stringify(ocrResult.analysis || {}));
+      const templateContext = {
+        ocr_analysis: ocrResult.analysis || {},
+        // Canonical record aliases so downstream always has a single source of truth
+        record: enhancedData,
+        structured: enhancedData,
+        enhanced_data: enhancedData,
+        extracted_data: enhancedData,
+        client_features: clientFeatures,
+        avg_confidence: ocrResult.avg_conf,
+        filename: file.originalname
+      };
+      fs.writeFileSync(analysisPath, JSON.stringify(templateContext));
       
       const fillRes = await runCommand(pythonCmd, ['fill_template.py', ocrOutPath, filledPath, analysisPath], { cwd: ocrWorkerDir });
       let filledText = '';
@@ -1131,7 +1142,8 @@ app.post('/export-combined-data', async (req, res) => {
       last_name: p.last_name || 'Unknown',
       first_name: p.first_name || 'Unknown',
       dob: p.dob || 'Unknown',
-      insurance: ins.carrier || 'Unknown',
+      // Prefer plan, then carrier
+      insurance: ins.plan || ins.carrier || 'Unknown',
       member_id: ins.member_id || 'Unknown'
     };
 
@@ -1161,6 +1173,10 @@ app.post('/export-combined-data', async (req, res) => {
           const val = v <= 1 ? v * 100 : v;
           return `${val.toFixed(1)}%`;
         };
+        const clean = (s) => String(s ?? '')
+          .replace(/^["':\s]+/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
         const drawLine = (text, fontSize = 11, opts = {}) => {
           if (y < margin + 40) { // new page threshold
@@ -1205,7 +1221,7 @@ app.post('/export-combined-data', async (req, res) => {
         const phy = enhancedData.physician || {};
         section('PHYSICIAN');
         drawLine(`Name: ${phy.name || 'Not found'}`);
-        drawLine(`Specialty: ${phy.specialty || 'Not found'}`);
+        drawLine(`Referring Specialty: ${phy.specialty || 'Not found'}`);
         drawLine(`NPI: ${phy.npi || 'Not found'}`);
         drawLine(`Clinic Phone: ${dedupePhoneFax(phy.clinic_phone, phy.fax)}`);
 
@@ -1213,7 +1229,7 @@ app.post('/export-combined-data', async (req, res) => {
         section('PROCEDURE');
         drawLine(`Study Requested: ${proc.study_requested || 'Not found'}`);
         drawLine(`CPT: ${(proc.cpt && proc.cpt.join(', ')) || 'Not found'}`);
-        drawLine(`Indication: ${proc.indication || proc.study_requested || 'Not found'}`);
+        drawLine(`Indication: ${clean(proc.indication || proc.study_requested || 'Not found')}`);
 
         const clin = enhancedData.clinical || {};
         section('CLINICAL');
@@ -1221,7 +1237,7 @@ app.post('/export-combined-data', async (req, res) => {
         drawLine(`Epworth: ${clin.epworth_score || 'Not found'}`);
         drawLine(`Symptoms: ${(clin.symptoms && clin.symptoms.join(', ')) || 'Not found'}`);
   // Neck circumference actually lives under clinical in enhancedData; previous code looked under patient (p)
-  drawLine(`Neck Circumference: ${clin.neck_circumference || 'Not found'}`);
+        drawLine(`Neck Circumference: ${clin.neck_circumference || 'Not found'}`);
 
         section('METADATA');
         drawLine(`Document Date: ${enhancedData.document_date || 'Not found'}`);
@@ -1258,6 +1274,7 @@ app.post('/export-combined-data', async (req, res) => {
     const outputPath = path.join(exportDir, `${baseFilename}.pdf`);
 
     const combinedPdf = await PDFDocument.create();
+    const monoFont = await combinedPdf.embedFont(StandardFonts.Courier);
     // Add patient form first
     try {
       const pfDoc = await PDFDocument.load(patientFormBytes);
@@ -1267,8 +1284,32 @@ app.post('/export-combined-data', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to build patient form PDF' });
     }
 
+    // Sanitize incoming OCR text (strip logs/JSON wrappers)
+    const rawTextIn = typeof text === 'string' ? text : '';
+    function sanitizeOcrText(t) {
+      if (!t) return '';
+      const trimmed = t.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          const j = JSON.parse(trimmed);
+          if (j && typeof j.text === 'string') return j.text;
+        } catch (_) { /* not JSON, continue */ }
+      }
+      const lines = t.split(/\r?\n/);
+      let start = 0;
+      while (
+        start < lines.length &&
+        !/^\s*Page\s*\d+\s*:/i.test(lines[start]) &&
+        !lines[start].trim().startsWith('A') // common first line in our OCR previews
+      ) {
+        start++;
+      }
+      return lines.slice(start).join('\n');
+    }
+    const textSan = sanitizeOcrText(rawTextIn);
+
     // Optionally add OCR TEXT pages (split by form feed or explicit page markers)
-    if (text && typeof text === 'string' && text.trim()) {
+    if (textSan && textSan.trim()) {
       // Build highlight terms from flags/actions and key extracted fields
       const shouldHighlight = (req.body.highlight !== false); // default to true unless explicitly disabled
       const collectTerms = () => {
@@ -1398,7 +1439,7 @@ app.post('/export-combined-data', async (req, res) => {
         return [{ header: 'OCR Text', lines: String(txt).split(/\r?\n/) }];
       };
 
-      const pages = splitIntoPages(text);
+      const pages = splitIntoPages(textSan);
       pages.forEach(p => addOcrPage(combinedPdf, p.header, p.lines));
     }
 
@@ -1574,7 +1615,7 @@ app.post('/export-mass-combined', async (req, res) => {
         const patientData = {
           last_name: p.last_name || 'Unknown',
           first_name: p.first_name || 'Unknown',
-          insurance: ins.carrier || 'UnknownIns'
+          insurance: ins.plan || ins.carrier || 'UnknownIns'
         };
         
         // Create desktop export directory
@@ -1756,7 +1797,7 @@ app.post('/export-mass-combined', async (req, res) => {
           // Footer for OCR section (counts for entire text body)
           drawLine('', 8);
           drawLine(''.padEnd(60, '='), 10, { color: rgb(0.8, 0.3, 0.1) });
-          drawLine(`Characters: ${text.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
+      drawLine(`Characters: ${textSan.length}`, 10, { color: rgb(0.5, 0.5, 0.5) });
           
         } else if (enhancedData.ocr_text || enhancedData.raw_text) {
           const ocrText = enhancedData.ocr_text || enhancedData.raw_text;

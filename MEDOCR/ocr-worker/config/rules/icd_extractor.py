@@ -47,8 +47,27 @@ except Exception:
 
 
 def _negated(ctx: str) -> bool:
+    """Detect negation tokens while staying within the local clause."""
+    if not ctx:
+        return False
+
     lc = ctx.lower()
-    return any(n in lc for n in NEG)
+    # Only consider the clause immediately preceding the match to avoid
+    # negations from unrelated earlier sentences (e.g., "not rested" in HPI
+    # should not invalidate a subsequent "Diagnosis" line).
+    tail = re.split(r"[\n\r\.\;]", lc)[-1]
+    tail = tail[-80:]  # limit to nearby context
+
+    for token in NEG:
+        if not token:
+            continue
+        if ' ' in token:
+            if token in tail:
+                return True
+        else:
+            if re.search(rf"\b{re.escape(token)}\b", tail):
+                return True
+    return False
 
 
 def extract_icd(text: str, patient_age: int = None):
