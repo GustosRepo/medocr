@@ -212,10 +212,13 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
     if not primary_dx and not icd10_codes and not symptoms:
         flags.append('MISSING_CHART_NOTES')
     
-    # MISSING_PATIENT_INFO
+    # MISSING_PATIENT_INFO — require 2 of 3 (DOB, MRN, Phone)
     patient = parsed.get('patient', {})
     has_phone = bool(patient.get('phones')) or bool(patient.get('phone_home')) or bool(patient.get('phone'))
-    if not patient.get('dob') or not patient.get('mrn') or not has_phone:
+    has_dob = bool(patient.get('dob'))
+    has_mrn = bool(patient.get('mrn'))
+    present_count = sum([has_dob, has_mrn, has_phone])
+    if present_count < 2:
         flags.append('MISSING_PATIENT_INFO')
     
     # === INSURANCE FLAGS ===
@@ -383,7 +386,7 @@ def derive_flags(ocr_text: str, parsed: Dict, today: date, rules: Dict, conf: Op
 def compute_confidence_bucket(ocr_conf: Optional[float], flags: List[str]) -> str:
     """Compute confidence bucket based on OCR confidence and flags"""
     if 'MANUAL_REVIEW_REQUIRED' in flags:
-        return 'Manual Review Required'
+        return 'Manual Review'
     
     if 'LOW_OCR_CONFIDENCE' in flags or ocr_conf is None:
         return 'Low'

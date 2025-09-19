@@ -1,196 +1,449 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import FeedbackPanel from './panels/FeedbackPanel';
 import ExportPanel from './panels/ExportPanel';
 
-export default function ResultCard({ r, idx, files, toggleRowCollapse, collapsedRows, collapsedSections, toggleSectionCollapse, handleFeedback, handleExportCombinedPdf, openHtmlInNewWindow, setEditTarget, setEditText, isSectionCollapsed }) {
+function mergeDeep(target, source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return target;
+  Object.entries(source).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      if (!Array.isArray(target[key]) || target[key].length === 0) {
+        target[key] = value.slice();
+      } else {
+        const existing = new Set(target[key].map((item) => JSON.stringify(item)));
+        const merged = target[key].slice();
+        value.forEach((item) => {
+          const sig = JSON.stringify(item);
+          if (!existing.has(sig)) {
+            existing.add(sig);
+            merged.push(item);
+          }
+        });
+        target[key] = merged;
+      }
+    } else if (typeof value === 'object') {
+      if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
+        target[key] = {};
+      }
+      mergeDeep(target[key], value);
+    } else if (target[key] === undefined || target[key] === null || target[key] === '') {
+      target[key] = value;
+    }
+  });
+  return target;
+}
+
+function buildStructured(result) {
+  const sources = [
+    result?.enhanced_data,
+    result?.analysis?.enhanced_data,
+    result?.analysis?.extracted_data,
+    result?.analysis?.normalized,
+    result?.analysis?.ocr_analysis,
+    result?.analysis,
+    result?.filled_template,
+  ];
+  return sources.reduce((acc, src) => mergeDeep(acc, src), {});
+}
+
+function pickValue(structured, paths) {
+  for (const path of paths) {
+    const value = path.reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), structured);
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length) return trimmed;
+    } else if (typeof value === 'number') {
+      return value;
+    } else if (Array.isArray(value)) {
+      if (value.length) return value;
+    } else if (typeof value === 'object' && Object.keys(value).length) {
+      return value;
+    }
+  }
+  return '';
+}
+
+function formatList(value) {
+  if (!value) return 'Not provided';
+  if (Array.isArray(value)) {
+    const filtered = value.map((v) => (typeof v === 'string' ? v.trim() : v)).filter(Boolean);
+    return filtered.length ? filtered.join(', ') : 'Not provided';
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : 'Not provided';
+  }
+  return String(value);
+}
+
+function computeConfidence(result, structured) {
+  const label = pickValue(structured, [[ 'confidence_label' ], [ 'client_features', 'status' ]])
+    || result?.client_features?.status
+    || result?.processing_status
+    || 'Unknown';
+  const rawScore = pickValue(structured, [
+    ['confidence_scores', 'overall_confidence'],
+    ['overall_confidence'],
+  ]) || result?.avg_conf;
+  let pct = null;
+  if (typeof rawScore === 'number' && !Number.isNaN(rawScore)) {
+    pct = rawScore <= 1 ? rawScore * 100 : rawScore;
+  }
+  return { label, pct };
+}
+
+export default function ResultCard({
+  r,
+  idx,
+  files,
+  collapsedRows,
+  toggleRowCollapse,
+  handleFeedback,
+  handleExportCombinedPdf,
+  openHtmlInNewWindow,
+  setEditTarget,
+  setEditText,
+}) {
   const resultId = r.id || r.suggested_filename || r.filename || `res-${idx}`;
-  const isCollapsed = !!collapsedRows[resultId];
-  const avg = r.avg_conf !== undefined ? Number(r.avg_conf) : null;
-  const avgConfText = avg !== null ? `${(avg > 1 ? avg : avg * 100).toFixed(1)}%` : null;
+  const isCollapsed = !!(collapsedRows && collapsedRows[resultId]);
+  const [showDebug, setShowDebug] = useState(false);
 
-  // Confidence label + percent (prefers rule-driven label)
-  const confidenceLabel = r.confidence_label || r.confidence || null;
-  const confidencePct = (r.confidence_detail && (r.confidence_detail.percent ?? r.confidence_detail.score))
-    ?? (avg !== null ? (avg > 1 ? avg : avg * 100) : null);
+  const structured = useMemo(() => buildStructured(r), [r]);
 
-  // Primary diagnosis (prefer explicit, else first ICD entry)
-  const primaryDx = r?.clinical?.primary_diagnosis
-    || (Array.isArray(r?.clinical?.icd10_codes) && r.clinical.icd10_codes.length > 0
-        ? `${r.clinical.icd10_codes[0]?.code || ''} - ${r.clinical.icd10_codes[0]?.label || ''}`.trim()
-        : null);
+  const templateHtml =
+    r?.filled_template
+    || structured?.filled_template
+    || r?.individual_pdf_content
+    || r?.client_features?.individual_pdf_content
+    || r?.client_features?.pdf_content
+    || structured?.pdf_content
+    || structured?.template_html;
 
-  // CPT code + description (string or list)
-  const cpt = Array.isArray(r?.procedure?.cpt) ? (r.procedure.cpt[0] || null) : (r?.procedure?.cpt || null);
-  const cptDesc = r?.procedure?.description || null;
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editedHtml, setEditedHtml] = useState('');
+  const [localTemplateHtml, setLocalTemplateHtml] = useState(templateHtml);
 
-  // Insurance basics
-  const carrier = r?.insurance?.primary?.carrier || r?.insurance?.carrier || null;
-  const memberId = r?.insurance?.primary?.member_id || r?.insurance?.member_id || null;
+  // keep local copy in sync when backend result changes
+  useEffect(() => {
+    setLocalTemplateHtml(templateHtml);
+  }, [templateHtml]);
 
-  // Group flags into buckets for nicer display
-  const actionSet = new Set([
-    'MISSING_CHART_NOTES','SELF_PAY_WORKFLOW','AUTHORIZATION_REQUIRED','INSURANCE_NOT_ACCEPTED','INSURANCE_SUNSET_WARNING','PROVIDER_FOLLOWUP_REQUIRED'
+  const patient = structured?.patient || {};
+  const insurancePrimary = structured?.insurance?.primary || {};
+  const insuranceSecondary = structured?.insurance?.secondary || {};
+  const procedure = structured?.procedure || {};
+  const physician = structured?.physician || {};
+  const clinical = structured?.clinical || {};
+
+  const cleanString = (value) => {
+    if (!value) return '';
+    return String(value)
+      .replace(/\r|\n|\t|\f/g, ' ')
+      .replace(/\\N/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const collapseCarrier = (value) => {
+    const str = cleanString(value);
+    if (!str) return str;
+    return str.split(/\b(?:Subscriber|Member|Address|Phone)\b/)[0].replace(/[,;:]$/, '').trim();
+  };
+
+  const collapsePhysician = (value) => {
+    const str = cleanString(value);
+    if (!str) return str;
+    return str
+      .split(/\bProvider\s+(?:Facility|Speciality|NPI|UPIN|1D Number)\b/)[0]
+      .split(/\bAddress\b/)[0]
+      .replace(/[,;:]$/, '')
+      .trim();
+  };
+
+  const patientFirst = pickValue(structured, [['patient', 'first_name'], ['patient', 'first'], ['patient', 'given_name']]);
+  const patientLast = pickValue(structured, [['patient', 'last_name'], ['patient', 'last'], ['patient', 'family_name']]);
+  const patientName = cleanString(
+    pickValue(structured, [['patient', 'name'], ['patient_name']])
+    || [patientFirst, patientLast].filter(Boolean).join(' ')
+  );
+  const patientDob = pickValue(structured, [['patient', 'dob'], ['dob'], ['patient', 'date_of_birth']]);
+  const referralDate = pickValue(structured, [['document_date'], ['referral', 'date'], ['referral_date']]);
+  const mrn = pickValue(structured, [['patient', 'mrn'], ['mrn']]);
+  const patientPhone = cleanString(pickValue(structured, [['patient', 'phone_home'], ['patient', 'phone'], ['phone_number']])) || 'Not provided';
+  const patientEmail = pickValue(structured, [['patient', 'email'], ['email']]);
+
+  const insuranceCarrierRaw = pickValue(structured, [['insurance', 'primary', 'carrier'], ['insurance_carrier'], ['carrier']]);
+  const insuranceCarrier = collapseCarrier(insuranceCarrierRaw) || insuranceCarrierRaw;
+  const insuranceMemberId = cleanString(pickValue(structured, [['insurance', 'primary', 'member_id'], ['member_id']])) || ''; 
+  const insuranceGroup = cleanString(pickValue(structured, [['insurance', 'primary', 'group'], ['group']])) || '';
+  const insuranceAuth = cleanString(pickValue(structured, [['insurance', 'primary', 'authorization_number'], ['authorization_number']])) || '';
+
+  const cptCodes = Array.isArray(procedure?.cpt) ? procedure.cpt : (procedure?.cpt ? [procedure.cpt] : []);
+  const cptDescription = pickValue(structured, [
+    ['procedure', 'description_text'],
+    ['procedure', 'description'],
+    ['procedure', 'study_requested'],
+    ['procedure', 'study'],
   ]);
-  const reviewSet = new Set([
-    'MANUAL_REVIEW_REQUIRED','DME_PRESENT_REVIEW_REQUIRED','ICD_PRIMARY_MISSING','ICD_SUPPORTING_MISSING','TITRATION_REQUIRES_CLINICAL_REVIEW','WRONG_TEST_ORDERED_SPLITNIGHT_CONFLICT','CONTRADICTIONS_DETECTED'
-  ]);
-  const groupedFlags = (Array.isArray(r.flags) ? r.flags : []).reduce((acc, f) => {
-    if (reviewSet.has(f)) acc['Additional Review'].push(f);
-    else if (actionSet.has(f)) acc['Action'].push(f);
-    else acc['Info'].push(f);
-    return acc;
-  }, { 'Info': [], 'Action': [], 'Additional Review': [] });
+  const procedureNotes = pickValue(structured, [['procedure', 'notes'], ['provider_notes']]);
+
+  const physicianNameRaw = pickValue(structured, [['physician', 'name'], ['referring_provider'], ['provider_name']]);
+  const physicianName = collapsePhysician(physicianNameRaw) || physicianNameRaw;
+  const physicianNpi = pickValue(structured, [['physician', 'npi'], ['provider_npi']]);
+  const physicianPracticeRaw = pickValue(structured, [['physician', 'practice'], ['physician', 'clinic']]);
+  const physicianPractice = collapsePhysician(physicianPracticeRaw) || physicianPracticeRaw;
+  const physicianPhone = cleanString(pickValue(structured, [['physician', 'clinic_phone'], ['physician', 'phone']])) || '';
+  const physicianFax = cleanString(pickValue(structured, [['physician', 'fax']])) || '';
+
+  const primaryDiagnosis = pickValue(structured, [['clinical', 'primary_diagnosis'], ['diagnosis'], ['primary_diagnosis']]);
+  const symptoms = clinical?.symptoms || structured?.symptoms || [];
+  const bmi = pickValue(structured, [['patient', 'bmi'], ['clinical', 'bmi'], ['vitals', 'bmi']]);
+  const bp = pickValue(structured, [['patient', 'blood_pressure'], ['clinical', 'blood_pressure'], ['vitals', 'bp']]);
+
+  const { label: confidenceLabel, pct: confidencePct } = computeConfidence(r, structured);
+  const flags = Array.isArray(r?.flags) ? r.flags : [];
+  const actions = Array.isArray(r?.actions) ? r.actions : [];
+
+  const ocrText = r?.text || structured?.ocr_text || '';
+  const fileName = r?.filename || r?.suggested_filename || files?.[idx]?.name || `Document ${idx + 1}`;
+
+  const secondaryCarrier = collapseCarrier(insuranceSecondary?.carrier) || cleanString(insuranceSecondary?.carrier) || 'Not provided';
+  const secondaryMemberId = cleanString(insuranceSecondary?.member_id);
+  const secondaryGroup = cleanString(insuranceSecondary?.group);
+
+  const confidenceClass = (() => {
+    if (confidenceLabel && confidenceLabel.toLowerCase().includes('manual')) return 'confidence-low';
+    if (typeof confidencePct === 'number') {
+      if (confidencePct >= 90) return 'confidence-high';
+      if (confidencePct >= 75) return 'confidence-medium';
+      return 'confidence-low';
+    }
+    return 'confidence-medium';
+  })();
 
   return (
-    <div className={`document-card ${isCollapsed ? 'collapsed' : ''}`} style={{ width: '100%', minWidth: '100%', boxSizing: 'border-box' }}>
-      <div className="p-8 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200" style={{ width: '100%', position: 'relative', paddingRight: '7rem', minHeight: '90px' }}>
-        <div className="flex items-center gap-10">
-          <div className="flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mr-6">
-            <span className="text-2xl">📄</span>
-          </div>
-          <div className="flex flex-row items-center min-w-0 gap-6 pl-2 pr-2 flex-1">
-            <h3
-              className="font-bold text-gray-800 text-xl flex-1 min-w-0 truncate"
-              style={{ lineHeight: '1.2', marginBottom: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-              title={r.filename || `Document ${idx + 1}`}
-            >
-              {r.filename || `Document ${idx + 1}`}
-            </h3>
-            {(confidenceLabel || confidencePct !== null) && (
-              <span
-                className={`confidence-badge ml-4 text-base ${(() => {
-                  const pct = Number(confidencePct);
-                  if (confidenceLabel === 'Manual Review') return 'confidence-low';
-                  if (!isNaN(pct)) {
-                    if (pct >= 90) return 'confidence-high';
-                    if (pct >= 80) return 'confidence-medium';
-                    if (pct >= 70) return 'confidence-low';
-                  }
-                  return 'confidence-medium';
-                })()}`}
-                title={(r.confidence_detail?.reasons || []).join('; ')}
+    <div className={`document-card ${isCollapsed ? 'collapsed' : ''}`} style={{ width: '100%' }}>
+      <div className="p-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 relative">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-xl">📄</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-gray-800 text-lg truncate" title={fileName}>{patientName || fileName}</h3>
+              <button
+                className="btn-small btn-outline"
+                onClick={() => toggleRowCollapse(resultId)}
+                title={isCollapsed ? 'Expand row' : 'Collapse row'}
               >
-                {confidenceLabel ? `${confidenceLabel}` : 'Confidence'}
-                {confidencePct !== null ? ` · ${Number(confidencePct).toFixed(0)}%` : ''}
-              </span>
-            )}
-          </div>
-        </div>
-        <button
-          className="btn-small btn-outline px-3 py-2 text-sm hover:scale-105 transition-transform duration-200"
-          onClick={() => toggleRowCollapse(resultId)}
-          title={isCollapsed ? 'Expand row' : 'Collapse row'}
-          style={{ position: 'absolute', top: 24, right: 24, zIndex: 2 }}
-        >
-          <span className="flex items-center gap-1">{isCollapsed ? '▶' : '▼'}<span className="hidden sm:inline">{isCollapsed ? 'Expand' : 'Collapse'}</span></span>
-        </button>
-      </div>
-
-      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[5000px] opacity-100'}`} style={{ width: '100%', boxSizing: 'border-box' }}>
-        <div className="p-6" style={{ width: '100%', boxSizing: 'border-box' }}>
-
-          <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex gap-8 items-start flex-wrap">
-              <FeedbackPanel resultId={resultId} onFeedback={handleFeedback} />
-              <ExportPanel resultId={resultId} r={r} onExport={handleExportCombinedPdf} openHtmlInNewWindow={openHtmlInNewWindow} />
+                {isCollapsed ? 'Expand' : 'Collapse'}
+              </button>
             </div>
-          </div>
-
-          {/* Key Facts */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-            <div className="border rounded-xl p-3 bg-white/60">
-              <div className="text-gray-500 text-sm">CPT</div>
-              <div className="font-medium">{cpt || '—'}</div>
-              {cptDesc ? <div className="text-gray-600 text-sm">{cptDesc}</div> : null}
-            </div>
-            <div className="border rounded-xl p-3 bg-white/60">
-              <div className="text-gray-500 text-sm">Primary Diagnosis</div>
-              <div className="font-medium">{primaryDx || '—'}</div>
-            </div>
-            <div className="border rounded-xl p-3 bg-white/60">
-              <div className="text-gray-500 text-sm">Insurance</div>
-              <div className="font-medium">{carrier || '—'}</div>
-              {memberId ? <div className="text-gray-600 text-sm">ID: {memberId}</div> : null}
-            </div>
-          </div>
-
-          {/* Image preview */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between p-3 bg-gray-100 rounded-t-lg border border-gray-200">
-              <h3 className="font-semibold text-gray-800">{r.filename || files[idx]?.name || `File ${idx+1}`}</h3>
-              <button className="btn-small btn-outline px-2 py-1 text-xs" onClick={() => toggleSectionCollapse(resultId, 'image')} title={isSectionCollapsed(resultId, 'image') ? 'Show image preview' : 'Hide image preview'}>{isSectionCollapsed(resultId, 'image') ? '▶' : '▼'}</button>
-            </div>
-            {!isSectionCollapsed(resultId, 'image') && (
-              <div className="bg-gray-50 border border-t-0 border-gray-200 rounded-b-lg p-4">
-                <div className="w-full aspect-[8.5/11] bg-white border border-gray-300 rounded-lg flex items-center justify-center overflow-hidden mb-4">
-                  {files[idx] && files[idx].type?.startsWith('image/') ? (
-                    <img src={URL.createObjectURL(files[idx])} alt={files[idx].name} className="max-w-full h-auto object-contain" />
-                  ) : (
-                    <div className="text-4xl text-gray-400"><span role="img" aria-label="PDF">📄</span></div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* OCR text */}
-          <div className="compare-ocr has-template" style={{display:'flex', gap: '2rem', alignItems:'flex-start'}}>
-            <div className="ocr-pane" style={{flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-              <div className="ocr-col" style={{width: '100%', maxWidth: 700, minWidth: 320}}>
-                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
-                  <span style={{display:'flex', alignItems:'center', gap:8}}>OCR Text</span>
-                  <div>
-                    <button type="button" onClick={()=>{ setEditTarget({ idx, resultId, text: r.text||'' }); setEditText(r.text||''); }} style={{fontSize:12, padding:'2px 8px'}}>Edit OCR</button>
-                  </div>
-                </div>
-                <pre className="ocr-text" style={{whiteSpace:'pre-wrap', marginTop:8, fontSize: '1rem', background: '#f9f9f9', borderRadius: 6, padding: '1rem', minHeight: 120, width: '100%', boxSizing: 'border-box', overflowX: 'auto'}}>{r.text}</pre>
-                {r.qc_results && (
-                  <div className="qc-section mt-3">
-                    {(r.qc_results.errors?.length > 0 || r.qc_results.warnings?.length > 0) ? (
-                      <div>
-                        {r.qc_results.errors?.map((error, i) => <div key={i} className="qc-error">❌ {error}</div>)}
-                        {r.qc_results.warnings?.map((warning, i) => <div key={i} className="qc-warning">⚠️ {warning}</div>)}
-                      </div>
-                    ) : <div className="qc-pass">✅ All quality checks passed</div>}
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            <div className="side-col" style={{flex: '1 1 0', minWidth: 220}}>
-                {(Array.isArray(r.flags) && r.flags.length > 0) && (
-                  <div className="flags-section">
-                    <div className="col-title">Intelligent Flags</div>
-                    <div className="grid grid-cols-1 gap-2 mt-2">
-                      {Object.entries(groupedFlags).map(([group, items]) => (
-                        <div key={group} className="border rounded-lg p-2">
-                          <div className="text-gray-500 text-xs mb-1">{group}</div>
-                          {items.length === 0 ? (
-                            <div className="text-gray-400 text-xs">None</div>
-                          ) : (
-                            <div className="flex flex-wrap gap-2">
-                              {items.map((f, i) => (
-                                <span key={`${group}-${i}`} className="flag-badge" style={{marginRight:6}}>{f}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {Array.isArray(r.actions) && r.actions.length > 0 && (
-                  <div className="actions-section mt-3">
-                    <div className="col-title">Required Actions</div>
-                    <ul className="actions-list" style={{marginTop:6}}>{r.actions.map((a,i)=>(<li key={i}>{a}</li>))}</ul>
-                  </div>
-                )}
-              </div>
+            <div className="text-sm text-gray-500 mt-1 flex gap-3">
+              {patientDob ? <span>DOB: {patientDob}</span> : null}
+              {referralDate ? <span>Referral: {referralDate}</span> : null}
+              {confidenceLabel ? (
+                <span className={`confidence-badge ${confidenceClass}`}>
+                  {confidenceLabel}{typeof confidencePct === 'number' ? ` · ${confidencePct.toFixed(0)}%` : ''}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
       </div>
+
+      {!isCollapsed && (
+        <div className="p-6 space-y-6 bg-white">
+          <div className="flex flex-wrap gap-6 items-start">
+            <FeedbackPanel resultId={resultId} onFeedback={handleFeedback} />
+            <ExportPanel
+              resultId={resultId}
+              r={r}
+              templateHtml={templateHtml}
+              onExport={handleExportCombinedPdf}
+              openHtmlInNewWindow={openHtmlInNewWindow}
+            />
+            <button
+              type="button"
+              className="btn-outline btn-small"
+              onClick={() => { setEditTarget({ idx, resultId, text: ocrText }); setEditText(ocrText); }}
+            >
+              Edit OCR
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-small"
+              onClick={() => setShowDebug((v) => !v)}
+            >
+              {showDebug ? 'Hide Debug' : 'Show Debug'}
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="text-xs uppercase text-gray-500">Patient</div>
+              <div className="text-sm text-gray-800 mt-1">{patientName || 'Not found'}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {patientDob ? <div>DOB: {patientDob}</div> : null}
+                {mrn ? <div>MRN: {mrn}</div> : null}
+                {patientPhone ? <div>Phone: {patientPhone}</div> : null}
+                {patientEmail ? <div>Email: {patientEmail}</div> : null}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="text-xs uppercase text-gray-500">Insurance (Primary)</div>
+          <div className="text-sm text-gray-800 mt-1">{insuranceCarrier || 'Not found'}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {insuranceMemberId ? <div>Member ID: {insuranceMemberId}</div> : null}
+                {insuranceGroup ? <div>Group: {insuranceGroup}</div> : null}
+                {insuranceAuth ? <div>Authorization: {insuranceAuth}</div> : null}
+                {insurancePrimary?.insurance_verified ? <div>Verified: {insurancePrimary.insurance_verified}</div> : null}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="text-xs uppercase text-gray-500">Procedure</div>
+              <div className="text-sm text-gray-800 mt-1">{cptCodes.length ? cptCodes.join(', ') : 'Not found'}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {cptDescription ? <div>{cptDescription}</div> : null}
+                {procedureNotes ? <div>{procedureNotes}</div> : null}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="text-xs uppercase text-gray-500">Clinical</div>
+              <div className="text-sm text-gray-800 mt-1">{primaryDiagnosis || 'Not found'}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {symptoms && symptoms.length ? <div>Symptoms: {formatList(symptoms)}</div> : null}
+                {bmi ? <div>BMI: {bmi}</div> : null}
+                {bp ? <div>BP: {bp}</div> : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">Physician</div>
+              <div className="text-sm text-gray-800 mt-1">{physicianName || 'Not found'}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {physicianNpi ? <div>NPI: {physicianNpi}</div> : null}
+                {physicianPractice ? <div>Practice: {physicianPractice}</div> : null}
+                {physicianPhone ? <div>Phone: {physicianPhone}</div> : null}
+                {physicianFax ? <div>Fax: {physicianFax}</div> : null}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">Secondary Insurance</div>
+              <div className="text-sm text-gray-800 mt-1">{secondaryCarrier}</div>
+              <div className="text-xs text-gray-500 mt-2 space-y-1">
+                {secondaryMemberId ? <div>Member ID: {secondaryMemberId}</div> : null}
+                {secondaryGroup ? <div>Group: {secondaryGroup}</div> : null}
+              </div>
+            </div>
+          </div>
+
+          {templateHtml ? (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-4 py-2 border-b bg-gray-50 text-sm font-medium text-gray-700 flex items-center justify-between">
+                <span>Template Preview</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-outline btn-small"
+                    onClick={() => { setEditedHtml(localTemplateHtml || templateHtml || ''); setIsEditOpen(true); }}
+                  >
+                    Edit Template
+                  </button>
+                </div>
+              </div>
+              <div className="p-0 bg-white">
+                {/* Security note: avoid combining allow-scripts + allow-same-origin to prevent sandbox escape warning.
+                    Scripts can run but the frame remains in a unique origin. Add allow-popups to let links open new tabs. */}
+                <iframe
+                  title={`TemplatePreview-${resultId}`}
+                  srcDoc={localTemplateHtml || templateHtml}
+                  sandbox="allow-scripts allow-popups"
+                  style={{ width: '100%', minHeight: 900, border: 0, background: 'white' }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+
+          {(flags.length > 0 || actions.length > 0) && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {flags.length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="text-xs uppercase text-gray-500">Flags</div>
+                  <ul className="mt-2 text-sm text-gray-700 list-disc list-inside space-y-1">
+                    {flags.map((flag, i) => <li key={i}>{flag}</li>)}
+                  </ul>
+                </div>
+              )}
+              {actions.length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="text-xs uppercase text-gray-500">Actions</div>
+                  <ul className="mt-2 text-sm text-gray-700 list-disc list-inside space-y-1">
+                    {actions.map((action, i) => <li key={i}>{action}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showDebug && (
+            <pre className="bg-gray-900 text-gray-100 text-xs p-4 rounded-lg overflow-auto" style={{ maxHeight: 320 }}>
+              {JSON.stringify({ structured, result: r }, null, 2)}
+            </pre>
+          )}
+
+          {isEditOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.45)' }}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl mx-4 overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+                  <div className="text-sm font-medium text-gray-700">Edit Template HTML</div>
+                  <button className="btn-small" onClick={() => setIsEditOpen(false)}>✕</button>
+                </div>
+                <div className="p-4">
+                  <textarea
+                    value={editedHtml}
+                    onChange={(e) => setEditedHtml(e.target.value)}
+                    className="w-full border rounded-md p-3 font-mono text-xs"
+                    style={{ minHeight: 420 }}
+                    spellCheck={false}
+                  />
+                </div>
+                <div className="px-4 py-3 border-t bg-gray-50 flex items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    className="btn-outline btn-small"
+                    onClick={() => setEditedHtml(templateHtml || '')}
+                    title="Restore the original HTML returned by the backend"
+                  >
+                    Restore Original
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline btn-small"
+                    onClick={() => setIsEditOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-small"
+                    onClick={() => { setLocalTemplateHtml(editedHtml); setIsEditOpen(false); }}
+                  >
+                    Save Preview
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

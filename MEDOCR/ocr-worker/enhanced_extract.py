@@ -6,12 +6,13 @@ Specialized for sleep medicine and general medical referrals
 
 import re
 import json
+import importlib.util
 from datetime import date, datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Set
 import os
 
 from ocr_preprocessing import OCRPreprocessor, FuzzyPatternMatcher, enhance_extraction_confidence
-from semantic_template_mapper import SemanticTemplateMapper
+from semantic_template_mapper import SemanticTemplateMapper, apply_fallback_mappings
 from flag_rules import load_flags_catalog, derive_flags, flags_to_actions, compute_confidence_bucket
 from quality.assess import compute_confidence
 
@@ -21,6 +22,22 @@ try:
 except Exception:
     def select_cpt(extracted_text: str, patient_age: int = None, prior_positive_test: bool = False, cpap_issues: list = None):
         return {"code": None, "reason": "cpt_selector not available"}
+
+
+# Optional ICD extractor (loaded via importlib to avoid strict packaging requirements)
+_RULES_BASE = os.path.join(os.path.dirname(__file__), 'config', 'rules')
+_ICD_EXTRACTOR_FN = None
+_ICD_MODULE_PATH = os.path.join(_RULES_BASE, 'icd_extractor.py')
+if os.path.exists(_ICD_MODULE_PATH):
+    try:
+        _icd_spec = importlib.util.spec_from_file_location("medocr_icd_extractor", _ICD_MODULE_PATH)
+        if _icd_spec and _icd_spec.loader:
+            _icd_module = importlib.util.module_from_spec(_icd_spec)
+            _icd_spec.loader.exec_module(_icd_module)  # type: ignore[attr-defined]
+            _ICD_EXTRACTOR_FN = getattr(_icd_module, 'extract_icd', None)
+    except Exception:
+        _ICD_EXTRACTOR_FN = None
+
 
 def _load_json_safe(p):
     try:
@@ -35,6 +52,67 @@ def _token_windows(text, span, window_chars=80):
     start = max(0, s - window_chars)
     end = min(len(text), e + window_chars)
     return text[start:end]
+
+
+def _merge_icd_results(clinical: Dict[str, Any], icd_result: Optional[Dict[str, Any]]):
+    """Normalize and merge ICD-10 findings into the clinical payload."""
+    if not isinstance(clinical, dict):
+        return
+
+    icd_result = icd_result or {}
+
+    combined: List[Dict[str, Optional[str]]] = []
+    seen: Set[str] = set()
+
+    def _add_entry(code: Optional[str], label: Optional[str]):
+        if not code:
+            return
+        code_str = str(code).strip()
+        if not code_str:
+            return
+        norm = code_str.upper()
+        if norm in seen:
+            return
+        seen.add(norm)
+        entry = {"code": code_str, "label": (label or '').strip() or None}
+        combined.append(entry)
+
+    existing = clinical.get("icd10_codes")
+    if isinstance(existing, list):
+        for item in existing:
+            if isinstance(item, dict):
+                _add_entry(item.get("code"), item.get("label"))
+            elif isinstance(item, str):
+                _add_entry(item, None)
+    elif isinstance(existing, str):
+        _add_entry(existing, None)
+
+    primary = icd_result.get("primary") if isinstance(icd_result, dict) else None
+    if isinstance(primary, dict):
+        _add_entry(primary.get("code"), primary.get("label"))
+
+    supporting = icd_result.get("supporting") if isinstance(icd_result, dict) else None
+    if isinstance(supporting, list):
+        for item in supporting:
+            if isinstance(item, dict):
+                _add_entry(item.get("code"), item.get("label"))
+
+    if not combined:
+        return
+
+    clinical["icd10_codes"] = combined
+    clinical["icd10_all"] = [entry["code"] for entry in combined]
+
+    if not str(clinical.get("icd10_primary", "")).strip():
+        clinical["icd10_primary"] = combined[0]["code"]
+
+    primary_diag = clinical.get("primary_diagnosis")
+    if not str(primary_diag or "").strip():
+        first = combined[0]
+        if first.get("label"):
+            clinical["primary_diagnosis"] = f"{first['code']} — {first['label']}".strip(" —")
+        else:
+            clinical["primary_diagnosis"] = first['code']
 
 def refine_symptoms(text: str) -> list:
     """Extract symptoms with negation, subject, and proximity handling."""
@@ -262,6 +340,18 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
     if form["procedure"]["indication"]:
         form["clinical"]["primary_diagnosis"] = form["procedure"]["indication"]
 
+    # Run fallback mappings to backfill anything the semantic pass missed (e.g., patient phone, carrier canonicalization)
+    try:
+        apply_fallback_mappings(
+            corrected_text,
+            form.setdefault("patient", {}),
+            form.setdefault("insurance", {}),
+            form.setdefault("physician", {}),
+            form.setdefault("procedure", {}),
+        )
+    except Exception:
+        pass
+
     # ---- Clinical ----
     form["clinical"].update({
         "epworth_score": extracted_fields.get('epworth_score', ''),
@@ -282,6 +372,17 @@ def analyze_medical_form(ocr_text: str, ocr_confidence: float = 0.0) -> Dict[str
     refined = refine_symptoms(corrected_text)
     if refined:
         form["clinical"]["symptoms"] = refined
+
+    icd_result = None
+    if _ICD_EXTRACTOR_FN:
+        try:
+            icd_result = _ICD_EXTRACTOR_FN(
+                corrected_text,
+                patient_age=form.get("patient", {}).get("age")
+            )
+        except Exception:
+            icd_result = None
+    _merge_icd_results(form["clinical"], icd_result if isinstance(icd_result, dict) else {})
 
     # ---- Document / Metadata ----
     # Referral/order date

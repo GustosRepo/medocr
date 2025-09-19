@@ -1,6 +1,6 @@
 # quality/assess.py
 import json, os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Union
 
 BASE = os.path.dirname(__file__)
 RULES_PATH = os.path.join(os.path.dirname(BASE), "config", "rules", "confidence_rules.json")
@@ -25,8 +25,8 @@ def load_rules():
             "manualTriggers": ["contradictions","handwriting_blocked","missing_required"]
         }
 
-def compute_confidence(parsed: Dict[str, Any], ocr_percent: float | int | None = None,
-                       manual_signals: List[str] | None = None):
+def compute_confidence(parsed: Dict[str, Any], ocr_percent: Optional[Union[float, int]] = None,
+                       manual_signals: Optional[List[str]] = None):
     """
     Returns: {
       "label": "High|Medium|Low|Manual Review",

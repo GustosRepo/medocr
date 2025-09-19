@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MEDOCR Client Summary</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; color: #0f172a; }
+    h1, h2 { color: #1e293b; }
+    header { margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { border: 1px solid #cbd5f5; border-radius: 10px; padding: 16px; background: #f8fafc; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    .value { font-size: 15px; font-weight: 600; margin-top: 4px; color: #0f172a; }
+    .pill { display: inline-block; padding: 4px 9px; border-radius: 999px; background: #e0f2fe; color: #0c4a6e; margin-right: 8px; margin-bottom: 6px; font-size: 12px; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 12px; overflow-x: auto; white-space: pre-wrap; }
+    .muted { color: #64748b; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Client Summary</h1>
+    <div class="muted">Generated {{generated_at}} • Confidence {{confidence_label}} ({{confidence_score}})</div>
+  </header>
+
+  <section class="grid">
+    <div class="card">
+      <div class="label">Patient</div>
+      <div class="value">{{patient_name}}</div>
+      <div class="muted">DOB: {{patient_dob}} • MRN: {{patient_mrn}}</div>
+      <div class="muted">Phone: {{patient_phone}} • BMI: {{patient_bmi}} • BP: {{patient_bp}}</div>
+    </div>
+    <div class="card">
+      <div class="label">Insurance</div>
+      <div class="value">{{insurance_carrier}}</div>
+      <div class="muted">Member: {{insurance_member_id}} • Group: {{insurance_group}}</div>
+      <div class="muted">Secondary: {{insurance_secondary_carrier}} • ID: {{insurance_secondary_member_id}} • Group: {{insurance_secondary_group}}</div>
+      <div class="muted">Authorization: {{insurance_authorization}} • Verified: {{insurance_verified}}</div>
+    </div>
+    <div class="card">
+      <div class="label">Physician</div>
+      <div class="value">{{physician_name}}</div>
+      <div class="muted">Practice: {{physician_practice}}</div>
+      <div class="muted">NPI: {{physician_npi}} • Phone: {{physician_phone}} • Fax: {{physician_fax}}</div>
+    </div>
+    <div class="card">
+      <div class="label">Procedure</div>
+      <div class="value">{{procedure_cpt}}</div>
+      <div class="muted">{{procedure_description}}</div>
+      <div class="muted">Indication: {{procedure_indication}}</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="label">Clinical Snapshot</div>
+    <div class="value">Diagnosis: {{clinical_diagnosis}}</div>
+    <div class="muted">Symptoms: {{clinical_symptoms}}</div>
+  </section>
+
+  <section class="card">
+    <div class="label">Flags</div>
+    {{flags}}
+  </section>
+
+  <section class="card">
+    <div class="label">Actions</div>
+    {{actions}}
+  </section>
+
+  <section class="card">
+    <div class="label">Dates</div>
+    <div class="muted">Document Date: {{document_date}} • Intake Date: {{intake_date}}</div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary style="cursor:pointer;font-weight:600;margin-bottom:8px">OCR Preview</summary>
+      <pre style="margin-top:8px">{{raw_text}}</pre>
+    </details>
+  </section>
+</body>
+</html>
