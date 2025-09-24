@@ -111,6 +111,18 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
 
   const pythonCmd = process.env.PYTHON || "python3";
 
+  // Resolve OCR engine from request (form field or query) or env; default tesseract
+  const resolveEngine = () => {
+    try {
+      const q = (req.query && (req.query.engine || req.query.ocr_engine)) || null;
+      // For multipart, text fields appear on req.body
+      const b = (req.body && (req.body.engine || req.body.ocr_engine)) || null;
+      const env = process.env.OCR_ENGINE || null;
+      const v = (b || q || env || 'tesseract').toString().toLowerCase();
+      return (v === 'paddle' ? 'paddle' : 'tesseract');
+    } catch { return 'tesseract'; }
+  };
+
   // process a single file (async)
   async function processFile(file, idx) {
     const imgPath = path.resolve(file.path);
@@ -133,7 +145,9 @@ app.post("/ocr", upload.array("file"), async (req, res) => {
       // if user-words/patterns exist in ocr-worker, pass them to the CLI
       const userWords = path.join(ocrWorkerDir, 'config', 'user-words.txt');
       const userPatterns = path.join(ocrWorkerDir, 'config', 'user-patterns.txt');
-      const args = ['main.py', imgPath];
+  const args = ['main.py', imgPath];
+  const engine = resolveEngine();
+  if (engine) args.push('--engine', engine);
       if (fs.existsSync(userWords)) args.push('--user-words', userWords);
       if (fs.existsSync(userPatterns)) args.push('--user-patterns', userPatterns);
       const ocrRes = await runCommand(pythonCmd, args, { cwd: ocrWorkerDir });
@@ -668,6 +682,16 @@ app.post("/batch-ocr", upload.array("file"), async (req, res) => {
   }
 
   const pythonCmd = process.env.PYTHON || "python3";
+  const resolveEngine = () => {
+    try {
+      const q = (req.query && (req.query.engine || req.query.ocr_engine)) || null;
+      const b = (req.body && (req.body.engine || req.body.ocr_engine)) || null;
+      const env = process.env.OCR_ENGINE || null;
+      const v = (b || q || env || 'tesseract').toString().toLowerCase();
+      return (v === 'paddle' ? 'paddle' : 'tesseract');
+    } catch { return 'tesseract'; }
+  };
+  const ocrEngine = resolveEngine();
   const intakeDate = req.body.intake_date || new Date().toLocaleDateString('en-US');
   const jobId = String((req.body && req.body.job_id) || randomBytes(6).toString('hex'));
   const startedAt = new Date().toISOString();
@@ -704,7 +728,7 @@ app.post("/batch-ocr", upload.array("file"), async (req, res) => {
         if (i >= req.files.length) break;
         const f = req.files[i];
         const srcPath = path.resolve(f.path);
-        const args = ['main.py', srcPath];
+  const args = ['main.py', srcPath, '--engine', ocrEngine];
         if (fs.existsSync(userWords)) args.push('--user-words', userWords);
         if (fs.existsSync(userPatterns)) args.push('--user-patterns', userPatterns);
         const ocrRes = await runCommand(pythonCmd, args, { cwd: ocrWorkerDir }, { timeoutMs: perFileTimeoutMs });
