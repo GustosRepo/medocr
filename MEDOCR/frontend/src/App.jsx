@@ -74,6 +74,8 @@ function App() {
   const [showRuleAdvanced, setShowRuleAdvanced] = useState(false);
   const editTextAreaRef = useRef(null);
   const [recentChanges, setRecentChanges] = useState({});
+  // OCR engine selection (tesseract | paddle)
+  const [ocrEngine, setOcrEngine] = useState('tesseract');
 
   useEffect(() => {
     (async () => {
@@ -103,6 +105,8 @@ function App() {
     setResults([]);
     const formData = new FormData();
     files.forEach(f => formData.append('file', f));
+  // Pass selected OCR engine to backend
+  try { formData.append('engine', ocrEngine || 'tesseract'); } catch(_) {}
     const isBatch = files.length > 1;
     let jobId = null;
     if (isBatch) {
@@ -244,6 +248,8 @@ function App() {
               error={error}
               onFileChange={handleFileChange}
               onSubmit={handleSubmit}
+              engine={ocrEngine}
+              setEngine={setOcrEngine}
               results={results}
               errorsCount={errorsCount}
               batchResults={batchResults}
