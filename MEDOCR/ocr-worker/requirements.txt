@@ -1,8 +1,0 @@
-pytesseract
-pillow
-reportlab
-numpy
-opencv-python-headless
-pdf2image
-PyPDF2
-PaddleOCR
