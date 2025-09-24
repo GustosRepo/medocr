@@ -438,17 +438,22 @@ def _clean_group(val: Any) -> str:
     return "N/A"
 
 def _find_patient_phone_from_text(text: str) -> Optional[str]:
-    """Prefer a patient-specific phone from OCR text when structured is missing."""
+    """Prefer a patient-specific phone from OCR text when structured is missing.
+    Avoid lines that include clinic/provider/fax tokens to prevent leakage of clinic numbers.
+    """
     if not text:
         return None
-    # Look for explicit Patient Phone labels first
+    # Strictly labeled patient phone
     m = re.search(r"(?:Patient\s*(?:Cell|Home)?\s*Phone|Patient Phone)\s*[:\-]?\s*(\(?\d{3}\)?[^\d]?\d{3}[^\d]?\d{4})", text, re.I)
     if m:
         return m.group(1)
-    # Secondary heuristic: a line mentioning Patient followed by a phone number
-    m = re.search(r"^.*Patient.*?(\(?\d{3}\)?[^\d]?\d{3}[^\d]?\d{4}).*$", text, re.I | re.M)
-    if m:
-        return m.group(1)
+    # Line-based heuristic: must include 'patient' and must NOT include 'fax'/'clinic'/'provider'
+    for ln in text.splitlines():
+        lo = ln.lower()
+        if 'patient' in lo and 'fax' not in lo and 'clinic' not in lo and 'provider' not in lo:
+            m2 = re.search(r"(\(?\d{3}\)?[^\d]?\d{3}[^\d]?\d{4})", ln)
+            if m2:
+                return m2.group(1)
     return None
 
 def build_context(structured: Dict[str, Any], text: str, analysis: Optional[Dict[str, Any]]) -> Dict[str, str]:
@@ -545,6 +550,15 @@ def build_context(structured: Dict[str, Any], text: str, analysis: Optional[Dict
         "Not provided",
     )
     patient_phone = _clean_str(patient_phone)
+    # Do not let clinic phone or fax appear as patient phone
+    def _digits10(s: str) -> str:
+        d = re.sub(r"\D", "", str(s or ""))
+        return d[-10:] if len(d) >= 10 else d
+    phys_phone_10 = _digits10(physician.get("clinic_phone") or physician.get("phone"))
+    phys_fax_10 = _digits10(physician.get("fax"))
+    pat_phone_10 = _digits10(patient_phone)
+    if pat_phone_10 and (pat_phone_10 == phys_phone_10 or pat_phone_10 == phys_fax_10):
+        patient_phone = "Not provided"
 
     bmi = _first_non_empty(
         patient.get("bmi"),

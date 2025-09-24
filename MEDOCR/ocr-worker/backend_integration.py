@@ -67,7 +67,8 @@ RX = {
     "dob": re.compile(r"\b(?:DOB|Date of Birth)[:\s]*([01]?\d\/[0-3]?\d\/\d{4})\b", re.I),
     "bp": re.compile(r"\b(?:Blood Pressure|BP)[:\s]*([0-2]?\d{2}\/[0-2]?\d{2})\b", re.I),
     "mrn": re.compile(r"\bMRN[:\s]*([A-Z0-9\-]{3,})\b", re.I),
-    "phone_any": re.compile(r"\b(?:Phone|Phone \(Home\)|Clinic phone)[:\s]*([()\-\s\.\d]{10,20})", re.I),
+    # Patient phone (do NOT include 'Clinic phone' here)
+    "phone_any": re.compile(r"\b(?:Phone|Phone \(Home\))[:\s]*([()\-\s\.\d]{10,20})", re.I),
     "fax": re.compile(r"\bFax[:\s]*([()\-\s\.\d]{10,20})", re.I),
     "provider_block": re.compile(r"Provider:\s*([^\n]+?)\s+Specialty:\s*([^\n]+?)(?:\s+NPI:|\n|$)", re.I),
     "npi": re.compile(r"\bNPI[:\s]*([0-9]{8,15})\b", re.I),
@@ -223,9 +224,11 @@ def _fallback_extract(text: str, avg_conf: Optional[float]) -> dict:
     if m:
         out["patient"]["phone_home"] = _fmt_phone(m.group(1))
     else:
-        m = RX["phone_any"].search(search_space)
-        if m:
-            out["patient"]["phone_home"] = _fmt_phone(m.group(1))
+        # Only search generically within the Patient section; avoid matching Clinic phone
+        if patient_section:
+            m = RX["phone_any"].search(patient_section)
+            if m:
+                out["patient"]["phone_home"] = _fmt_phone(m.group(1))
     m = RX["fax"].search(referring_section or t)
     if m:
         out["physician"]["fax"] = _fmt_phone(m.group(1))
