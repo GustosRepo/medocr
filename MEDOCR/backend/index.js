@@ -1314,16 +1314,35 @@ app.post('/export-combined-data', async (req, res) => {
       const shouldHighlight = (req.body.highlight !== false); // default to true unless explicitly disabled
       const collectTerms = () => {
         const terms = new Set();
-        const add = (v) => { if (!v) return; const s = String(v).trim(); if (s.length >= 3) terms.add(s); };
+        const looksLikePhone = (val) => {
+          const s = String(val || '').trim();
+          if (!s) return false;
+          const d = s.replace(/\D/g, '');
+          // Treat standard NANP 10+ digit strings as phone-like
+          if (d.length >= 10 && d.length <= 15) return true;
+          // Common formatted patterns
+          if (/^\(?\d{3}\)?[\-\.\s]?\d{3}[\-\.\s]?\d{4}$/.test(s)) return true;
+          return false;
+        };
+        const add = (v) => {
+          if (!v) return;
+          const s = String(v).trim();
+          if (s.length < 3) return;
+          // Skip phone-like strings to avoid noisy highlighting across OCR text
+          if (looksLikePhone(s)) return;
+          terms.add(s);
+        };
         (flags || []).forEach(add);
         (actions || []).forEach(add);
         try {
           const p = (enhancedData && enhancedData.patient) || {};
-          add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob); add(p.phone_home);
+          add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob);
+          // Intentionally skip patient phone
           const ins = (enhancedData && enhancedData.insurance && enhancedData.insurance.primary) || {};
           add(ins.carrier); add(ins.member_id); add(ins.authorization_number); add(ins.group);
           const phy = (enhancedData && enhancedData.physician) || {};
-          add(phy.name); add(phy.npi); add(phy.clinic_phone); add(phy.fax);
+          add(phy.name); add(phy.npi);
+          // Intentionally skip clinic phone and fax
           const proc = (enhancedData && enhancedData.procedure) || {};
           if (Array.isArray(proc.cpt)) proc.cpt.forEach(add); else add(proc.cpt);
           add(proc.study_requested); add(proc.indication);
@@ -1660,16 +1679,26 @@ app.post('/export-mass-combined', async (req, res) => {
         const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const collectTerms = () => {
           const terms = new Set();
-          const add = (v) => { if (!v) return; const s = String(v).trim(); if (s.length >= 3) terms.add(s); };
+          const looksLikePhone = (val) => {
+            const s = String(val || '').trim();
+            if (!s) return false;
+            const d = s.replace(/\D/g, '');
+            if (d.length >= 10 && d.length <= 15) return true;
+            if (/^\(?\d{3}\)?[\-\.\s]?\d{3}[\-\.\s]?\d{4}$/.test(s)) return true;
+            return false;
+          };
+          const add = (v) => {
+            if (!v) return; const s = String(v).trim(); if (s.length < 3) return; if (looksLikePhone(s)) return; terms.add(s);
+          };
           (flags || []).forEach(add);
           (actions || []).forEach(add);
           try {
             const p = (enhancedData && enhancedData.patient) || {};
-            add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob); add(p.phone_home);
+            add(p.first_name); add(p.last_name); add(p.mrn); add(p.dob);
             const ins = (enhancedData && enhancedData.insurance && enhancedData.insurance.primary) || {};
             add(ins.carrier); add(ins.member_id); add(ins.authorization_number); add(ins.group);
             const phy = (enhancedData && enhancedData.physician) || {};
-            add(phy.name); add(phy.npi); add(phy.clinic_phone); add(phy.fax);
+            add(phy.name); add(phy.npi);
             const proc = (enhancedData && enhancedData.procedure) || {};
             if (Array.isArray(proc.cpt)) proc.cpt.forEach(add); else add(proc.cpt);
             add(proc.study_requested); add(proc.indication);
