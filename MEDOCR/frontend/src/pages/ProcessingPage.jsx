@@ -26,6 +26,9 @@ export default function ProcessingPage({
   setEditTarget,
   setEditText,
   exportingPdf,
+  // New: OCR engine control
+  engine,
+  setEngine,
 }) {
   const proc = useOcrProcessing();
   const files = pFiles ?? proc.files;
@@ -66,6 +69,19 @@ export default function ProcessingPage({
                     </div>
                   </div>
                 )}
+              </div>
+              {/* OCR Engine Selector */}
+              <div className="mt-4 flex items-center gap-3">
+                <label className="text-sm text-gray-700">OCR Engine</label>
+                <select
+                  value={engine || 'tesseract'}
+                  onChange={(e) => setEngine && setEngine(e.target.value)}
+                  className="border rounded px-2 py-1 text-sm"
+                  disabled={loading}
+                >
+                  <option value="tesseract">Tesseract (default)</option>
+                  <option value="paddle">PaddleOCR (experimental)</option>
+                </select>
               </div>
               {batchProgress && files.length > 1 && (
                 <div className="mt-3 text-sm text-gray-700">
