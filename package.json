@@ -1,0 +1,27 @@
+{
+  "name": "medocr",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+  "validate:schema": "node scripts/validate-extraction-result.js",
+  "validate:all": "node scripts/validate-all.js",
+  "lint:json": "node scripts/lint-json.js",
+  "dev:api": "NODE_ENV=development node backend/server.js",
+  "dev:all": "bash scripts/dev-all.sh",
+  "stop:all": "bash scripts/stop-all.sh",
+  "inspect": "node scripts/inspect-upload.js",
+  "test": "NODE_ENV=test node --test"
+  },
+  "devDependencies": {
+    "ajv": "^8.12.0",
+  "ajv-formats": "^2.1.1",
+  "express": "^4.19.2",
+  "multer": "^1.4.5-lts.1",
+  "supertest": "^7.0.0"
+  }
+  ,
+  "dependencies": {
+    "pdfkit": "^0.15.0"
+  }
+}

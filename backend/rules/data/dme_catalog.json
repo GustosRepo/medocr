@@ -1,0 +1,33 @@
+{
+  "vendors": [
+    "APRIA",
+    "LINCARE",
+    "ROTECH",
+    "ADAPT",
+    "PACIFIC",
+    "PRISM",
+    "PHILIPS",
+    "RESMED",
+    "PREFERRED HOMESCARE",
+    "PREFERRED MEDICAL",
+    "NATIONWIDE MEDICAL",
+    "NATIONWIDE DME",
+    "SOUTHWEST MEDICAL",
+    "SUPER CARE HEALTH"
+  ],
+  "codes": [
+    "E0601",
+    "E0562",
+    "A7034",
+    "A7035",
+    "A7036",
+    "E0470",
+    "E0471",
+    "E0472",
+    "E1390",
+    "E1392",
+    "E0445",
+    "E0\\d{3}",
+    "A703[4-9]"
+  ]
+}

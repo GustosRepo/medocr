@@ -1,0 +1,8 @@
+{
+  "I47.1": ["alert_cardiac_svt"],
+  "I47.2": ["alert_cardiac_vt"],
+  "Z95.0": ["alert_pacemaker"],
+  "Z95.810": ["alert_icd_defibrillator"],
+  "E66.01": ["alert_mobility"],
+  "U07.1": ["alert_infectious_covid"]
+}
