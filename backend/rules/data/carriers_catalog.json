@@ -1,0 +1,13 @@
+[
+  { "name": "Aetna", "status": "accepted", "patterns": ["\\bAETNA\\b"] },
+  { "name": "Anthem BCBS", "status": "accepted", "patterns": ["\\bANTHEM\\b", "\\bBLUE\\s*CROSS\\b", "\\bBLUE\\s*SHIELD\\b", "\\bBCBS\\b"] },
+  { "name": "United Healthcare", "status": "accepted", "patterns": ["\\bUNITED\\s*HEALTH\\s*CARE\\b", "\\bUNITEDHEALTHCARE\\b", "\\bUHC\\b"] },
+  { "name": "Cigna", "status": "accepted", "patterns": ["\\bCIGNA\\b"] },
+  { "name": "Humana", "status": "accepted", "patterns": ["\\bHUMANA\\b"] },
+  { "name": "Medicare", "status": "accepted", "patterns": ["\\bMEDICARE\\b"] },
+  { "name": "Medicaid", "status": "accepted", "patterns": ["\\bMEDICAID\\b"] },
+  { "name": "Molina", "status": "unknown", "patterns": ["\\bMOLINA\\b"] },
+  { "name": "Prominence", "status": "unknown", "patterns": ["\\bPROMINENCE\\b"] },
+  { "name": "Culinary", "status": "not_accepted", "patterns": ["\\bCULINARY\\b"] },
+  { "name": "SilverSummit", "status": "unknown", "patterns": ["\\bSILVER\\s*SUMMIT\\b"] }
+]

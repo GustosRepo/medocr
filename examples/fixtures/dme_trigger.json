@@ -1,0 +1,11 @@
+{
+  "documentMeta": { "pages": 2, "filename": "Lee_Kai_12121985_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Lee", "first": "Kai", "dob": "12/12/1985" },
+  "insurance": [ { "carrier": "United Healthcare", "memberId": "UHC99", "status": "accepted" } ],
+  "procedure": { "cpt": "95810" },
+  "diagnoses": [ { "code": "G47.33" } ],
+  "dme": { "codes": ["E0601"], "providers": ["Apria Healthcare"], "issues": ["mask leaking"] },
+  "alerts": { "actions": ["dme_decision_required"] },
+  "confidence": "Medium",
+  "ocr": [ { "page": 1, "text": "..." } ]
+}

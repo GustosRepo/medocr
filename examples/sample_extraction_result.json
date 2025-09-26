@@ -1,0 +1,22 @@
+{
+  "documentMeta": { "pages": 6, "filename": "Doe_Jane_01021970_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Doe", "first": "Jane", "dob": "01/02/1970", "phones": ["7025550100"], "email": "jane.doe@example.com" },
+  "insurance": [ { "carrier": "Aetna", "memberId": "ABC12345", "groupId": "G100", "status": "accepted" } ],
+  "provider": { "name": "Dr. Smith", "npi": "1234567890", "practice": "Sunrise Clinic", "phone": "7025552222", "fax": "7025553333" },
+  "procedure": { "cpt": "95810", "description": "In-lab PSG", "notes": ["sleep study", "eval & treat"] },
+  "diagnoses": [ { "code": "G47.33", "description": "Obstructive Sleep Apnea (Adult)", "temporal": "current" } ],
+  "symptoms": [
+    { "name": "witnessed apneas", "status": "confirmed", "context": "spouse reports", "page": 2, "bbox": [100, 200, 180, 24] },
+    { "name": "snoring", "status": "denied", "context": "denies", "page": 1, "bbox": [120, 260, 160, 20] }
+  ],
+  "dme": { "codes": [], "providers": [], "issues": [] },
+  "priorStudy": { "present": false },
+  "alerts": { "info": ["history_of_htn"], "actions": [], "review": [] },
+  "flags": { "verifyManually": false, "reasons": [] },
+  "qc": { "nameConsistency": "pass", "dateValidity": "pass", "phoneValidity": "pass", "cptValid": "pass" },
+  "confidence": "Medium",
+  "ocr": [
+    { "page": 1, "text": "...page1 text..." },
+    { "page": 2, "text": "...page2 text..." }
+  ]
+}

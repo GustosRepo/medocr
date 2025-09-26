@@ -1,0 +1,10 @@
+{
+  "documentMeta": { "pages": 3, "filename": "Public_Joe_07071970_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Public", "first": "Joe", "dob": "07/07/1970" },
+  "insurance": [ { "carrier": "Culinary", "memberId": "CUL123", "groupId": "X" , "status": "not_accepted"} ],
+  "procedure": { "cpt": "95810", "description": "In-lab PSG" },
+  "diagnoses": [ { "code": "G47.33" } ],
+  "alerts": { "actions": ["insurance_not_accepted"] },
+  "confidence": "Medium",
+  "ocr": [ { "page": 1, "text": "..." } ]
+}

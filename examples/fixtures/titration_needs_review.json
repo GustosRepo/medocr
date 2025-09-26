@@ -1,0 +1,11 @@
+{
+  "documentMeta": { "pages": 4, "filename": "Smith_Ada_05201990_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Smith", "first": "Ada", "dob": "05/20/1990" },
+  "insurance": [ { "carrier": "Aetna", "memberId": "AET123", "status": "accepted" } ],
+  "procedure": { "cpt": "95811", "description": "CPAP Titration", "notes": ["titration only"] },
+  "diagnoses": [ { "code": "G47.33" } ],
+  "alerts": { "review": ["titration_without_prior_positive_or_cpAP_issue"] },
+  "flags": { "verifyManually": true, "reasons": ["missing_prior_positive"] },
+  "confidence": "Low",
+  "ocr": [ { "page": 1, "text": "..." } ]
+}

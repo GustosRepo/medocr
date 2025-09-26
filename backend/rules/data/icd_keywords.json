@@ -1,0 +1,1755 @@
+[
+  {
+    "code": "G47.30",
+    "label": "Sleep Apnea, Unspecified",
+    "keywords": [
+      "sleep apnea",
+      "apnea unspecified",
+      "witnessed apneas",
+      "witnessed apnea",
+      "apneas",
+      "apneic episodes",
+      "gasping for air",
+      "choking",
+      "breathing stops",
+      "apnea",
+      "wife witnessed apnea",
+      "husband witnessed apnea",
+      "partner witnessed apnea",
+      "spouse witnessed apnea",
+      "significant other witnessed apnea",
+      "witnessed apnea episodes",
+      "witnessed apneic episodes",
+      "gasping for air during sleep",
+      "choking during sleep",
+      "witnessed apneas during sleep",
+      "wakes up choking",
+      "wakes up gasping for air",
+      "wakes up short of breath",
+      "stops breathing",
+      "suspected sleep apnea",
+      "possible sleep apnea",
+      "likely sleep apnea",
+      "probable sleep apnea",
+      "apnea episodes",
+      "apneic episodes during sleep",
+      "concerns for apnea",
+      "concern for apnea",
+      "concern for sleep apnea",
+      "concerns for sleep apnea",
+      "apnea during sleep",
+      "apneas during sleep",
+      "gasping sensations during sleep",
+      "stops breathing during sleep",
+      "holds breath during sleep",
+      "breathing pauses during sleep",
+      "breathing pauses",
+      "holds breath",
+      "breathing cessations",
+      "breathing cessation",
+      "cessation of breathing",
+      "High altitude periodic breathing",
+      "G47.32",
+      "Sleep related hypoventilation in conditions classified elsewhere",
+      "G47.36",
+      "Other sleep apnea",
+      "G47.39"
+    ]
+  },
+  {
+    "code": "G47.10",
+    "label": "Hypersomnia, Unspecified",
+    "keywords": [
+      "hypersomnia",
+      "excessive daytime sleepiness",
+      "falling asleep while driving",
+      "falling asleep while talking",
+      "falling asleep while working",
+      "falling asleep while reading",
+      "falling asleep in conversation",
+      "falling asleep in meetings",
+      "falling asleep in class",
+      "falling asleep in church",
+      "falling asleep in public",
+      "falling asleep in social situations",
+      "tiredness impacting daily life",
+      "fatigue impacting daily life",
+      "fell asleep driving",
+      "fell asleep talking",
+      "fell asleep working",
+      "fell asleep reading",
+      "fell asleep in conversation",
+      "fell asleep in meetings",
+      "fell asleep in class",
+      "fell asleep in church",
+      "fell asleep in public",
+      "fell asleep in social situations",
+      "can't stay awake despite good sleep hygiene",
+      "can't keep eyes open",
+      "has to nap",
+      "needs to nap",
+      "takes naps",
+      "difficulty staying awake",
+      "difficulty keeping eyes open",
+      "difficulty concentrating due to sleepiness",
+      "difficulty focusing due to sleepiness",
+      "difficulty concentrating due to tiredness",
+      "difficulty focusing due to tiredness",
+      "difficulty concentrating due to fatigue",
+      "difficulty focusing due to fatigue",
+      "lost job due to sleepiness",
+      "lost job due to tiredness",
+      "lost job due to fatigue",
+      "can't wake up in the morning",
+      "difficulty waking up in the morning",
+      "difficulty waking up",
+      "sleeps 8 hours but still tired",
+      "sleeps 7 hours but still tired",
+      "sleeps 9 hours but still tired",
+      "sleeps 10 hours but still tired",
+      "sleeps 11 hours but still tired",
+      "sleeps 12 hours but still tired",
+      "sleeps 8 hours but still sleepy",
+      "sleeps 7 hours but still sleepy",
+      "sleeps 9 hours but still sleepy",
+      "sleeps 10 hours but still sleepy",
+      "sleeps 11 hours but still sleepy",
+      "sleeps 12 hours but still sleepy",
+      "sleeps 8 hours but still fatigued",
+      "sleeps 7 hours but still fatigued",
+      "sleeps 9 hours but still fatigued",
+      "sleeps 10 hours but still fatigued",
+      "sleeps 11 hours but still fatigued",
+      "sleeps 12 hours but still fatigued",
+      "can't function without a nap",
+      "difficulty functioning without a nap",
+      "difficulty functioning due to sleepiness",
+      "difficulty functioning due to tiredness",
+      "difficulty functioning due to fatigue",
+      "can't work due to sleepiness",
+      "can't work due to tiredness",
+      "can't work due to fatigue",
+      "epworth sleepiness scale greater than 10",
+      "epworth sleepiness scale greater than 11",
+      "epworth sleepiness scale greater than 12",
+      "epworth sleepiness scale greater than 13",
+      "epworth sleepiness scale greater than 14",
+      "epworth sleepiness scale greater than 15",
+      "epworth sleepiness scale greater than 16",
+      "epworth sleepiness scale greater than 17",
+      "epworth sleepiness scale greater than 18",
+      "epworth sleepiness scale greater than 19",
+      "epworth sleepiness scale greater than 20",
+      "epworth sleepiness scale 10",
+      "epworth sleepiness scale 11",
+      "epworth sleepiness scale 12",
+      "epworth sleepiness scale 13",
+      "epworth sleepiness scale 14",
+      "epworth sleepiness scale 15",
+      "epworth sleepiness scale 16",
+      "epworth sleepiness scale 17",
+      "epworth sleepiness scale 18",
+      "epworth sleepiness scale 19",
+      "epworth sleepiness scale 20",
+      "epworth sleepiness scale 21",
+      "epworth sleepiness scale 22",
+      "epworth sleepiness scale 23",
+      "epworth sleepiness scale 24",
+      "scored 10 on epworth sleepiness scale",
+      "scored 11 on epworth sleepiness scale",
+      "scored 12 on epworth sleepiness scale",
+      "scored 13 on epworth sleepiness scale",
+      "scored 14 on epworth sleepiness scale",
+      "scored 15 on epworth sleepiness scale",
+      "scored 16 on epworth sleepiness scale",
+      "scored 17 on epworth sleepiness scale",
+      "scored 18 on epworth sleepiness scale",
+      "scored 19 on epworth sleepiness scale",
+      "scored 20 on epworth sleepiness scale",
+      "scored 21 on epworth sleepiness scale",
+      "scored 22 on epworth sleepiness scale",
+      "scored 23 on epworth sleepiness scale",
+      "scored 24 on epworth sleepiness scale",
+      "scored 10 on ess",
+      "scored 11 on ess",
+      "scored 12 on ess",
+      "scored 13 on ess",
+      "scored 14 on ess",
+      "scored 15 on ess",
+      "scored 16 on ess",
+      "scored 17 on ess",
+      "scored 18 on ess",
+      "scored 19 on ess",
+      "scored 20 on ess",
+      "scored 21 on ess",
+      "scored 22 on ess",
+      "scored 23 on ess",
+      "scored 24 on ess",
+      "ess greater than 10",
+      "ess greater than 11",
+      "ess greater than 12",
+      "ess greater than 13",
+      "ess greater than 14",
+      "ess greater than 15",
+      "ess greater than 16",
+      "ess greater than 17",
+      "ess greater than 18",
+      "ess greater than 19",
+      "ess greater than 20",
+      "ess 10",
+      "ess 11",
+      "ess 12",
+      "ess 13",
+      "ess 14",
+      "ess 15",
+      "ess 16",
+      "ess 17",
+      "ess 18",
+      "ess 19",
+      "ess 20",
+      "ess 21",
+      "ess 22",
+      "ess 23",
+      "ess 24",
+      "excessive daytime sleepiness impacting daily life",
+      "excessive daytime sleepiness impacting work",
+      "excessive daytime sleepiness impacting social life",
+      "excessive daytime sleepiness impacting family life",
+      "excessive daytime sleepiness impacting relationships",
+      "excessive daytime sleepiness impacting concentration",
+      "excessive daytime sleepiness impacting focus",
+      "excessive daytime sleepiness impacting memory",
+      "excessive daytime sleepiness impacting mood",
+      "excessive daytime sleepiness impacting energy",
+      "excessive daytime sleepiness impacting motivation",
+      "excessive daytime sleepiness impacting productivity",
+      "excessive daytime sleepiness impacting ability to function",
+      "eds impacting daily life",
+      "eds impacting work",
+      "eds impacting social life",
+      "eds impacting family life",
+      "eds impacting relationships",
+      "eds impacting concentration",
+      "eds impacting focus",
+      "eds impacting memory",
+      "eds impacting mood",
+      "eds impacting energy",
+      "eds impacting motivation",
+      "eds impacting productivity",
+      "eds impacting ability to function",
+      "severe eds",
+      "moderate eds",
+      "complains of excessive daytime sleepiness",
+      "complains of tiredness that impacts daily life",
+      "complains of fatigue that impacts daily life",
+      "complains of sleepiness that impacts daily life",
+      "complains of tiredness that impacts work",
+      "complains of fatigue that impacts work",
+      "complains of sleepiness that impacts work",
+      "complains of tiredness that impacts social life",
+      "complains of fatigue that impacts social life",
+      "complains of sleepiness that impacts social life",
+      "complains of tiredness that impacts family life",
+      "complains of fatigue that impacts family life",
+      "complains of sleepiness that impacts family life",
+      "complains of tiredness that impacts relationships",
+      "complains of fatigue that impacts relationships",
+      "complains of sleepiness that impacts relationships",
+      "complains of tiredness that impacts concentration",
+      "complains of fatigue that impacts concentration",
+      "complains of sleepiness that impacts concentration",
+      "complains of tiredness that impacts focus",
+      "complains of fatigue that impacts focus",
+      "complains of sleepiness that impacts focus",
+      "complains of tiredness that impacts memory",
+      "complains of fatigue that impacts memory",
+      "complains of sleepiness that impacts memory",
+      "complains of tiredness that impacts mood",
+      "complains of fatigue that impacts mood",
+      "complains of sleepiness that impacts mood",
+      "complains of tiredness that impacts energy",
+      "complains of fatigue that impacts energy",
+      "complains of sleepiness that impacts energy",
+      "complains of tiredness that impacts motivation",
+      "complains of fatigue that impacts motivation",
+      "complains of sleepiness that impacts motivation",
+      "complains of tiredness that impacts productivity",
+      "complains of fatigue that impacts productivity",
+      "complains of sleepiness that impacts productivity",
+      "complains of tiredness that impacts ability to function",
+      "complains of fatigue that impacts ability to function",
+      "complains of sleepiness that impacts ability to function",
+      "difficulty functioning due to eds",
+      "difficulty functioning due to excessive daytime sleepiness",
+      "can't function due to eds",
+      "can't function due to excessive daytime sleepiness",
+      "can't function due to tiredness",
+      "can't function due to fatigue",
+      "can't function due to sleepiness",
+      "lost job due to eds",
+      "lost job due to excessive daytime sleepiness",
+      "severe excessive daytime sleepiness",
+      "moderate excessive daytime sleepiness",
+      "complains of being very sleepy during the day",
+      "complains of being extremely sleepy during the day",
+      "complains of being moderately sleepy during the day",
+      "complains of being very tired during the day",
+      "complains of being extremely tired during the day",
+      "complains of being moderately tired during the day",
+      "complains of being very fatigued during the day",
+      "complains of being extremely fatigued during the day",
+      "complains of being moderately fatigued during the day",
+      "very sleepy during the day",
+      "extremely sleepy during the day",
+      "moderately sleepy during the day",
+      "very tired during the day",
+      "extremely tired during the day",
+      "moderately tired during the day",
+      "very fatigued during the day",
+      "extremely fatigued during the day",
+      "moderately fatigued during the day",
+      "severe daytime sleepiness",
+      "moderate daytime sleepiness",
+      "severe daytime fatigue",
+      "moderate daytime fatigue",
+      "severe daytime tiredness",
+      "moderate daytime tiredness",
+      "severe eds impacting daily life",
+      "moderate eds impacting daily life",
+      "severe excessive daytime sleepiness impacting daily life",
+      "moderate excessive daytime sleepiness impacting daily life",
+      "severe eds impacting work",
+      "moderate eds impacting work",
+      "severe excessive daytime sleepiness impacting work",
+      "moderate excessive daytime sleepiness impacting work",
+      "severe eds impacting social life",
+      "moderate eds impacting social life",
+      "severe excessive daytime sleepiness impacting social life",
+      "moderate excessive daytime sleepiness impacting social life",
+      "severe eds impacting family life",
+      "moderate eds impacting family life",
+      "severe excessive daytime sleepiness impacting family life",
+      "moderate excessive daytime sleepiness impacting family life",
+      "severe eds impacting relationships",
+      "moderate eds impacting relationships",
+      "severe excessive daytime sleepiness impacting relationships",
+      "moderate excessive daytime sleepiness impacting relationships",
+      "severe eds impacting concentration",
+      "moderate eds impacting concentration",
+      "severe excessive daytime sleepiness impacting concentration",
+      "moderate excessive daytime sleepiness impacting concentration",
+      "severe eds impacting focus",
+      "moderate eds impacting focus",
+      "severe excessive daytime sleepiness impacting focus",
+      "moderate excessive daytime sleepiness impacting focus",
+      "severe eds impacting memory",
+      "moderate eds impacting memory",
+      "severe excessive daytime sleepiness impacting memory",
+      "moderate excessive daytime sleepiness impacting memory",
+      "severe eds impacting mood",
+      "moderate eds impacting mood",
+      "severe excessive daytime sleepiness impacting mood",
+      "moderate excessive daytime sleepiness impacting mood",
+      "severe eds impacting energy",
+      "moderate eds impacting energy",
+      "severe excessive daytime sleepiness impacting energy",
+      "moderate excessive daytime sleepiness impacting energy",
+      "severe eds impacting motivation",
+      "moderate eds impacting motivation",
+      "severe excessive daytime sleepiness impacting motivation",
+      "moderate excessive daytime sleepiness impacting motivation",
+      "severe eds impacting productivity",
+      "moderate eds impacting productivity",
+      "severe excessive daytime sleepiness impacting productivity",
+      "moderate excessive daytime sleepiness impacting productivity",
+      "severe eds impacting ability to function",
+      "moderate eds impacting ability to function",
+      "severe excessive daytime sleepiness impacting ability to function",
+      "moderate excessive daytime sleepiness impacting ability to function",
+      "complains of eds",
+      "drinks multiple caffeinated beverages to stay awake",
+      "uses caffeine to stay awake",
+      "relies on caffeine to stay awake",
+      "needs caffeine to stay awake",
+      "uses caffeine to combat eds",
+      "relies on caffeine to combat eds",
+      "needs caffeine to combat eds",
+      "uses caffeine to combat excessive daytime sleepiness",
+      "relies on caffeine to combat excessive daytime sleepiness",
+      "needs caffeine to combat excessive daytime sleepiness",
+      "uses caffeine to combat tiredness",
+      "relies on caffeine to combat tiredness",
+      "needs caffeine to combat tiredness",
+      "uses caffeine to combat fatigue",
+      "relies on caffeine to combat fatigue",
+      "needs caffeine to combat fatigue",
+      "uses caffeine to stay awake due to eds",
+      "relies on caffeine to stay awake due to eds",
+      "needs caffeine to stay awake due to eds",
+      "uses caffeine to stay awake due to excessive daytime sleepiness",
+      "relies on caffeine to stay awake due to excessive daytime sleepiness",
+      "needs caffeine to stay awake due to excessive daytime sleepiness",
+      "uses caffeine to stay awake due to tiredness",
+      "relies on caffeine to stay awake due to tiredness",
+      "needs caffeine to stay awake due to tiredness",
+      "uses caffeine to stay awake due to fatigue",
+      "relies on caffeine to stay awake due to fatigue",
+      "needs caffeine to stay awake due to fatigue",
+      "uses caffeine to stay awake during the day",
+      "relies on caffeine to stay awake during the day",
+      "needs caffeine to stay awake during the day",
+      "uses caffeine to combat sleepiness",
+      "relies on caffeine to combat sleepiness",
+      "needs caffeine to combat sleepiness",
+      "relies on caffeine to stay awake due to sleepiness",
+      "needs caffeine to stay awake due to sleepiness",
+      "uses caffeine to stay awake due to sleepiness",
+      "eds"
+    ]
+  },
+  {
+    "code": "R53.83",
+    "label": "Fatigue, Unspecified",
+    "keywords": [
+      "fatigue",
+      "tired",
+      "exhausted",
+      "hypersomnia",
+      "lethargy",
+      "lethargic",
+      "can't wake up in the morning",
+      "takes naps",
+      "wakes up tired",
+      "wakes up fatigued",
+      "daytime sleepiness",
+      "feels tired all the time",
+      "feels fatigued all the time",
+      "feels exhausted all the time",
+      "chronic fatigue",
+      "persistent fatigue",
+      "unexplained fatigue",
+      "sleepy",
+      "drowsy",
+      "drowsiness",
+      "lack of energy",
+      "low energy",
+      "no energy",
+      "decreased energy",
+      "reduced energy",
+      "energy levels are low",
+      "energy level is low",
+      "energy levels are decreased",
+      "energy level is decreased",
+      "energy levels are reduced",
+      "energy level is reduced",
+      "sleepiness during day",
+      "very tired during the day",
+      "tired all the time",
+      "complains of being tired",
+      "exhaustion",
+      "tired all day",
+      "wiped out",
+      "run down",
+      "burned out",
+      "drained",
+      "depleted",
+      "running on empty",
+      "feeling drained",
+      "feeling depleted",
+      "feeling wiped out",
+      "feeling run down",
+      "feeling burned out"
+    ]
+  },
+  {
+    "code": "R06.83",
+    "label": "Snoring",
+    "keywords": [
+      "snoring",
+      "loud snoring",
+      "complains of snoring",
+      "reports snoring",
+      "habitual snoring",
+      "heavy snoring",
+      "frequent snoring",
+      "chronic snoring",
+      "wife reports snoring",
+      "husband reports snoring",
+      "partner reports snoring",
+      "spouse reports snoring",
+      "witnessed snoring",
+      "disruptive snoring"
+    ]
+  },
+  {
+    "code": "R06.09",
+    "label": "Other Forms of Dyspnea",
+    "keywords": [
+      "dyspnea",
+      "wakes up choking",
+      "wakes up gasping for air",
+      "wakes up short of breath",
+      "gasping sensations during sleep",
+      "gasping sensations",
+      "choking sensations"
+    ]
+  },
+  {
+    "code": "F51.9",
+    "label": "Sleep Disorder, Unspecified",
+    "keywords": [
+      "sleep disorder",
+      "sleep issues",
+      "sleep problem",
+      "frequent awakenings",
+      "disturbed sleep",
+      "sleep disturbances",
+      "restless sleep",
+      "restless at night",
+      "wakes up throughout the night",
+      "difficulty staying asleep",
+      "difficulty falling back asleep",
+      "multiple awakenings at night",
+      "frequent nighttime awakenings",
+      "difficulty maintaining sleep",
+      "difficulty staying asleep at night",
+      "wakes up a lot at night",
+      "trouble staying asleep",
+      "trouble falling back asleep",
+      "trouble maintaining sleep",
+      "difficulty sleeping through the night",
+      "difficulty sleeping at night",
+      "trouble sleeping through the night",
+      "trouble sleeping at night",
+      "poor sleep quality",
+      "non-restorative sleep",
+      "unrefreshing sleep",
+      "light sleeper",
+      "sleeps lightly",
+      "easily awakened from sleep",
+      "difficulty getting a full night's sleep",
+      "difficulty getting a full night's rest",
+      "difficulty getting a full night's sleep due to awakenings",
+      "wakes up multiple times at night",
+      "wakes up to use the restroom",
+      "wakes up to urinate",
+      "wakes up to go to the bathroom",
+      "wakes up to pee"
+    ]
+  },
+  {
+    "code": "F41.8",
+    "label": "Anxiety Disorder, Unspecified",
+    "keywords": [
+      "anxiety",
+      "anxious",
+      "anxiety disorder",
+      "panic disorder",
+      "generalized anxiety disorder",
+      "feelings of panic",
+      "feelings of anxiety",
+      "feelings of nervousness",
+      "nervousness",
+      "worrying",
+      "excessive worrying",
+      "persistent worrying",
+      "chronic worrying",
+      "social anxiety",
+      "social phobia",
+      "panic attacks",
+      "feelings of dread",
+      "feelings of impending doom",
+      "feelings of unease"
+    ]
+  },
+  {
+    "code": "F33.9",
+    "label": "Major Depressive Disorder, Recurrent, Unspecified",
+    "keywords": [
+      "depression",
+      "depressed",
+      "major depressive disorder",
+      "mdd",
+      "feelings of sadness",
+      "feelings of hopelessness",
+      "feelings of worthlessness",
+      "loss of interest in activities",
+      "loss of interest in hobbies",
+      "loss of interest in things once enjoyed",
+      "depressed feelings",
+      "moderate depression",
+      "mild depression",
+      "severe depression",
+      "persistent depressive disorder",
+      "dysthymia"
+    ]
+  },
+  {
+    "code": "G47.00",
+    "label": "Insomnia, Unspecified",
+    "keywords": [
+      "insomnia"
+    ]
+  },
+  {
+    "code": "I10",
+    "label": "Essential Hypertension",
+    "keywords": [
+      "hypertension",
+      "htn",
+      "high blood pressure",
+      "hypertensive crisis",
+      "hypertensive urgency",
+      "hypertensive emergency",
+      "hbp",
+      "uncontrolled hypertension",
+      "uncontrolled htn",
+      "uncontrolled high blood pressure",
+      "poorly controlled hypertension",
+      "poorly controlled htn",
+      "poorly controlled high blood pressure",
+      "blood pressure not well controlled",
+      "blood pressure not under control",
+      "blood pressure not controlled",
+      "hypertensive kidney disease",
+      "hypertensive heart disease",
+      "hypertensive heart and kidney disease",
+      "hypertensive retinopathy",
+      "blood pressure well controlled",
+      "blood pressure under control",
+      "blood pressure controlled",
+      "bp well controlled",
+      "bp under control",
+      "bp controlled"
+    ]
+  },
+  {
+    "code": "E66.9",
+    "label": "Obesity, Unspecified",
+    "keywords": [
+      "obesity",
+      "overweight",
+      "weight gain"
+    ]
+  },
+  {
+    "code": "E66.01",
+    "label": "Morbid (Severe) Obesity due to Excess Calories",
+    "keywords": [
+      "morbid obesity",
+      "severe obesity"
+    ]
+  },
+  {
+    "code": "I50.9",
+    "label": "Heart Failure, Unspecified",
+    "keywords": [
+      "heart failure",
+      "hf"
+    ]
+  },
+  {
+    "code": "I25.10",
+    "label": "Atherosclerotic Heart Disease of Native Coronary Artery without Angina Pectoris",
+    "keywords": [
+      "coronary artery disease",
+      "cad",
+      "atherosclerosis"
+    ]
+  },
+  {
+    "code": "J44.9",
+    "label": "Chronic Obstructive Pulmonary Disease, Unspecified",
+    "keywords": [
+      "copd",
+      "chronic obstructive pulmonary disease"
+    ]
+  },
+  {
+    "code": "J96.21",
+    "label": "Chronic Respiratory Failure with Hypoxia",
+    "keywords": [
+      "chronic respiratory failure with hypoxia",
+      "chronic respiratory failure with low oxygen",
+      "chronic respiratory failure with o2"
+    ]
+  },
+  {
+    "code": "J96.20",
+    "label": "Chronic Respiratory Failure without Hypoxia",
+    "keywords": [
+      "chronic respiratory failure without hypoxia",
+      "chronic respiratory failure without low oxygen",
+      "chronic respiratory failure without o2"
+    ]
+  },
+  {
+    "code": "Z68.30",
+    "label": "BMI 30.0-30.9, Adult",
+    "keywords": [
+      "bmi 30-30.9",
+      "bmi 30 to 30.9",
+      "bmi 30 to 30"
+    ]
+  },
+  {
+    "code": "Z68.31",
+    "label": "BMI 31.0-31.9, Adult",
+    "keywords": [
+      "bmi 31-31.9",
+      "bmi 31 to 31.9",
+      "bmi 31 to 31"
+    ]
+  },
+  {
+    "code": "Z68.32",
+    "label": "BMI 32.0-32.9, Adult",
+    "keywords": [
+      "bmi 32-32.9",
+      "bmi 32 to 32.9",
+      "bmi 32 to 32"
+    ]
+  },
+  {
+    "code": "Z68.33",
+    "label": "BMI 33.0-33.9, Adult",
+    "keywords": [
+      "bmi 33-33.9",
+      "bmi 33 to 33.9",
+      "bmi 33 to 33"
+    ]
+  },
+  {
+    "code": "Z68.34",
+    "label": "BMI 34.0-34.9, Adult",
+    "keywords": [
+      "bmi 34-34.9",
+      "bmi 34 to 34.9",
+      "bmi 34 to 34"
+    ]
+  },
+  {
+    "code": "Z68.35",
+    "label": "BMI 35.0-35.9, Adult",
+    "keywords": [
+      "bmi 35-35.9",
+      "bmi 35 to 35.9",
+      "bmi 35 to 35"
+    ]
+  },
+  {
+    "code": "Z68.36",
+    "label": "BMI 36.0-36.9, Adult",
+    "keywords": [
+      "bmi 36-36.9",
+      "bmi 36 to 36.9",
+      "bmi 36 to 36"
+    ]
+  },
+  {
+    "code": "Z68.37",
+    "label": "BMI 37.0-37.9, Adult",
+    "keywords": [
+      "bmi 37-37.9",
+      "bmi 37 to 37.9",
+      "bmi 37 to 37"
+    ]
+  },
+  {
+    "code": "Z68.38",
+    "label": "BMI 38.0-38.9, Adult",
+    "keywords": [
+      "bmi 38-38.9",
+      "bmi 38 to 38.9",
+      "bmi 38 to 38"
+    ]
+  },
+  {
+    "code": "Z68.39",
+    "label": "BMI 39.0-39.9, Adult",
+    "keywords": [
+      "bmi 39-39.9",
+      "bmi 39 to 39.9",
+      "bmi 39 to 39"
+    ]
+  },
+  {
+    "code": "Z68.41",
+    "label": "BMI 40.0-44.9, Adult",
+    "keywords": [
+      "bmi 40-44.9",
+      "bmi 40 to 44.9",
+      "bmi 40 to 40"
+    ]
+  },
+  {
+    "code": "Z68.42",
+    "label": "BMI 45.0-49.9, Adult",
+    "keywords": [
+      "bmi 45-49.9",
+      "bmi 45 to 49.9",
+      "bmi 45 to 45"
+    ]
+  },
+  {
+    "code": "Z68.43",
+    "label": "BMI 50-59.9, Adult",
+    "keywords": [
+      "bmi 50-59.9",
+      "bmi 50 to 59.9",
+      "bmi 50 to 50"
+    ]
+  },
+  {
+    "code": "Z68.44",
+    "label": "BMI 60 and Over, Adult",
+    "keywords": [
+      "bmi 60 and over",
+      "bmi 60+",
+      "bmi 60 or more"
+    ]
+  },
+  {
+    "code": "Z68.45",
+    "label": "BMI 70 or greater, Adult",
+    "keywords": [
+      "bmi 70 or greater",
+      "bmi 70+",
+      "bmi 70 or more"
+    ]
+  },
+  {
+    "code": "Z68.51",
+    "label": "BMI Pediatric, Less than 5th Percentile",
+    "keywords": [
+      "bmi pediatric less than 5th percentile",
+      "bmi pediatric under 5th percentile",
+      "bmi less than 5th percentile",
+      "bmi under 5th percentile"
+    ]
+  },
+  {
+    "code": "Z68.52",
+    "label": "BMI Pediatric, 5th Percentile to Less than 85th Percentile",
+    "keywords": [
+      "bmi pediatric 5th to less than 85th percentile",
+      "bmi pediatric 5th to 85th percentile",
+      "bmi 5th to less than 85th percentile",
+      "bmi 5th to 85th percentile"
+    ]
+  },
+  {
+    "code": "Z68.53",
+    "label": "BMI Pediatric, 85th Percentile to Less than 95th Percentile",
+    "keywords": [
+      "bmi pediatric 85th to less than 95th percentile",
+      "bmi pediatric 85th to 95th percentile",
+      "bmi 85th to less than 95th percentile",
+      "bmi 85th to 95th percentile"
+    ]
+  },
+  {
+    "code": "Z68.54",
+    "label": "BMI Pediatric, 95th Percentile to Less than 120% of the 95th Percentile",
+    "keywords": [
+      "bmi pediatric 95th to less than 120% of the 95th percentile",
+      "bmi pediatric 95th to 120% of the 95th percentile",
+      "bmi 95th to less than 120% of the 95th percentile",
+      "bmi 95th to 120% of the 95th percentile"
+    ]
+  },
+  {
+    "code": "Z68.55",
+    "label": "BMI Pediatric, 120% or greater of the 95th Percentile",
+    "keywords": [
+      "bmi pediatric 120% or greater of the 95th percentile",
+      "bmi pediatric 120% or more of the 95th percentile",
+      "bmi 120% or greater of the 95th percentile",
+      "bmi 120% or more of the 95th percentile"
+    ]
+  },
+  {
+    "code": "Z68.56",
+    "label": "BMI Pediatric, greater than or equal to 140% of the 95th Percentile",
+    "keywords": [
+      "bmi pediatric greater than or equal to 140% of the 95th percentile",
+      "bmi pediatric 140% or more of the 95th percentile",
+      "bmi greater than or equal to 140% of the 95th percentile",
+      "bmi 140% or more of the 95th percentile"
+    ]
+  },
+  {
+    "code": "Z68.57",
+    "label": "BMI Pediatric, greater than or equal to 140% of the 95th percentile for age",
+    "keywords": [
+      "bmi pediatric greater than or equal to 140% of the 95th percentile for age",
+      "bmi pediatric 140% or more of the 95th percentile for age",
+      "bmi greater than or equal to 140% of the 95th percentile for age",
+      "bmi 140% or more of the 95th percentile for age"
+    ]
+  },
+  {
+    "code": "Z99.89",
+    "label": "Dependence on Other Equipment",
+    "keywords": [
+      "cpap usage",
+      "bpap usage",
+      "bilevel machine usage",
+      "ventilator usage",
+      "bi-level machine usage",
+      "c-pap usage",
+      "b-pap usage",
+      "cpap machine usage",
+      "bpap machine usage",
+      "cpap broken",
+      "bpap broken",
+      "bilevel machine broken",
+      "ventilator broken",
+      "bi-level machine broken",
+      "c-pap broken",
+      "b-pap broken",
+      "cpap not working",
+      "bpap not working",
+      "bilevel machine not working",
+      "ventilator not working",
+      "asv broken",
+      "asv not working",
+      "adaptive servo-ventilation broken",
+      "adaptive servo-ventilation not working",
+      "machine not working",
+      "machine broken",
+      "uses cpap",
+      "uses bpap",
+      "uses bilevel machine",
+      "uses ventilator",
+      "uses bi-level machine",
+      "uses c-pap",
+      "uses b-pap",
+      "uses asv",
+      "uses adaptive servo-ventilation",
+      "needs new cpap machine",
+      "needs new bpap machine",
+      "needs new bilevel machine",
+      "needs new ventilator",
+      "needs new bi-level machine",
+      "needs new c-pap machine",
+      "needs new b-pap machine",
+      "needs new asv machine",
+      "needs new adaptive servo-ventilation machine",
+      "needs new machine"
+    ]
+  },
+  {
+    "code": "Z99.81",
+    "label": "Dependence on Supplemental Oxygen",
+    "keywords": [
+      "patient on oxygen",
+      "2lpm oxygen",
+      "2 lpm oxygen",
+      "2 liters per minute oxygen",
+      "2 liters/min oxygen",
+      "2 liters per min oxygen",
+      "2 liters/minute oxygen",
+      "2lpm o2",
+      "2 lpm o2",
+      "2 liters per minute o2",
+      "2 liters/min o2",
+      "2 liters per min o2",
+      "2 liters/minute o2",
+      "3lpm oxygen",
+      "3 lpm oxygen",
+      "3 liters per minute oxygen",
+      "3 liters/min oxygen",
+      "3 liters per min oxygen",
+      "3 liters/minute oxygen",
+      "3lpm o2",
+      "3 lpm o2",
+      "3 liters per minute o2",
+      "3 liters/min o2",
+      "3 liters per min o2",
+      "3 liters/minute o2",
+      "4lpm oxygen",
+      "4 lpm oxygen",
+      "4 liters per minute oxygen",
+      "4 liters/min oxygen",
+      "4 liters per min oxygen",
+      "4 liters/minute oxygen",
+      "4lpm o2",
+      "4 lpm o2",
+      "4 liters per minute o2",
+      "4 liters/min o2",
+      "4 liters per min o2",
+      "4 liters/minute o2",
+      "5lpm oxygen",
+      "5 lpm oxygen",
+      "5 liters per minute oxygen",
+      "5 liters/min oxygen",
+      "5 liters per min oxygen",
+      "5 liters/minute oxygen",
+      "5lpm o2",
+      "5 lpm o2",
+      "5 liters per minute o2",
+      "5 liters/min o2",
+      "5 liters per min o2",
+      "5 liters/minute o2",
+      "patient on 2lpm oxygen",
+      "patient on 2 lpm oxygen",
+      "patient on 2 liters per minute oxygen",
+      "patient on 2 liters/min oxygen",
+      "patient on 2 liters per min oxygen",
+      "patient on 2 liters/minute oxygen",
+      "patient on 3lpm oxygen",
+      "patient on 3 lpm oxygen",
+      "patient on 3 liters per minute oxygen",
+      "patient on 3 liters/min oxygen",
+      "patient on 3 liters per min oxygen",
+      "patient on 3 liters/minute oxygen",
+      "patient on 4lpm oxygen",
+      "patient on 4 lpm oxygen",
+      "patient on 4 liters per minute oxygen",
+      "patient on 4 liters/min oxygen",
+      "patient on 4 liters per min oxygen",
+      "patient on 4 liters/minute oxygen",
+      "patient on 5lpm oxygen",
+      "patient on 5 lpm oxygen",
+      "patient on 5 liters per minute oxygen",
+      "patient on 5 liters/min oxygen",
+      "patient on 5 liters per min oxygen",
+      "patient on 5 liters/minute oxygen",
+      "patient on o2",
+      "patient on 2lpm o2",
+      "patient on 2 lpm o2",
+      "patient on 2 liters per minute o2",
+      "patient on 2 liters/min o2",
+      "patient on 2 liters per min o2",
+      "patient on 2 liters/minute o2",
+      "patient on 3lpm o2",
+      "patient on 3 lpm o2",
+      "patient on 3 liters per minute o2",
+      "patient on 3 liters/min o2",
+      "patient on 3 liters per min o2",
+      "patient on 3 liters/minute o2",
+      "patient on 4lpm o2",
+      "patient on 4 lpm o2",
+      "patient on 4 liters per minute o2",
+      "patient on 4 liters/min o2",
+      "patient on 4 liters per min o2",
+      "patient on 4 liters/minute o2",
+      "patient on 5lpm o2",
+      "patient on 5 lpm o2",
+      "patient on 5 liters per minute o2",
+      "patient on 5 liters/min o2",
+      "patient on 5 liters per min o2",
+      "patient on 5 liters/minute o2",
+      "1lpm oxygen",
+      "1 lpm oxygen",
+      "1 liters per minute oxygen",
+      "1 liters/min oxygen",
+      "1 liters per min oxygen",
+      "1 liters/minute oxygen",
+      "1lpm o2",
+      "1 lpm o2",
+      "1 liters per minute o2",
+      "1 liters/min o2",
+      "1 liters per min o2",
+      "1 liters/minute o2",
+      "patient on 1lpm oxygen",
+      "patient on 1 lpm oxygen",
+      "patient on 1 liters per minute oxygen",
+      "patient on 1 liters/min oxygen",
+      "patient on 1 liters per min oxygen",
+      "patient on 1 liters/minute oxygen",
+      "patient on 1lpm o2",
+      "patient on 1 lpm o2",
+      "patient on 1 liters per minute o2",
+      "patient on 1 liters/min o2",
+      "patient on 1 liters per min o2",
+      "patient on 1 liters/minute o2",
+      "pt on oxygen",
+      "pt on 2lpm oxygen",
+      "pt on 2 lpm oxygen",
+      "pt on 2 liters per minute oxygen",
+      "pt on 2 liters/min oxygen",
+      "pt on 2 liters per min oxygen",
+      "pt on 2 liters/minute oxygen",
+      "pt on 3lpm oxygen",
+      "pt on 3 lpm oxygen",
+      "pt on 3 liters per minute oxygen",
+      "pt on 3 liters/min oxygen",
+      "pt on 3 liters per min oxygen",
+      "pt on 3 liters/minute oxygen",
+      "pt on 4lpm oxygen",
+      "pt on 4 lpm oxygen",
+      "pt on 4 liters per minute oxygen",
+      "pt on 4 liters/min oxygen",
+      "pt on 4 liters per min oxygen",
+      "pt on 4 liters/minute oxygen",
+      "pt on 5lpm oxygen",
+      "pt on 5 lpm oxygen",
+      "pt on 5 liters per minute oxygen",
+      "pt on 5 liters/min oxygen",
+      "pt on 5 liters per min oxygen",
+      "pt on 5 liters/minute oxygen",
+      "pt on o2",
+      "pt on 2lpm o2",
+      "pt on 2 lpm o2",
+      "pt on 2 liters per minute o2",
+      "pt on 2 liters/min o2",
+      "pt on 2 liters per min o2",
+      "pt on 2 liters/minute o2",
+      "pt on 3lpm o2",
+      "pt on 3 lpm o2",
+      "pt on 3 liters per minute o2",
+      "pt on 3 liters/min o2",
+      "pt on 3 liters per min o2",
+      "pt on 3 liters/minute o2",
+      "pt on 4lpm o2",
+      "pt on 4 lpm o2",
+      "pt on 4 liters per minute o2",
+      "pt on 4 liters/min o2",
+      "pt on 4 liters per min o2",
+      "pt on 4 liters/minute o2",
+      "pt on 5lpm o2",
+      "pt on 5 lpm o2",
+      "pt on 5 liters per minute o2",
+      "pt on 5 liters/min o2",
+      "pt on 5 liters per min o2",
+      "pt on 5 liters/minute o2",
+      "pt on 1lpm oxygen",
+      "pt on 1 lpm oxygen",
+      "pt on 1 liters per minute oxygen",
+      "pt on 1 liters/min oxygen",
+      "pt on 1 liters per min oxygen",
+      "pt on 1 liters/minute oxygen",
+      "pt on 1lpm o2",
+      "pt on 1 lpm o2",
+      "pt on 1 liters per minute o2",
+      "pt on 1 liters/min o2",
+      "pt on 1 liters per min o2",
+      "pt on 1 liters/minute o2",
+      "on oxygen",
+      "supplemental oxygen",
+      "oxygen dependent",
+      "continuous oxygen",
+      "o2 dependent",
+      "continuous o2",
+      "on o2",
+      "supplemental o2",
+      "oxygen during sleep",
+      "o2 during sleep",
+      "oxygen at night",
+      "o2 at night",
+      "oxygen while sleeping",
+      "o2 while sleeping",
+      "sleep study with oxygen",
+      "sleep study with o2",
+      "sleep study w/ oxygen",
+      "sleep study w/ o2",
+      "polysomnography with oxygen",
+      "polysomnography with o2",
+      "polysomnography w/ oxygen",
+      "polysomnography w/ o2",
+      "polysomngram with oxygen",
+      "polysomngram with o2",
+      "polysomngram w/ oxygen",
+      "polysomngram w/ o2",
+      "psg with oxygen",
+      "psg with o2",
+      "psg w/ oxygen",
+      "psg w/ o2",
+      "overnight sleep study with oxygen",
+      "overnight sleep study with o2",
+      "overnight sleep study w/ oxygen",
+      "overnight sleep study w/ o2",
+      "overnight polysomnography with oxygen",
+      "overnight polysomnography with o2",
+      "overnight polysomnography w/ oxygen",
+      "overnight polysomnography w/ o2",
+      "overnight polysomngram with oxygen",
+      "overnight polysomngram with o2",
+      "overnight polysomngram w/ oxygen",
+      "overnight polysomngram w/ o2",
+      "overnight psg with oxygen",
+      "overnight psg with o2",
+      "overnight psg w/ oxygen",
+      "overnight psg w/ o2",
+      "24 hour oxygen",
+      "24hr oxygen",
+      "24 hour o2",
+      "24hr o2",
+      "24-hour oxygen",
+      "24-hour o2",
+      "titration study with oxygen",
+      "titration study with o2",
+      "titration study w/ oxygen",
+      "titration study w/ o2",
+      "titration polysomnography with oxygen",
+      "titration polysomnography with o2",
+      "titration polysomnography w/ oxygen",
+      "titration polysomnography w/ o2",
+      "titration polysomngram with oxygen",
+      "titration polysomngram with o2",
+      "titration polysomngram w/ oxygen",
+      "titration polysomngram w/ o2",
+      "titration psg with oxygen",
+      "titration psg with o2",
+      "titration psg w/ oxygen",
+      "titration psg w/ o2",
+      "oxygen concentrator broken",
+      "o2 concentrator broken",
+      "oxygen concentrator not working",
+      "o2 concentrator not working",
+      "oxygen concentrator malfunctioning",
+      "o2 concentrator malfunctioning",
+      "oxygen machine broken",
+      "o2 machine broken",
+      "oxygen machine not working",
+      "o2 machine not working",
+      "oxygen machine malfunctioning",
+      "o2 machine malfunctioning",
+      "needs oxygen supplies",
+      "needs o2 supplies"
+    ]
+  },
+  {
+    "code": "G25.81",
+    "label": "Restless Legs Syndrome",
+    "keywords": [
+      "restless legs",
+      "rls",
+      "restless leg syndrome"
+    ]
+  },
+  {
+    "code": "G47.33",
+    "label": "Obstructive Sleep Apnea (Adult)",
+    "keywords": [
+      "osa",
+      "obstructive sleep apnea",
+      "apnea (obstructive)"
+    ]
+  },
+  {
+    "code": "G47.31",
+    "label": "Primary Central Sleep Apnea",
+    "keywords": [
+      "central sleep apnea",
+      "csa",
+      "primary central sleep apnea",
+      "Central apnea"
+    ]
+  },
+  {
+    "code": "G47.37",
+    "label": "Complex Sleep Apnea Syndrome",
+    "keywords": [
+      "complex sleep apnea",
+      "complex sleep apnea syndrome"
+    ]
+  },
+  {
+    "code": "G47.20",
+    "label": "Circadian Rhythm Sleep Disorder, Unspecified",
+    "keywords": [
+      "circadian rhythm disorder",
+      "circadian sleep disorder",
+      "circadian rhythm sleep disorder"
+    ]
+  },
+  {
+    "code": "G47.21",
+    "label": "Delayed Sleep Phase Type",
+    "keywords": [
+      "delayed sleep phase",
+      "sleep phase delay",
+      "goes to sleep very late",
+      "can't fall asleep until late",
+      "night owl schedule"
+    ]
+  },
+  {
+    "code": "G47.22",
+    "label": "Advanced Sleep Phase Type",
+    "keywords": [
+      "advanced sleep phase",
+      "falls asleep early in the evening",
+      "early morning awakenings (phase)"
+    ]
+  },
+  {
+    "code": "G47.23",
+    "label": "Irregular Sleep Wake Type",
+    "keywords": [
+      "irregular sleep wake",
+      "irregular sleep-wake",
+      "fragmented sleep schedule"
+    ]
+  },
+  {
+    "code": "G47.24",
+    "label": "Free Running Type",
+    "keywords": [
+      "free running",
+      "non-24-hour sleep-wake",
+      "non 24 hour sleep wake"
+    ]
+  },
+  {
+    "code": "G47.25",
+    "label": "Jet Lag Type",
+    "keywords": [
+      "jet lag",
+      "travel across time zones"
+    ]
+  },
+  {
+    "code": "G47.26",
+    "label": "Shift Work Type",
+    "keywords": [
+      "shift work disorder",
+      "works night shift",
+      "rotating shifts",
+      "graveyard shift"
+    ]
+  },
+  {
+    "code": "G47.59",
+    "label": "Other Parasomnia",
+    "keywords": [
+      "sleepwalking",
+      "somnambulism",
+      "sleep terrors",
+      "night terrors",
+      "parasomnia"
+    ]
+  },
+  {
+    "code": "G47.51",
+    "label": "Confusional Arousals",
+    "keywords": [
+      "confusional arousals",
+      "sleep drunkenness"
+    ]
+  },
+  {
+    "code": "G47.52",
+    "label": "REM Sleep Behavior Disorder",
+    "keywords": [
+      "rem sleep behavior disorder",
+      "acting out dreams",
+      "dream enactment",
+      "violent during sleep"
+    ]
+  },
+  {
+    "code": "G47.53",
+    "label": "Recurrent Isolated Sleep Paralysis",
+    "keywords": [
+      "sleep paralysis",
+      "unable to move on awakening",
+      "paralyzed upon waking"
+    ]
+  },
+  {
+    "code": "G47.62",
+    "label": "Sleep Related Leg Cramps",
+    "keywords": [
+      "leg cramps at night",
+      "nocturnal leg cramps",
+      "cramps during sleep"
+    ]
+  },
+  {
+    "code": "G47.63",
+    "label": "Sleep Related Bruxism",
+    "keywords": [
+      "bruxism",
+      "teeth grinding",
+      "grinds teeth",
+      "jaw clenching"
+    ]
+  },
+  {
+    "code": "G47.411",
+    "label": "Narcolepsy with Cataplexy",
+    "keywords": [
+      "cataplexy",
+      "narcolepsy with cataplexy",
+      "sudden muscle weakness with emotion"
+    ]
+  },
+  {
+    "code": "G47.419",
+    "label": "Narcolepsy without Cataplexy",
+    "keywords": [
+      "narcolepsy",
+      "sleep attacks",
+      "sudden sleep episodes"
+    ]
+  },
+  {
+    "code": "I48.91",
+    "label": "Unspecified Atrial Fibrillation",
+    "keywords": [
+      "atrial fibrillation",
+      "afib",
+      "a-fib"
+    ]
+  },
+  {
+    "code": "I48.0",
+    "label": "Paroxysmal Atrial Fibrillation",
+    "keywords": [
+      "paroxysmal atrial fibrillation",
+      "paf"
+    ]
+  },
+  {
+    "code": "I48.1",
+    "label": "Persistent Atrial Fibrillation",
+    "keywords": [
+      "persistent atrial fibrillation"
+    ]
+  },
+  {
+    "code": "I48.2",
+    "label": "Chronic Atrial Fibrillation",
+    "keywords": [
+      "chronic atrial fibrillation"
+    ]
+  },
+  {
+    "code": "I47.1",
+    "label": "Supraventricular Tachycardia (SVT)",
+    "keywords": [
+      "supraventricular tachycardia",
+      "svt"
+    ]
+  },
+  {
+    "code": "I47.2",
+    "label": "Ventricular Tachycardia (VTAC)",
+    "keywords": [
+      "ventricular tachycardia",
+      "vt"
+    ]
+  },
+  {
+    "code": "Z95.0",
+    "label": "Presence of Cardiac Pacemaker",
+    "keywords": [
+      "pacemaker",
+      "ppm",
+      "has pacemaker",
+      "pacemaker in place"
+    ]
+  },
+  {
+    "code": "Z95.810",
+    "label": "Presence of Automatic (Implantable) Cardiac Defibrillator",
+    "keywords": [
+      "icd device",
+      "aicd",
+      "defibrillator",
+      "implantable defibrillator",
+      "has defibrillator"
+    ]
+  },
+  {
+    "code": "I27.20",
+    "label": "Pulmonary Hypertension, Unspecified",
+    "keywords": [
+      "pulmonary hypertension",
+      "phtn"
+    ]
+  },
+  {
+    "code": "J84.10",
+    "label": "Pulmonary Fibrosis, Unspecified",
+    "keywords": [
+      "pulmonary fibrosis",
+      "interstitial lung disease",
+      "ild"
+    ]
+  },
+  {
+    "code": "J44.1",
+    "label": "COPD with Acute Exacerbation",
+    "keywords": [
+      "copd exacerbation",
+      "acute exacerbation of copd"
+    ]
+  },
+  {
+    "code": "J44.0",
+    "label": "COPD with Acute Lower Respiratory Infection",
+    "keywords": [
+      "copd with infection",
+      "copd with lower respiratory infection"
+    ]
+  },
+  {
+    "code": "J96.90",
+    "label": "Respiratory Failure, Unspecified",
+    "keywords": [
+      "respiratory failure",
+      "resp failure"
+    ]
+  },
+  {
+    "code": "J96.00",
+    "label": "Acute Respiratory Failure",
+    "keywords": [
+      "acute respiratory failure"
+    ]
+  },
+  {
+    "code": "J96.10",
+    "label": "Chronic Respiratory Failure",
+    "keywords": [
+      "chronic respiratory failure"
+    ]
+  },
+  {
+    "code": "Z93.0",
+    "label": "Tracheostomy Status",
+    "keywords": [
+      "tracheostomy",
+      "trach",
+      "has trach",
+      "trach dependent"
+    ]
+  },
+  {
+    "code": "Z99.11",
+    "label": "Dependence on Respirator [Ventilator] Status",
+    "keywords": [
+      "ventilator dependent",
+      "on ventilator",
+      "vent dependent",
+      "mechanical ventilation"
+    ]
+  },
+  {
+    "code": "Z99.12",
+    "label": "Dependence on Wheelchair",
+    "keywords": [
+      "wheelchair bound",
+      "uses wheelchair",
+      "in wheelchair"
+    ]
+  },
+  {
+    "code": "Z74.01",
+    "label": "Bed Confinement Status (Homebound)",
+    "keywords": [
+      "homebound",
+      "bed bound",
+      "bedbound"
+    ]
+  },
+  {
+    "code": "Z74.09",
+    "label": "Other Reduced Mobility",
+    "keywords": [
+      "reduced mobility",
+      "limited mobility"
+    ]
+  },
+  {
+    "code": "Z87.891",
+    "label": "Personal History of Nicotine Dependence",
+    "keywords": [
+      "former smoker",
+      "quit smoking",
+      "history of smoking"
+    ]
+  },
+  {
+    "code": "U07.1",
+    "label": "COVID-19",
+    "keywords": [
+      "covid-19",
+      "covid 19",
+      "covid",
+      "sars cov 2",
+      "sars-cov-2"
+    ]
+  },
+  {
+    "code": "Z11.59",
+    "label": "Encounter for Screening for Other Viral Diseases",
+    "keywords": [
+      "viral screening",
+      "screening for viral disease"
+    ]
+  },
+  {
+    "code": "B19.9",
+    "label": "Unspecified Viral Hepatitis",
+    "keywords": [
+      "hepatitis",
+      "viral hepatitis"
+    ]
+  },
+  {
+    "code": "G40.9",
+    "label": "Epilepsy, Unspecified",
+    "keywords": [
+      "epilepsy",
+      "seizure disorder"
+    ]
+  },
+  {
+    "code": "G20",
+    "label": "Parkinson's Disease",
+    "keywords": [
+      "parkinson's",
+      "parkinson disease"
+    ]
+  },
+  {
+    "code": "G35",
+    "label": "Multiple Sclerosis",
+    "keywords": [
+      "multiple sclerosis"
+    ]
+  },
+  {
+    "code": "F07.81",
+    "label": "Postconcussional Syndrome",
+    "keywords": [
+      "post-concussive syndrome",
+      "postconcussional"
+    ]
+  },
+  {
+    "code": "I63.9",
+    "label": "Cerebral Infarction, Unspecified (Stroke)",
+    "keywords": [
+      "stroke",
+      "cva",
+      "cerebral infarction"
+    ]
+  },
+  {
+    "code": "I21.9",
+    "label": "Acute Myocardial Infarction, Unspecified",
+    "keywords": [
+      "myocardial infarction",
+      "heart attack",
+      "acute mi"
+    ]
+  },
+  {
+    "code": "J35.1",
+    "label": "Hypertrophy of Tonsils",
+    "keywords": [
+      "enlarged tonsils",
+      "tonsillar hypertrophy"
+    ]
+  },
+  {
+    "code": "J35.2",
+    "label": "Hypertrophy of Adenoids",
+    "keywords": [
+      "enlarged adenoids",
+      "adenoid hypertrophy"
+    ]
+  },
+  {
+    "code": "J35.3",
+    "label": "Hypertrophy of Tonsils with Hypertrophy of Adenoids",
+    "keywords": [
+      "enlarged tonsils and adenoids",
+      "tonsillar and adenoid hypertrophy"
+    ]
+  },
+  {
+    "code": "Q67.4",
+    "label": "Other Congenital Deformities of Skull, Face and Jaw",
+    "keywords": [
+      "micrognathia",
+      "retrognathia"
+    ]
+  },
+  {
+    "code": "K07.0",
+    "label": "Major Anomalies of Jaw Size",
+    "keywords": [
+      "malocclusion",
+      "jaw size anomaly"
+    ]
+  },
+  {
+    "code": "N39.44",
+    "label": "Nocturnal Enuresis",
+    "keywords": [
+      "nocturnal enuresis",
+      "bedwetting"
+    ]
+  },
+  {
+    "code": "F98.0",
+    "label": "Enuresis",
+    "keywords": [
+      "enuresis"
+    ]
+  },
+  {
+    "code": "R35.0",
+    "label": "Frequency of Micturition (Nocturia)",
+    "keywords": [
+      "nocturia",
+      "frequent urination at night"
+    ]
+  },
+  {
+    "code": "H90.3",
+    "label": "Sensorineural Hearing Loss, Bilateral",
+    "keywords": [
+      "sensorineural hearing loss",
+      "bilateral hearing loss"
+    ]
+  },
+  {
+    "code": "H91.90",
+    "label": "Unspecified Hearing Loss, Unspecified Ear",
+    "keywords": [
+      "hearing loss",
+      "hard of hearing"
+    ]
+  },
+  {
+    "code": "H54.7",
+    "label": "Unspecified Visual Loss",
+    "keywords": [
+      "visual loss",
+      "vision loss"
+    ]
+  },
+  {
+    "code": "H54.0",
+    "label": "Blindness, Both Eyes",
+    "keywords": [
+      "blindness",
+      "blind"
+    ]
+  },
+  {
+    "code": "Z46.1",
+    "label": "Encounter for Fitting and Adjustment of Hearing Aid",
+    "keywords": [
+      "hearing aid fitting",
+      "adjustment of hearing aid"
+    ]
+  },
+  {
+    "code": "F80.9",
+    "label": "Developmental Disorder of Speech and Language, Unspecified",
+    "keywords": [
+      "speech delay",
+      "language delay"
+    ]
+  }
+]
