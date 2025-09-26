@@ -1,0 +1,24 @@
+{
+  "documentMeta": { "pages": 9, "filename": "Nguyen_Tam_11021975_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Nguyen", "first": "Tam", "dob": "11/02/1975", "phones": ["7025556060"], "email": "tam.nguyen@example.com" },
+  "insurance": [ { "carrier": "Prominence", "memberId": "PROMX9", "status": "unknown" } ],
+  "provider": { "name": "Dr. Alvarez", "practice": "Community Care" },
+  "procedure": { "cpt": "95810", "description": "In-lab PSG", "notes": ["sleep evaluation", "complete sleep study"] },
+  "diagnoses": [ { "code": "R06.83", "description": "Snoring", "temporal": "current" }, { "code": "G47.33", "temporal": "past" } ],
+  "symptoms": [
+    { "name": "snoring", "status": "confirmed", "context": "patient reports", "page": 2, "bbox": [90, 260, 180, 24] },
+    { "name": "witnessed apneas", "status": "denied", "context": "denies", "page": 2, "bbox": [90, 290, 180, 24] },
+    { "name": "mask leaking", "status": "info", "context": "notes mention mask issue", "page": 7, "bbox": [60, 520, 200, 20] }
+  ],
+  "dme": { "codes": ["E0601"], "providers": ["Apria Healthcare"], "issues": ["mask leaking"] },
+  "priorStudy": { "present": true, "AHI": "normal 5 years ago" },
+  "alerts": {
+    "info": ["history_of_osa", "bp_medications"],
+    "actions": ["dme_decision_required", "insurance_verification_needed"],
+    "review": ["prominence_contract_check", "conflicting_symptoms"]
+  },
+  "flags": { "verifyManually": true, "reasons": ["ocr_low_confidence", "contradictory_information", "do_not_accept_or_pending_contract"] },
+  "qc": { "nameConsistency": "pass", "dateValidity": "pass", "phoneValidity": "pass", "cptValid": "pass" },
+  "confidence": "Low",
+  "ocr": [ { "page": 1, "text": "...faxed multi-page referral with mixed info..." } ]
+}

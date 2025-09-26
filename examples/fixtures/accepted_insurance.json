@@ -1,0 +1,9 @@
+{
+  "documentMeta": { "pages": 2, "filename": "Roe_John_01011980_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Roe", "first": "John", "dob": "01/01/1980" },
+  "insurance": [ { "carrier": "Anthem BCBS", "memberId": "ZZ123", "groupId": "A1", "status": "accepted" } ],
+  "procedure": { "cpt": "G0399", "description": "Home Sleep Test" },
+  "diagnoses": [ { "code": "G47.33" } ],
+  "confidence": "High",
+  "ocr": [ { "page": 1, "text": "..." } ]
+}

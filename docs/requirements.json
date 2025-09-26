@@ -1,0 +1,20 @@
+{
+  "items": [
+    { "id": "patient_name",      "title": "Patient name",                        "status": "met",     "notes": "Label-aware (fallback patterns)" },
+    { "id": "patient_dob",       "title": "Patient DOB",                         "status": "met",     "notes": "Label-aware; future-safe; context filtered" },
+    { "id": "cpt_catalog",       "title": "CPT selection (catalog)",             "status": "met",     "notes": "95811, 95810, 95806, G0399, 95782, 95783, 95805" },
+    { "id": "icd_catalog",       "title": "ICD detection (catalog)",             "status": "met",     "notes": "Client allowlist; normalization" },
+    { "id": "carrier_policies",  "title": "Carrier detection + policy overlay",  "status": "met",     "notes": "Accepted/doNotAccept/selfPay, sunsets, notes, auto flags" },
+    { "id": "dme_catalog",       "title": "DME vendors/HCPCS (catalog)",         "status": "met",     "notes": "Vendors, codes, issues" },
+    { "id": "member_group_ids",  "title": "Member/Group ID extraction",          "status": "gap",     "notes": "Not implemented" },
+    { "id": "provider_block",    "title": "Provider block extraction",           "status": "gap",     "notes": "Name/NPI/phone/fax" },
+    { "id": "multi_insurance",   "title": "Multiple insurances",                 "status": "gap",     "notes": "Single plan array item" },
+    { "id": "icd_keywords",      "title": "ICD keyword inference",               "status": "gap",     "notes": "When codes absent" },
+    { "id": "qc_confidence",     "title": "QC + confidence scoring",             "status": "partial", "notes": "Basic overall; no per-field scoring" },
+    { "id": "debug_trace",       "title": "Debug trace",                         "status": "met",     "notes": "Per-rule why" },
+    { "id": "health_endpoints",  "title": "Health endpoints",                    "status": "met",     "notes": "API and OCR" },
+    { "id": "no_seed_mode",      "title": "No template seed mode",               "status": "met",     "notes": "Default off; demo via flag" },
+    { "id": "schema_validation", "title": "JSON Schema validation",              "status": "met",     "notes": "AJV in tests" },
+    { "id": "dev_launcher",      "title": "Dev all-in-one launcher",             "status": "met",     "notes": "scripts/dev-all.sh" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "documentMeta": { "pages": 5, "filename": "Lopez_Maria_03151982_09242025.pdf", "intakeDate": "2025-09-24" },
+  "patient": { "last": "Lopez", "first": "Maria", "dob": "03/15/1982", "phones": ["7025551212"], "email": "maria.lopez@example.com" },
+  "insurance": [ { "carrier": "Anthem BCBS", "memberId": "ANT123456", "groupId": "GRP42", "status": "accepted" } ],
+  "provider": { "name": "Dr. Patel", "npi": "1122334455", "practice": "Valley Sleep Clinic", "phone": "7025553434", "fax": "7025557878" },
+  "procedure": { "cpt": "95811", "description": "CPAP Titration", "notes": ["cpap pressure not effective", "needs pressure adjustment"] },
+  "diagnoses": [ { "code": "G47.33", "description": "Obstructive Sleep Apnea (Adult)", "temporal": "current" } ],
+  "symptoms": [
+    { "name": "witnessed apneas", "status": "confirmed", "context": "partner observes", "page": 1, "bbox": [110, 210, 180, 22] },
+    { "name": "excessive daytime sleepiness", "status": "confirmed", "context": "EDS", "page": 1, "bbox": [118, 240, 170, 22] }
+  ],
+  "dme": { "codes": [], "providers": [], "issues": [] },
+  "priorStudy": { "present": true, "AHI": 22.0, "RDI": 24.0, "O2": "nadir 84%" },
+  "alerts": { "info": ["prior_positive_study"], "actions": [], "review": [] },
+  "flags": { "verifyManually": false, "reasons": [] },
+  "qc": { "nameConsistency": "pass", "dateValidity": "pass", "phoneValidity": "pass", "cptValid": "pass" },
+  "confidence": "High",
+  "ocr": [ { "page": 1, "text": "...typed referral text with prior positive PSG and CPAP issues..." } ]
+}
