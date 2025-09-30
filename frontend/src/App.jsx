@@ -271,7 +271,7 @@ export default function App() {
                     {Array.isArray(result.clinical?.symptoms) && result.clinical.symptoms.length > 0 && (
                       <>
                         <div className="k">Symptoms</div>
-                        <div>{result.clinical.symptoms.join(', ')}</div>
+                          <div style={{ fontSize: '0.75em' }}>{result.clinical.symptoms.map(s => s.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())).join(', ')}</div>
                       </>
                     )}
                     {result.clinical?.vitals && (
