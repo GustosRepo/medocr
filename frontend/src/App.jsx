@@ -82,8 +82,8 @@ export default function App() {
   async function pollStatus(id) {
     setStatus('processing')
     let tries = 0
-    const maxTries = 20
-    const baseDelay = 600
+  const maxTries = 40 // allow more time before declaring timeout
+  const baseDelay = 750
     while (tries < maxTries) {
       try {
         const res = await fetch(`${apiBase}/documents/${id}/status`)
@@ -116,9 +116,9 @@ export default function App() {
         return
       }
       tries++
-      await new Promise(r => setTimeout(r, baseDelay + tries * 200))
+      await new Promise(r => setTimeout(r, baseDelay + tries * 250))
     }
-    setError('Processing timeout')
+    setError('Processing timeout (client). Try again or increase OCR_TIMEOUT_MS on server')
     setLoading(false)
   }
 
@@ -220,13 +220,40 @@ export default function App() {
                 <div className="card">
                   <div className="row">
                     <div className="badge">Patient</div>
-                    <div className="meta">{result.patient?.last}, {result.patient?.first} • DOB {result.patient?.dob}</div>
+                    <div className="meta">{result.patient?.last}, {result.patient?.first} • DOB {result.patient?.dob}{Array.isArray(result.patient?.phones) && result.patient.phones.length ? ` • Phone${result.patient.phones.length>1?'s':''} ${result.patient.phones.join(', ')}` : ''}</div>
                   </div>
                   <div className="kv" style={{ marginTop: 8 }}>
                     <div className="k">CPT</div>
-                    <div>{result.procedure?.cpt} {result.procedure?.description ? `— ${result.procedure.description}` : ''}</div>
+                    <div>
+                      {result.procedure?.cpt}
+                      {result.procedure?.description && (
+                        <div style={{ fontSize: '0.75em', opacity: 0.85 }}>{result.procedure.description}</div>
+                      )}
+                      {Array.isArray(result.procedure?.cptCandidates) && result.procedure.cptCandidates.length > 1 && (
+                        <div style={{ fontSize: '0.8em', marginTop: 4 }}>
+                          Candidates: {result.procedure.cptCandidates.join(', ')}
+                        </div>
+                      )}
+                      {Array.isArray(result.procedure?.cptDetails) && result.procedure.cptDetails.length > 0 && (
+                        <div style={{ fontSize: '0.7em', marginTop: 4, opacity: 0.85 }}>
+                          {result.procedure.cptDetails.map(d => (
+                            <span key={d.code} style={{ display: 'inline-block', marginRight: 8 }}>
+                              <code>{d.code}</code>: {d.intent}{d.why && d.why !== 'pattern_match' ? `/${d.why}` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="k">Insurance</div>
-                    <div>{insuranceName}</div>
+                    <div>
+                      {insuranceName}
+                      {Array.isArray(result.insurance) && result.insurance[0] && (result.insurance[0].memberId || result.insurance[0].groupId) && (
+                        <div style={{ fontSize: '0.7em', marginTop: 2 }}>
+                          {result.insurance[0].memberId && <span style={{ marginRight: 8 }}>ID: {result.insurance[0].memberId}</span>}
+                          {result.insurance[0].groupId && <span>Group: {result.insurance[0].groupId}</span>}
+                        </div>
+                      )}
+                    </div>
                     <div className="k">Diagnosis</div>
                     <div>
                       {Array.isArray(result.diagnoses) && result.diagnoses.length
@@ -235,6 +262,47 @@ export default function App() {
                             : (result.diagnoses[0]?.code || '—'))
                         : '—'}
                     </div>
+                    {result.clinical?.primaryDiagnosis && (
+                      <>
+                        <div className="k">Primary Dx</div>
+                        <div>{result.clinical.primaryDiagnosis.code}{result.clinical.primaryDiagnosis.description ? ` — ${result.clinical.primaryDiagnosis.description}` : ''}</div>
+                      </>
+                    )}
+                    {Array.isArray(result.clinical?.symptoms) && result.clinical.symptoms.length > 0 && (
+                      <>
+                        <div className="k">Symptoms</div>
+                        <div>{result.clinical.symptoms.join(', ')}</div>
+                      </>
+                    )}
+                    {result.clinical?.vitals && (
+                      <>
+                        <div className="k">Vitals</div>
+                        <div style={{ fontSize: '0.75em' }}>
+                          {result.clinical.vitals.bmi && <span style={{ marginRight: 8 }}>BMI {result.clinical.vitals.bmi}</span>}
+                          {result.clinical.vitals.bp && <span style={{ marginRight: 8 }}>BP {result.clinical.vitals.bp}</span>}
+                          {result.clinical.vitals.weightLbs && <span style={{ marginRight: 8 }}>Wt {result.clinical.vitals.weightLbs} lbs</span>}
+                          {result.clinical.vitals.height && <span>Ht {result.clinical.vitals.height}</span>}
+                        </div>
+                      </>
+                    )}
+                    {Array.isArray(result.procedure?.providerNotes) && result.procedure.providerNotes.length > 0 && (
+                      <>
+                        <div className="k">Provider Notes</div>
+                        <div>{result.procedure.providerNotes.join(', ')}</div>
+                      </>
+                    )}
+                    {result.patient?.email && (
+                      <>
+                        <div className="k">Email</div>
+                        <div>{result.patient.email}</div>
+                      </>
+                    )}
+                    {result.patient?.emergencyContact && (
+                      <>
+                        <div className="k">Emergency Contact</div>
+                        <div style={{ fontSize: '0.7em' }}>{result.patient.emergencyContact.raw}{result.patient.emergencyContact.relationship ? ` (${result.patient.emergencyContact.relationship})` : ''}{result.patient.emergencyContact.phone ? ` • ${result.patient.emergencyContact.phone}` : ''}</div>
+                      </>
+                    )}
                     {result?.documentMeta?.suggestedFilename && (
                       <>
                         <div className="k">Suggested filename</div>
@@ -243,7 +311,29 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {(result?.flags?.verifyManually || (result?.alerts?.actions||[]).length || result?.qc) && (
+        {(result.provider?.name || result.provider?.npi || result.provider?.fax || result.provider?.phone) && (
+                  <div className="card">
+                    <div className="row"><div className="badge">Provider</div><div className="meta">Referring details</div></div>
+                    <div className="kv" style={{ marginTop: 8 }}>
+                      {result.provider?.name && (<><div className="k">Name</div><div>{result.provider.name}</div></>)}
+                      {result.provider?.npi && (<><div className="k">NPI</div><div>{result.provider.npi}</div></>)}
+          {result.provider?.phone && (<><div className="k">Phone</div><div>{result.provider.phone}</div></>)}
+                      {result.provider?.fax && (<><div className="k">Fax</div><div>{result.provider.fax}</div></>)}
+                    </div>
+                  </div>
+                )}
+                {(result.infoAlerts && (result.infoAlerts.ppeRequired !== null || (result.infoAlerts.safety||[]).length || (result.infoAlerts.communication||[]).length || (result.infoAlerts.accommodations||[]).length)) && (
+                  <div className="card">
+                    <div className="row"><div className="badge">Alerts</div><div className="meta">Info alerts</div></div>
+                    <div className="kv" style={{ marginTop: 8 }}>
+                      {result.infoAlerts.ppeRequired !== null && (<><div className="k">PPE</div><div>{result.infoAlerts.ppeRequired ? 'Required' : 'No'}</div></>)}
+                      {(result.infoAlerts.safety||[]).length > 0 && (<><div className="k">Safety</div><div>{result.infoAlerts.safety.join(', ')}</div></>)}
+                      {(result.infoAlerts.communication||[]).length > 0 && (<><div className="k">Communication</div><div>{result.infoAlerts.communication.join(', ')}</div></>)}
+                      {(result.infoAlerts.accommodations||[]).length > 0 && (<><div className="k">Accommodations</div><div>{result.infoAlerts.accommodations.join(', ')}</div></>)}
+                    </div>
+                  </div>
+                )}
+                {(result?.flags?.verifyManually || (result?.alerts?.actions||[]).length || result?.qc || (result?.documentMeta?.authorizationNotes||[]).length) && (
                   <div className="card">
                     <div className="row"><div className="badge">Quality</div><div className="meta">Flags, reasons, and checks</div></div>
                     <div className="kv" style={{ marginTop: 8 }}>
@@ -269,7 +359,25 @@ export default function App() {
                           <div>{result.alerts.actions.join(', ')}</div>
                         </>
                       )}
+                      {Array.isArray(result?.documentMeta?.authorizationNotes) && result.documentMeta.authorizationNotes.length > 0 && (
+                        <>
+                          <div className="k">Auth Notes</div>
+                          <div style={{ fontSize: '0.75em', lineHeight: 1.3 }}>{result.documentMeta.authorizationNotes.map((n,i)=>(<div key={i}>• {n}</div>))}</div>
+                        </>
+                      )}
+                      {Array.isArray(result?.procedure?.cptCandidates) && result.procedure.cptCandidates.length > 1 && (
+                        <>
+                          <div className="k">CPT Ambiguity</div>
+                          <div>{result.procedure.cptCandidates.join(', ')}</div>
+                        </>
+                      )}
                     </div>
+                  </div>
+                )}
+                {(Array.isArray(result?.patient?.altPhones) && result.patient.altPhones.length > 0) && (
+                  <div className="card">
+                    <div className="row"><div className="badge">More Phones</div><div className="meta">Alternate contact numbers</div></div>
+                    <div style={{ fontSize: '0.75em', marginTop: 8 }}>{result.patient.altPhones.join(' • ')}</div>
                   </div>
                 )}
                 <div className="card">
