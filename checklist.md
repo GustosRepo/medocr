@@ -1,6 +1,6 @@
 # Project Checklist & Roadmap
 
-Last Updated: 2025-09-30
+Last Updated: 2025-09-30 (later update)
 Owner: (update when you take an item)
 
 Legend: 
@@ -36,6 +36,12 @@ Legend:
 - [x] Data Quality section added to patient PDF (confidence, QC, CPT ambiguity)
 - [x] Test coverage for authorizationNotes (PDF metadata assertion)
 - [x] Refined secondary insurance detection (scoring + distance heuristic)
+- [x] Provider contact classification (phone vs fax) & extraction
+- [x] Frontend: provider phone, authorization notes, CPT ambiguity & altPhones rendering
+- [x] Structured schema validation test (Ajv) added
+- [x] DME edge tests (presence & absence)
+- [x] Secondary insurance negative test (no false second) 
+- [x] Test suite expanded to 25 passing tests
 
 ---
 ## 2. In Progress / Monitoring
@@ -45,14 +51,14 @@ Legend:
 
 ---
 ## 3. Immediate Next (Sprint Candidate)
-1. [ ] Provider phone vs fax vs office line classification refinement
-2. [ ] Emergency contact extraction enhancement (relationship + phone validation)
-3. [ ] Expand symptom phrase library + source tagging
-4. [ ] Structured schema validation (JSON Schema) per extraction result + contract test
-5. [ ] Add altPhones rendering (optional / collapsible) to frontend
-6. [ ] Unit tests for DME detection edge cases
-7. [ ] Secondary insurance precision evaluation test (false-positive harness)
-8. [ ] CPT ambiguity UX improvements (surface reasons & confidence hints)
+1. [ ] Emergency contact extraction enhancement (relationship + phone validation)
+2. [ ] Expand symptom phrase library + source tagging
+3. [ ] Secondary insurance precision evaluation test harness (quantify FP rate)
+4. [ ] CPT ambiguity UX improvements (surface reasons & confidence hints)
+5. [ ] Confidence scoring recalibration experiment (post new fields) (QA)
+6. [ ] Authorization notes enrichment (carrier policy mapping) (Spec)
+7. [ ] Snapshot JSON contract test (freeze representative extraction payloads)
+8. [ ] Optional: collapse/expand UI for long authorization notes
 
 ---
 ## 4. Short-Term Backlog
@@ -134,7 +140,7 @@ Legend:
 ## 13. Quick Status Snapshot (Today)
 Core extraction: Stable
 PDF: Stable (markers implemented)
-Tests: 19 passing
+Tests: 25 passing
 Biggest near-term risk: Secondary insurance precision
 
 ---
