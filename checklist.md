@@ -53,7 +53,7 @@ Legend:
 ## 3. Immediate Next (Sprint Candidate)
 1. [ ] Emergency contact extraction enhancement (relationship + phone validation)
 2. [ ] Expand symptom phrase library + source tagging
-3. [ ] Secondary insurance precision evaluation test harness (quantify FP rate)
+3. [~] Secondary insurance precision evaluation test harness (baseline negative test added; add multi-sample metrics)
 4. [ ] CPT ambiguity UX improvements (surface reasons & confidence hints)
 5. [ ] Authorization notes enrichment (carrier policy mapping) (Spec)
 6. [ ] Snapshot JSON contract test (freeze representative extraction payloads)
