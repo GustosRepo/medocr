@@ -150,6 +150,14 @@ export function runExtraction(ocrPages) {
       result.flags.reasons.push('do_not_accept_or_pending_contract');
       if (car.value.status === 'not_accepted') result.alerts.actions.push('insurance_not_accepted');
     }
+    // Post-clean: avoid concatenated member/group (e.g., 'SNAMEGroup') due to OCR fusion
+    if (insObj.memberId && /group/i.test(insObj.memberId)) {
+      const split = insObj.memberId.split(/group/i);
+      if (split[0] && split[0].length >= 3) {
+        const possibleMember = split[0].replace(/[^A-Z0-9]/gi,'');
+        insObj.memberId = possibleMember;
+      }
+    }
   }
 
   // Secondary insurance naive detection: look for a second labeled line
@@ -332,6 +340,8 @@ export function runExtraction(ocrPages) {
           result.provider.name = `${result.provider.name}, ${cred}`;
           trace.push({ rule: 'provider_credential_append', value: cred });
         }
+  // Fix common OCR artifact 'NPl' or 'NP1' at end of name
+  result.provider.name = result.provider.name.replace(/NP[l1]\b/, 'NP');
       }
     }
     const npiMatch = (fullText || '').match(/\b(\d{10})\b/);
@@ -564,6 +574,22 @@ export function runExtraction(ocrPages) {
     if (notes.length) {
       result.documentMeta = { ...(result.documentMeta||{}), authorizationNotes: notes };
       trace.push({ rule: 'auth_notes_derive', count: notes.length });
+    }
+  }
+
+  // Post-processing pruning: if titration evidence present and cardiovascular comorbidity, suppress wrong_test_ordered flags
+  {
+    const hasTitrationEvidence = Array.isArray(result.procedure?.providerNotes) && result.procedure.providerNotes.includes('titration');
+    const hasCardioDx = (result.diagnoses || []).some(code => /^I\d+/.test(code));
+    if (hasTitrationEvidence && hasCardioDx) {
+      const beforeReasons = result.flags.reasons.length;
+      result.flags.reasons = result.flags.reasons.filter(r => r !== 'wrong_test_ordered_possible');
+      if (beforeReasons !== result.flags.reasons.length) trace.push({ rule: 'prune_wrong_test_for_titration_cardio' });
+      if (Array.isArray(result.alerts.actions)) {
+        const beforeActions = result.alerts.actions.length;
+        result.alerts.actions = result.alerts.actions.filter(a => a !== 'wrong_test_ordered');
+        if (beforeActions !== result.alerts.actions.length) trace.push({ rule: 'prune_wrong_test_action' });
+      }
     }
   }
 
