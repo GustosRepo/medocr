@@ -3,7 +3,11 @@ import { detectName, detectDob, detectPhones } from './patient.js';
 import { detectCpt } from './cpt.js';
 import { detectICDs } from './icd.js';
 import { detectCarrier } from './carriers.js';
+import { detectDates } from './date.js';
 import { detectDME } from './dme.js';
+import { PATTERNS } from './patterns.js';
+import fs from 'fs';
+import path from 'path';
 
 export function runExtraction(ocrPages) {
   const { fullText, lines } = normalizePages(ocrPages);
@@ -33,43 +37,46 @@ export function runExtraction(ocrPages) {
       'athomesleepstudies@gmail.com'
     ]);
     const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-    const all = [...new Set(((fullText || '').match(emailRe) || []))];
-    if (all.length) {
+    const matches = [...new Set(((fullText || '').match(emailRe) || []))];
+    if (matches.length) {
+      // Normalize punctuation: strip trailing commas/periods/semicolons
+      const cleaned = matches.map(e => e.replace(/[.,;:]+$/,'')).filter(Boolean);
       let chosen = null;
-      for (const em of all) {
+      for (const emRaw of cleaned) {
+        const em = emRaw.trim();
         const lower = em.toLowerCase();
-        if (BUSINESS_EMAIL_BLOCK.has(lower)) { trace.push({ rule: 'patient_email_ignored_business', value: lower }); continue; }
-        // locate line context
-        let lineIdx = lines.findIndex(l => l.includes(em) || l.toLowerCase().includes(lower));
-        if (lineIdx < 0) lineIdx = 0;
-        const ctxLines = [lines[lineIdx-1]||'', lines[lineIdx]||'', lines[lineIdx+1]||''].join('\n').toLowerCase();
-        const hasLabel = /email|e-mail|contact/.test(ctxLines);
-        const hasPatientRef = /patient|pt\b/.test(ctxLines);
-        const nameTie = (result.patient?.last && ctxLines.includes(result.patient.last.toLowerCase())) || (result.patient?.first && ctxLines.includes(result.patient.first.toLowerCase()));
-        if (hasLabel || (hasPatientRef && nameTie)) { chosen = em; break; }
+        if (BUSINESS_EMAIL_BLOCK.has(lower)) continue;
+        if (/patient\s*email/i.test(fullText) && /patient/i.test(lower)) { chosen = em; break; }
+        if (!chosen && /(gmail|yahoo|outlook|icloud|proton|hotmail)/i.test(lower)) chosen = em;
+        if (!chosen) chosen = em; // fallback first non-blocked
       }
-      if (chosen) { result.patient.email = chosen; trace.push({ rule: 'patient_email_detect', value: chosen }); }
+      if (chosen) {
+        // De-dupe if appears multiple times with punctuation variants
+        result.patient.email = chosen.toLowerCase();
+        trace.push({ rule: 'patient_email_detect', value: chosen });
+      }
     }
   }
-  // Emergency contact if minor (<18) or caretaker keywords
-  if (result.patient?.dob) {
-    const year = parseInt(result.patient.dob.slice(-4), 10);
-    const age = (new Date()).getFullYear() - year;
-    const needsEC = age < 18 || /(caretaker|caregiver|guardian)/i.test(fullText || '');
-    if (needsEC) {
-      const ecLine = (fullText || '').split(/\n/).find(l => /emergency\s*contact/i.test(l));
-      if (ecLine) {
-        const namePart = ecLine.split(/:/)[1] || '';
-        const phone = (namePart.match(/(\(\d{3}\)\s*\d{3}-\d{4})/) || [])[1];
-        const relMatch = namePart.match(/\b(mother|father|parent|guardian|sister|brother|spouse|wife|husband|daughter|son|caregiver|friend)\b/i);
-        if (namePart.trim()) {
-          result.patient.emergencyContact = {
-            raw: namePart.trim().slice(0,120),
-            phone: phone || null,
-            relationship: relMatch ? relMatch[1] : null
-          };
-          trace.push({ rule: 'patient_emergency_contact_detect' });
-        }
+  
+
+  // Emergency contact (explicit line scan)
+  {
+    const relationshipTokens = /(mother|father|parent|spouse|wife|husband|partner|daughter|son|sister|brother|caregiver|guardian|aunt|uncle|friend|daughter|son)/i;
+    const linesArr = (fullText || '').split(/\n/);
+    const idx = linesArr.findIndex(l => /in\s*case\s*of\s*emergency|emergency\s*contact|contact\s*.*emergency/i.test(l));
+    if (idx >= 0) {
+      const windowLines = linesArr.slice(idx, idx + 3);
+      const joined = windowLines.join(' | ');
+      const nameMatch = joined.match(/([A-Z][a-zA-Z'\-]+\s+[A-Z][a-zA-Z'\-]+)/);
+      const phoneMatch = joined.match(/(\(\d{3}\)\s*\d{3}-\d{4})/);
+      const relMatch = joined.match(relationshipTokens);
+      if (nameMatch) {
+        result.patient.emergencyContact = {
+          raw: nameMatch[1].slice(0,120),
+          phone: phoneMatch ? phoneMatch[1] : null,
+          relationship: relMatch ? relMatch[1].toLowerCase() : null
+        };
+        trace.push({ rule: 'patient_emergency_contact_detect', inferred: !!relMatch });
       }
     }
   }
@@ -86,8 +93,23 @@ export function runExtraction(ocrPages) {
       '95783': 'Pediatric PAP titration',
       '95805': 'MSLT / MWT daytime sleep testing'
     };
-    result.procedure = { ...result.procedure, cpt: cpt.primary, cptPrimary: cpt.primary, cptCandidates: cpt.candidates, cptDetails: cpt.details, description: CPT_DESCRIPTIONS[cpt.primary] };
-    trace.push({ rule: cpt.why, primary: cpt.primary, candidates: cpt.candidates, details: cpt.details });
+    // Derive confidence hint for CPT selection
+    let cptConfidence = 'high';
+    if (Array.isArray(cpt.ambiguity) && cpt.ambiguity.length) {
+      cptConfidence = cpt.ambiguity.length >= 2 ? 'low' : 'medium';
+    }
+    const ambiguityReasons = Array.isArray(cpt.ambiguity) ? cpt.ambiguity : [];
+    result.procedure = { 
+      ...result.procedure,
+      cpt: cpt.primary,
+      cptPrimary: cpt.primary,
+      cptCandidates: cpt.candidates,
+      cptDetails: cpt.details,
+      cptAmbiguity: ambiguityReasons,
+      cptConfidence,
+      description: CPT_DESCRIPTIONS[cpt.primary]
+    };
+    trace.push({ rule: cpt.why, primary: cpt.primary, candidates: cpt.candidates, ambiguity: ambiguityReasons, confidence: cptConfidence, details: cpt.details });
     if (Array.isArray(cpt.ambiguity) && cpt.ambiguity.length) {
       result.flags.verifyManually = true;
       result.flags.reasons.push(...cpt.ambiguity);
@@ -113,10 +135,12 @@ export function runExtraction(ocrPages) {
     result.diagnoses = values;
     // Build primaryDiagnosis with description if available
     const primaryCode = values[0];
+    if (!result.clinical) result.clinical = {};
     if (primaryCode && Array.isArray(icd.details)) {
       const det = icd.details.find(d => d.code === primaryCode);
       if (det) {
-        result.clinical.primaryDiagnosis = { code: det.code, description: det.description };
+        const { code, description, chronic = null, severity = null, note = null } = det;
+        result.clinical.primaryDiagnosis = { code, description, chronic, severity, note };
       }
       result.clinical.diagnosesDetailed = icd.details;
     }
@@ -158,15 +182,103 @@ export function runExtraction(ocrPages) {
         insObj.memberId = possibleMember;
       }
     }
+    // If fused pattern like ID: SNAMEGroup: NAME inside same line, attempt split
+    if (!insObj.groupId) {
+      const fuse = (fullText||'').match(/id:\s*([A-Z0-9]{3,})(group:|grp:?)([A-Z0-9]{2,})/i);
+      if (fuse) {
+        if (!insObj.memberId) insObj.memberId = fuse[1];
+        insObj.groupId = fuse[3];
+        trace.push({ rule: 'insurance_id_fused_split', member: insObj.memberId, group: insObj.groupId });
+      }
+    }
   }
 
-  // Secondary insurance naive detection: look for a second labeled line
+  // Pre-authorization heuristic rules (carrier + CPT combos)
+  try {
+    const preauthPath = path.resolve(process.cwd(), 'backend/rules/data/preauth_rules.json');
+    if (fs.existsSync(preauthPath) && result.procedure?.cpt && result.insurance.length) {
+      const rawRules = JSON.parse(fs.readFileSync(preauthPath, 'utf8'));
+      const primaryCarrier = (result.insurance[0].carrier || '').toLowerCase();
+      for (const rRule of rawRules) {
+        if ((rRule.carrier || '').toLowerCase() === primaryCarrier && String(rRule.cpt) === String(result.procedure.cpt)) {
+          // Add action & flag only once
+          const act = rRule.action || 'preauth_check';
+          if (!result.alerts.actions.includes(act)) result.alerts.actions.push(act);
+          if (!result.flags.reasons.includes('preauth_required_possible')) {
+            result.flags.verifyManually = true;
+            result.flags.reasons.push('preauth_required_possible');
+          }
+          // Stash note for later authorization notes enrichment
+          result.documentMeta = { ...(result.documentMeta||{}), preauthHints: [...(result.documentMeta.preauthHints||[]), rRule.note].slice(0,8) };
+          trace.push({ rule: 'preauth_rule_hit', carrier: rRule.carrier, cpt: rRule.cpt, action: act });
+        }
+      }
+    }
+  } catch (e) {
+    trace.push({ rule: 'preauth_rule_error', error: e.message });
+  }
+
+  // Policy-driven action inference heuristics
+  {
+    const actsBefore = new Set(result.alerts.actions);
+    const cptCode = String(result.procedure?.cpt || '');
+    const txtLower = (fullText || '').toLowerCase();
+    const dxSet = new Set((result.diagnoses || []).map(d => String(d)));
+    // If in-lab titration (95811) mentioned but no explicit prior diagnostic evidence phrases
+    if (cptCode === '95811' && !/95810|diagnostic\s+psg|prior\s+psg|baseline\s+study|hsat|home\s+sleep/i.test(fullText || '')) {
+      result.alerts.actions.push('document_prior_study_evidence');
+    }
+    // Prior study evidence enhancement: if explicit mention of prior PSG or HSAT failure, mark supporting evidence
+    if (/prior\s+(diagnostic\s+)?psg|baseline\s+study|failed\s+hsat|inconclusive\s+hsat/i.test(fullText || '')) {
+      if (!result.alerts.actions.includes('prior_study_evidence_present')) {
+        result.alerts.actions.push('prior_study_evidence_present');
+      }
+    }
+    // If diagnostic 95810 ordered but text contains strong HSAT language suggesting HSAT first
+    if (cptCode === '95810' && /uncomplicated|mild\s+osa|initial\s+evaluation/.test(txtLower) && !/failed\s+hsat|negative\s+hsat|hsat\s+inconclusive/.test(txtLower)) {
+      result.alerts.actions.push('evaluate_hsat_prerequisite');
+    }
+    // PCP referral requirement: if carrier hints (e.g., HMO language) or "PCP referral" words present and no prior_study_evidence
+    if (/pcp\s+referral|primary\s+care\s+referral|hmo\b/i.test(txtLower) && !result.alerts.actions.includes('obtain_pcp_referral')) {
+      result.alerts.actions.push('obtain_pcp_referral');
+    }
+    // Pediatric codes require protocol review
+    if (cptCode === '95782' || cptCode === '95783') {
+      result.alerts.actions.push('pediatric_protocol_review');
+    }
+    // If complex comorbidity (cardiopulmonary) with home study codes (95806/G0399) -> escalate review
+    if ((cptCode === '95806' || cptCode === 'G0399') && /(copd|congestive\s+heart|heart\s+failure|neuromuscular|opioid)/i.test(fullText || '')) {
+      result.alerts.actions.push('consider_inlab_over_hsat');
+    }
+    // If no sleep-related dx but sleep study code present (already flagged wrong_test_ordered_possible) add explicit action
+    const sleepStudySet = new Set(['95810','95811','95806','G0399']);
+    if (sleepStudySet.has(cptCode)) {
+      const hasSleepDx = ['G47.33','G47.30','G47.31','G47.37','R06.83','R06.09','R53.83','G25.81','F51.9'].some(d => dxSet.has(d));
+      if (!hasSleepDx && !result.alerts.actions.includes('review_indication')) {
+        result.alerts.actions.push('review_indication');
+      }
+    }
+    // Normalize unique actions
+    result.alerts.actions = Array.from(new Set(result.alerts.actions));
+    const added = result.alerts.actions.filter(a => !actsBefore.has(a));
+    if (added.length) {
+      result.flags.verifyManually = true;
+      if (!result.flags.reasons.includes('policy_action_inference')) result.flags.reasons.push('policy_action_inference');
+      trace.push({ rule: 'policy_action_infer', added });
+    }
+  }
+
+  // Secondary insurance detection (precision-focused)
   if (result.insurance.length === 1) {
     const linesArr = (fullText || '').split(/\n/);
     const carrierLineIndices = [];
-    for (let i=0;i<linesArr.length;i++) if (/(other\s+insurance|secondary\s+insurance|secondary\b|insurance|plan|payer)\s*[:\-]/i.test(linesArr[i])) carrierLineIndices.push(i);
+    for (let i=0;i<linesArr.length;i++) {
+      const line = linesArr[i];
+      if (/(other\s+insurance|secondary\s+insurance|\bsecondary\b.*insurance|payer\s*[:\-]|plan\s*[:\-]|^\s*insurance\s*[:\-])/i.test(line)) {
+        carrierLineIndices.push(i);
+      }
+    }
     if (carrierLineIndices.length > 1) {
-      // Evaluate candidates beyond the first; choose the best distinct carrier with minimal line distance overlap
       const primaryCarrier = result.insurance[0].carrier;
       let best = null;
       for (let idx = 1; idx < carrierLineIndices.length; idx++) {
@@ -176,16 +288,22 @@ export function runExtraction(ocrPages) {
         const block = blockLines.join('\n');
         const sec = detectCarrier(block, blockLines);
         if (sec.hit && sec.value.carrier !== primaryCarrier) {
-          // Correlate memberId pattern distinctness
-          const mid = block.match(/(?:member|subscriber|policy)\s*(?:id|#|number)?[:\s]*([A-Z0-9]{5,})/i);
+          const mid = block.match(/(?:member|subscriber|policy)\s*(?:id|#|number)?[:\s]*([A-Z0-9]{4,})/i);
           const gid = block.match(/group\s*(?:id|#|number)?[:\s]*([A-Z0-9]{3,})/i);
-          const memberId = mid ? mid[1] : null;
-          const groupId = gid ? gid[1] : null;
+            const memberId = mid ? mid[1] : null;
+            const groupId = gid ? gid[1] : null;
           const distance = start - carrierLineIndices[0];
-          const score = (memberId ? 1 : 0) + (groupId ? 0.5 : 0) + (distance > 2 ? 0.25 : 0) + (/(other|secondary)/i.test(linesArr[start]) ? 0.5 : 0);
-          if (!best || score > best.score) {
-            best = { sec, memberId, groupId, score };
-          }
+          const lineText = linesArr[start];
+          const hasExplicitSecondary = /(other\s+insurance|secondary\s+insurance|\bsecondary\b)/i.test(lineText);
+          const distinctCarrierToken = sec.value.carrier && sec.value.carrier.toLowerCase() !== (primaryCarrier||'').toLowerCase();
+          const strongStructure = !!(memberId && (groupId || /group/i.test(block)));
+          const score = (memberId ? 1 : 0) + (groupId ? 0.5 : 0) + (distance > 1 ? 0.25 : 0) + (hasExplicitSecondary ? 1.5 : 0);
+          const accept = (
+            (hasExplicitSecondary && distinctCarrierToken) ||
+            (distinctCarrierToken && memberId && result.insurance[0].memberId && distance > 0 && strongStructure)
+          );
+          if (!accept) continue;
+          if (!best || score > best.score) best = { sec, memberId, groupId, score };
         }
       }
       if (best) {
@@ -194,6 +312,27 @@ export function runExtraction(ocrPages) {
         if (best.groupId) secObj.groupId = best.groupId;
         result.insurance.push(secObj);
         trace.push({ rule: 'carrier_secondary_detect_refined', value: secObj.carrier, score: best.score });
+      } else {
+        const primaryCarrier2 = result.insurance[0].carrier;
+        for (let idx = 1; idx < carrierLineIndices.length; idx++) {
+          const start = carrierLineIndices[idx];
+          const line = linesArr[start];
+          if (!/^\s*insurance\s*[:\-]/i.test(line)) continue;
+          const blockLines = linesArr.slice(start, Math.min(linesArr.length, start + 4));
+          const block = blockLines.join('\n');
+          const sec = detectCarrier(block, blockLines);
+          if (!(sec.hit && sec.value.carrier && sec.value.carrier.toLowerCase() !== (primaryCarrier2||'').toLowerCase())) continue;
+          const mid = block.match(/(?:member|subscriber|policy)\s*(?:id|#|number)?[:\s]*([A-Z0-9]{4,})/i);
+          if (!mid) continue;
+          if (!/group\s*(?:id|#|number)?[:\-]/i.test(block) && !/plan\s*[:\-]/i.test(block)) continue;
+          const gid = block.match(/group\s*(?:id|#|number)?[:\s]*([A-Z0-9]{3,})/i);
+          const secObj = { carrier: sec.value.carrier, status: sec.value.status };
+          secObj.memberId = mid[1];
+          if (gid) secObj.groupId = gid[1];
+          result.insurance.push(secObj);
+          trace.push({ rule: 'carrier_secondary_detect_fallback_generic', value: secObj.carrier });
+          break;
+        }
       }
     }
   }
@@ -206,9 +345,66 @@ export function runExtraction(ocrPages) {
     result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_dme_required']));
   }
 
+  // CPAP compliance metrics extraction & inference
+  {
+    const text = fullText || '';
+    const metrics = {};
+    // Hours per night (avg usage)
+    const hrsMatch = text.match(/(avg\.?\s*)?(usage\s*)?(?:hours?|hrs)\s*(?:of\s*use\s*)?(?:per\s*night\s*)?(\d{1,2}(?:\.\d+)?)\s*(?:hrs?|hours?)/i) || text.match(/(\d{1,2}(?:\.\d+)?)\s*(?:hrs?|hours?)\s*(?:per|\/)?\s*night/i);
+    if (hrsMatch) metrics.avgHours = parseFloat(hrsMatch[3] || hrsMatch[1]);
+    // AHI value
+    const ahiMatch = text.match(/\bAHI\b[^0-9]{0,10}(\d{1,2}(?:\.\d+)?)/i);
+    if (ahiMatch) metrics.ahi = parseFloat(ahiMatch[1]);
+    // 90% pressure
+    const p90 = text.match(/90%\s*pressure[^0-9]{0,10}(\d{1,2}(?:\.\d+)?)/i);
+    if (p90) metrics.p90 = parseFloat(p90[1]);
+    // Usage percent (>=4 hr nights)
+    const usagePct = text.match(/(\d{2,3})%\s*(?:of\s*)?(?:nights|usage)/i);
+    if (usagePct) metrics.usagePercent = parseFloat(usagePct[1]);
+    // Pressure range or fixed setting (e.g., 5-15 cm, or 10 cm H2O)
+    const pressureRange = text.match(/(\d{1,2})\s*[-to]{1,3}\s*(\d{1,2})\s*cm/i);
+    if (pressureRange) {
+      metrics.pressureMin = parseInt(pressureRange[1]);
+      metrics.pressureMax = parseInt(pressureRange[2]);
+    } else {
+      const fixedPressure = text.match(/\b(\d{1,2})\s*cm\s*(?:h2o)?\b/i);
+      if (fixedPressure) metrics.pressureFixed = parseInt(fixedPressure[1]);
+    }
+    if (Object.keys(metrics).length) {
+      result.compliance = metrics;
+      trace.push({ rule: 'dme_compliance_metrics_detect', keys: Object.keys(metrics) });
+    }
+    // Inference: if CPAP mentioned but no metrics at all
+    const cpapMention = /(\bcpap\b|cpap\s*(?:user|uses|on)|apap|bipap)/i.test(text);
+    const metricsPresent = Object.keys(metrics).length > 0;
+    if (cpapMention && !metricsPresent) {
+      result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'obtain_cpap_compliance_data']));
+      if (!result.flags.reasons.includes('dme_compliance_data_missing')) result.flags.reasons.push('dme_compliance_data_missing');
+      trace.push({ rule: 'dme_compliance_infer', reason: 'cpap_reference_without_compliance' });
+    }
+  }
+  // DME linkage / prerequisite heuristics (after compliance metrics extraction so metrics are available)
+  if (dme?.hit) {
+    const cptCodeLocal = String(result.procedure?.cpt || '');
+    const isTitrationLike = cptCodeLocal === '95811' || cptCodeLocal === '95783';
+    const hasComplianceMetrics = !!result.compliance;
+    const referencedDmeIssues = Array.isArray(dme.value?.issues) && dme.value.issues.length > 0;
+  if (isTitrationLike && !hasComplianceMetrics && /cpap|pap|bipap|apap/i.test(fullText||'')) {
+      if (!result.alerts.actions.includes('obtain_cpap_compliance_data')) result.alerts.actions.push('obtain_cpap_compliance_data');
+      if (!result.alerts.actions.includes('verify_dme_prerequisites')) result.alerts.actions.push('verify_dme_prerequisites');
+      if (!result.flags.reasons.includes('dme_prerequisites_missing')) {
+        result.flags.verifyManually = true;
+        result.flags.reasons.push('dme_prerequisites_missing');
+      }
+      trace.push({ rule: 'dme_prereq_infer', cpt: cptCodeLocal, issues: referencedDmeIssues });
+    } else if (isTitrationLike && hasComplianceMetrics && referencedDmeIssues) {
+      trace.push({ rule: 'dme_prereq_present', metrics: Object.keys(result.compliance||{}).length });
+    }
+  }
+
   // If 95811 chosen but we don't see obvious titration criteria phrases, flag for review
   if (result.procedure?.cpt === '95811') {
-    const titrationCriteria = /(pressure\s*too\s*(high|low)|not\s*tolerating\s*(cpap|pressure)|failed\s*(cpap|pap|apap)|needs?\s*(pressure|settings)|still\s*tired\s*on\s*cpap|titration|pressures?\s*adjusted|urgent\/?stat\s+titration)/i;
+  const titrationCriteria = PATTERNS.TITRATION_CRITERIA;
     if (!titrationCriteria.test(fullText || '')) {
       result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_95811_required']));
       trace.push({ rule: 'cpt_95811_review_flag', reason: 'no_titration_criteria_found' });
@@ -331,27 +527,104 @@ export function runExtraction(ocrPages) {
     if (provLine) {
       const nameMatch = provLine.match(/(Dr\.?\s*)?([A-Z][a-zA-Z'\-]+\s+[A-Z][a-zA-Z'\-]+)/);
       if (nameMatch) {
-        result.provider.name = nameMatch[2];
-        trace.push({ rule: 'provider_name_detect', value: result.provider.name });
+        let provName = nameMatch[2];
+        // Cleanup common OCR artifact: NPl or NP1 -> NP (word boundary)
+        provName = provName.replace(/NP[l1]\b/g, 'NP');
+        trace.push({ rule: 'provider_name_detect', value: provName });
         // Credential normalization in same or nearby line
-        const credMatch = provLine.match(/\b(NP|PA-?C|MD|DO|FNP)\b/i);
-        if (credMatch) {
-          const cred = credMatch[1].toUpperCase().replace(/PA ?C/i,'PA-C');
-          result.provider.name = `${result.provider.name}, ${cred}`;
-          trace.push({ rule: 'provider_credential_append', value: cred });
+        // Credential normalization (expand set)
+        const credLine = provLine;
+        const credTokens = [];
+        const credPatterns = [
+          /\b(MD)\b/i,
+          /\b(DO)\b/i,
+          /\b(NP)\b/i,
+          /\b(FNP)\b/i,
+          /\b(PA\s?-?C)\b/i,
+          /\b(APRN)\b/i,
+          /\b(ANP)\b/i,
+          /\b(DC)\b/i,
+          /\b(RN)\b/i,
+          /\b(PhD)\b/i
+        ];
+        for (const pat of credPatterns) {
+          const m = credLine.match(pat);
+          if (m) {
+            let token = m[1].toUpperCase().replace(/PA\s?C/, 'PA-C');
+            if (!credTokens.includes(token)) credTokens.push(token);
+          }
         }
-  // Fix common OCR artifact 'NPl' or 'NP1' at end of name
-  result.provider.name = result.provider.name.replace(/NP[l1]\b/, 'NP');
+        if (credTokens.length) {
+          provName = `${provName}, ${credTokens.join('/')}`;
+          trace.push({ rule: 'provider_credential_append', value: credTokens.join('/') });
+        }
+        result.provider.name = provName;
       }
     }
     const npiMatch = (fullText || '').match(/\b(\d{10})\b/);
   if (npiMatch) { result.provider.npi = npiMatch[1]; trace.push({ rule: 'provider_npi_detect' }); }
     // Provider phones/fax
     const linesArr = (fullText || '').split(/\n/);
+    const providerPhones = new Set();
+    // First pass: explicit fax lines (preserve earliest)
     for (const L of linesArr) {
-      if (/fax/i.test(L) && /(\d[\d\-()\s]{8,}\d)/.test(L)) {
-        const digits = L.match(/(\d[\d\-()\s]{8,}\d)/)[1].replace(/\D/g,'');
-        if (digits.length === 10) result.provider.fax = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+      if (/fax/i.test(L)) {
+        const afterFax = L.match(/fax[^0-9]{0,15}((\(\d{3}\)\s*\d{3}-\d{4})|(\b\d{3}[-\. ]\d{3}[-\. ]\d{4}\b))/i);
+        if (afterFax) {
+          const rawFax = afterFax[1];
+          const digits = rawFax.replace(/\D/g,'');
+          if (digits.length === 10 && !result.provider.fax) {
+            result.provider.fax = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+            trace.push({ rule: 'provider_fax_detect', value: result.provider.fax, mode: 'line' });
+          }
+        }
+      }
+    }
+    const phonePattern = /(fax|fx|facsimile)?[^\n\r]{0,40}?((?:\(\d{3}\)\s*\d{3}-\d{4})|(?:\b\d{3}[-\. ]\d{3}[-\. ]\d{4}\b))/gi;
+    let m;
+    while ((m = phonePattern.exec(fullText || '')) !== null) {
+      const labelPart = m[1] || '';
+      const rawNum = m[2];
+      const digits = rawNum.replace(/\D/g,'');
+      if (digits.length !== 10) continue;
+      const formatted = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+      // Extract small context window to classify
+      const ctxStart = Math.max(0, m.index - 40);
+      const ctx = (fullText || '').slice(ctxStart, m.index + rawNum.length + 40).toLowerCase();
+  const beforeLabel = (fullText || '').slice(Math.max(0, m.index - 15), m.index).toLowerCase();
+  const isFax = /(fax|fx|facsimile)/i.test(labelPart) || (/\bfax\b|\bfx\b|facsimile/.test(beforeLabel) && !/no\s*fax/.test(beforeLabel));
+  const isTel = /tel|telephone|phone|ph\b/.test(beforeLabel + ctx) && !isFax;
+      if (isFax) {
+        if (!result.provider.fax) {
+          result.provider.fax = formatted;
+          trace.push({ rule: 'provider_fax_detect', value: formatted, mode: 'scan' });
+        }
+      } else if (isTel) {
+        providerPhones.add(formatted);
+      } else if (/provider|office|clinic|suite|ste\b/.test(ctx)) {
+        providerPhones.add(formatted);
+      }
+    }
+    if (providerPhones.size && !result.provider.phone) {
+      // Filter out numbers that also appear near patient contact labels
+      const textLower = (fullText || '').toLowerCase();
+      const patientLabelRe = /(contact\s+phone|patient\s+phone|patient\s+contact)/i;
+      const orderedAll = Array.from(providerPhones).filter(p => p !== result.provider.fax).sort();
+      let chosen = null;
+      for (const cand of orderedAll) {
+        const esc = cand.replace(/[-()\s]/g,'');
+        const idx = textLower.indexOf(esc.slice(0,6));
+        if (idx >= 0) {
+          // Extract surrounding window
+          const window = textLower.slice(Math.max(0, idx-40), idx+40);
+          if (patientLabelRe.test(window)) continue; // skip patient-labeled numbers
+        }
+        chosen = cand; break;
+      }
+      if (!chosen && orderedAll.length) chosen = orderedAll[0];
+      if (chosen) {
+        result.provider.phone = chosen;
+        trace.push({ rule: 'provider_phone_detect', value: chosen, candidates: orderedAll.length });
       }
     }
     // Post-filter patient phones: remove provider fax if present
@@ -361,6 +634,12 @@ export function runExtraction(ocrPages) {
       if (result.patient.phones.length !== before) {
         trace.push({ rule: 'patient_phone_remove_fax_match', removed: result.provider.fax });
       }
+    }
+    // Remove provider phone from patient list if it leaked there (avoid duplication/misclassification)
+    if (result.provider.phone && Array.isArray(result.patient.phones)) {
+      const before2 = result.patient.phones.length;
+      result.patient.phones = result.patient.phones.filter(p => p !== result.provider.phone);
+      if (result.patient.phones.length !== before2) trace.push({ rule: 'patient_phone_remove_provider_match', removed: result.provider.phone });
     }
       // Classify altPhones if more than 1 remains
       if (Array.isArray(result.patient.phones) && result.patient.phones.length > 1) {
@@ -386,19 +665,31 @@ export function runExtraction(ocrPages) {
 
   // Symptoms list
   {
-    const symptoms = [];
-    const SYM_MAP = [
-      ['snoring', /snor(?:e|ing)/i],
-      ['daytime_sleepiness', /(excessive\s+daytime\s+sleepiness|hypersomnia)/i],
-      ['fatigue', /fatigue|tired/i],
-      ['witnessed_apnea', /witnessed\s+(apnea|apneic)/i],
-      ['choking_gasping', /gasping|choking/i],
-      ['insomnia', /insomnia|difficulty\s+(falling|staying)\s+asleep/i],
-      ['restless_legs', /restless\s+legs|rls/i],
-      ['headache', /headache/i]
-    ];
-    for (const [label,re] of SYM_MAP) if (re.test(fullText || '')) symptoms.push(label);
-    if (symptoms.length) { result.clinical.symptoms = symptoms; trace.push({ rule: 'symptoms_detect', count: symptoms.length }); }
+    const linesLocal = (fullText || '').split(/\n/);
+    const confirmed = [];
+    const details = [];
+  // Centralized symptom configuration
+  const SYM_CONFIG = PATTERNS.SYMPTOM_CONFIG;
+    for (let i=0;i<linesLocal.length;i++) {
+      const line = linesLocal[i];
+      for (const [label,pos,neg] of SYM_CONFIG) {
+        if (pos.test(line)) {
+          const negHit = neg ? neg.test(line) : false;
+          if (!negHit && !confirmed.includes(label)) confirmed.push(label);
+          details.push({ name: label, status: negHit ? 'denied' : 'confirmed', context: line.trim().slice(0,180) });
+        } else if (neg && neg.test(line)) {
+          // Negative mention without positive form
+          details.push({ name: label, status: 'denied', context: line.trim().slice(0,180) });
+        }
+      }
+    }
+    if (confirmed.length) {
+      result.clinical.symptoms = confirmed; // maintain existing contract
+    }
+    if (details.length) {
+      result.clinical.symptomDetails = details.slice(0,60); // cap to avoid bloat
+      trace.push({ rule: 'symptoms_detect', confirmed: confirmed.length, totalMentions: details.length });
+    }
   }
 
   // Vitals (BMI, height, weight, BP) with BP validation to avoid date-like artifacts
@@ -535,45 +826,98 @@ export function runExtraction(ocrPages) {
     trace.push({ rule: 'flag_ocr_low_text_volume', len: (fullText || '').length });
   }
 
-  // Base confidence from extracted anchors
-  let score = 0; if (result.patient?.dob) score++; if (result.patient?.first && result.patient?.last) score++; if (result.procedure?.cpt) score++; if ((result.diagnoses || []).length) score++;
-  let baseConf = score >= 3 ? 'High' : score === 2 ? 'Medium' : 'Low';
+  // Base confidence from extracted anchors (expanded set) with weighted scoring
+  const anchors = {
+    patientName: !!(result.patient?.first && result.patient?.last),
+    dob: !!result.patient?.dob,
+    cpt: !!result.procedure?.cpt,
+    diagnosis: !!(result.diagnoses && result.diagnoses.length),
+    insuranceCarrier: !!(Array.isArray(result.insurance) && result.insurance[0]?.carrier),
+    insuranceIds: !!(Array.isArray(result.insurance) && (result.insurance[0]?.memberId || result.insurance[0]?.groupId)),
+    complianceMetrics: !!result.compliance, // optional signal
+  };
+  const WEIGHTS = { patientName:1, dob:1, cpt:1, diagnosis:1, insuranceCarrier:0.75, insuranceIds:0.5, complianceMetrics:0.5 };
+  let score = 0; for (const k of Object.keys(anchors)) if (anchors[k]) score += WEIGHTS[k];
+  // Thresholds chosen heuristically; will be refined with calibration harness later
+  let baseConf = score >= 4 ? 'High' : score >= 2.5 ? 'Medium' : 'Low';
 
-  // Adjust confidence by OCR quality
-  if (avgConf && avgConf < 0.8) baseConf = baseConf === 'High' ? 'Medium' : 'Low';
+  const adjustments = [];
+  // Adjust confidence by OCR quality (downgrade one tier if poor)
+  if (avgConf && avgConf < 0.8) { adjustments.push({ type: 'ocr_quality_downgrade', avgConf }); baseConf = baseConf === 'High' ? 'Medium' : 'Low'; }
 
   // Escalate to Manual Review when multiple uncertainties or critical missing info
   const criticalReasons = new Set(['ocr_low_confidence_critical', 'ocr_incomplete_pages', 'ocr_low_text_volume']);
   const manualTriggers = result.flags.reasons.filter(r => criticalReasons.has(r) || r.startsWith('mixed_signals_'));
   if (manualTriggers.length >= 2 || (lowCrit && score < 2)) {
     result.confidence = 'Manual Review';
+    adjustments.push({ type: 'manual_review_escalation', triggers: manualTriggers });
   } else {
-    // If any uncertainty, cap at Low
-    if (result.flags.verifyManually && baseConf === 'High') baseConf = 'Medium';
+    if (result.flags.verifyManually && baseConf === 'High') { adjustments.push({ type: 'verify_manual_cap' }); baseConf = 'Medium'; }
     result.confidence = baseConf;
   }
+  // Emit transparency object
+  result.confidenceDetail = {
+    anchors, score: Number(score.toFixed(2)), base: baseConf, avgOcrConf: Number(avgConf.toFixed(3)),
+    manualTriggers, adjustments
+  };
 
-  // Authorization notes (derive simple narrative from actions & insurance status)
+  // Authorization notes (enriched narrative + structured rationale)
   {
-    const notes = [];
+  const notes = [];
+  const structured = [];
+  const CATEGORY_MAP = {
+    wrong_test_ordered: 'policy',
+    review_95811_required: 'policy',
+    missing_chart_notes: 'documentation',
+    insurance_issue: 'carrier',
+    plan_not_accepted: 'carrier',
+    contract_sunset: 'carrier',
+    carrier_medicare: 'carrier_policy',
+    carrier_aetna: 'carrier_policy',
+    carrier_anthem_bcbs: 'carrier_policy',
+    carrier_uhc: 'carrier_policy',
+    carrier_cigna: 'carrier_policy',
+    carrier_tricare: 'carrier_policy',
+    cpt_95811_without_prior_hsat: 'policy',
+    positive_cardio_support: 'clinical_support'
+  };
     const acts = new Set(result.alerts?.actions || []);
     const primaryIns = Array.isArray(result.insurance) ? result.insurance[0] : null;
     const carrier = primaryIns?.carrier || '';
-    if (acts.has('wrong_test_ordered')) notes.push('Review clinical indication vs ordered test.');
-    if (acts.has('review_95811_required')) notes.push('Verify titration criteria for 95811.');
-    if (acts.has('missing_chart_notes')) notes.push('Obtain chart or progress notes.');
-    if (acts.has('insurance_issue')) notes.push('Verify active insurance coverage / benefits.');
-    if (primaryIns && primaryIns.status === 'not_accepted') notes.push('Plan not accepted: confirm self-pay or alternate insurance.');
-    if (primaryIns?.sunsetDays != null && primaryIns.sunsetDays <= 30 && primaryIns.sunsetDays >= 0) notes.push('Contract nearing end; confirm authorization path.');
+  function add(note, tag, cond, source='heuristic', confidence='medium') {
+      if (!cond) return;
+      if (!notes.includes(note)) {
+    notes.push(note);
+    const category = CATEGORY_MAP[tag] || source;
+    structured.push({ note, tag, source, confidence, category });
+      }
+    }
+  add('Review clinical indication vs ordered test.', 'wrong_test_ordered', acts.has('wrong_test_ordered'), 'policy');
+  add('Verify titration criteria for 95811.', 'review_95811_required', acts.has('review_95811_required'), 'policy');
+  add('Obtain chart or progress notes.', 'missing_chart_notes', acts.has('missing_chart_notes'), 'requirement');
+  add('Verify active insurance coverage / benefits.', 'insurance_issue', acts.has('insurance_issue'), 'carrier');
+  add('Plan not accepted: confirm self-pay or alternate insurance.', 'plan_not_accepted', primaryIns && primaryIns.status === 'not_accepted', 'carrier', 'high');
+  add('Contract nearing end; confirm authorization path.', 'contract_sunset', (primaryIns?.sunsetDays != null && primaryIns.sunsetDays <= 30 && primaryIns.sunsetDays >= 0), 'carrier', 'high');
   // Simple carrier-specific heuristics (extendable)
   const cL = carrier.toLowerCase();
-  if (cL.includes('medicare')) notes.push('Medicare: Typically no prior auth for diagnostic PSG (95810); confirm local coverage if atypical.');
-  if (cL.includes('aetna')) notes.push('Aetna: Check policy for HSAT vs PSG criteria; document failed HSAT if escalating to in-lab.');
-  if (cL.includes('anthem') || cL.includes('blue')) notes.push('Anthem/BCBS: Prior auth may be required for in-lab studies when HSAT criteria not met.');
-  if (cL.includes('uhc') || cL.includes('united')) notes.push('UHC: Ensure comorbidities supporting in-lab documented (cardiopulmonary, neuromuscular, hypoventilation).');
+  add('Medicare: Typically no prior auth for diagnostic PSG (95810); confirm local coverage if atypical.', 'carrier_medicare', cL.includes('medicare'), 'carrier');
+  add('Aetna: Check policy for HSAT vs PSG criteria; document failed HSAT if escalating to in-lab.', 'carrier_aetna', cL.includes('aetna'), 'carrier');
+  add('Anthem/BCBS: Prior auth may be required for in-lab studies when HSAT criteria not met.', 'carrier_anthem_bcbs', (cL.includes('anthem') || cL.includes('blue')), 'carrier');
+  add('UHC: Ensure comorbidities supporting in-lab documented (cardiopulmonary, neuromuscular, hypoventilation).', 'carrier_uhc', (cL.includes('uhc') || cL.includes('united')), 'carrier');
+  add('Cigna: Verify HSAT prerequisite documentation or failed trial before in-lab PSG.', 'carrier_cigna', cL.includes('cigna'), 'carrier');
+  add('Tricare: Confirm referral authorization requirements and PCM involvement.', 'carrier_tricare', cL.includes('tricare'), 'carrier');
+  // CPT-specific nuance
+  add('Ensure documentation of failed HSAT if moving to in-lab titration.', 'cpt_95811_without_prior_hsat', (result.procedure?.cpt === '95811' && !acts.has('review_95811_required')), 'policy');
+  // Positive justification: cardiovascular comorbidity supports in-lab titration when 95811 ordered and titration evidence present
+  const hasCardioDxForNote = (result.diagnoses || []).some(code => /^I1\d|^I2\d|^I3\d|^I4\d|^I5\d/.test(code));
+  const hasTitrationEvidenceForNote = Array.isArray(result.procedure?.providerNotes) && result.procedure.providerNotes.some(n => /titration/i.test(n));
+  add('Cardiovascular comorbidity supports in-lab titration.', 'positive_cardio_support', (result.procedure?.cpt === '95811' && hasCardioDxForNote && hasTitrationEvidenceForNote), 'clinical', 'high');
+  // Preauth rule-derived hints
+  const preHints = Array.isArray(result.documentMeta?.preauthHints) ? result.documentMeta.preauthHints : [];
+  for (const h of preHints) add(h, 'preauth_rule', true);
     if (notes.length) {
-      result.documentMeta = { ...(result.documentMeta||{}), authorizationNotes: notes };
-      trace.push({ rule: 'auth_notes_derive', count: notes.length });
+      result.documentMeta = { ...(result.documentMeta||{}), authorizationNotes: notes, authorizationNotesStructured: structured };
+      trace.push({ rule: 'auth_notes_derive', count: notes.length, structured: structured.length });
     }
   }
 
@@ -592,6 +936,132 @@ export function runExtraction(ocrPages) {
       }
     }
   }
+  // Ambiguity pruning: if home codes only mentioned and primary is non-home, drop home/inlab conflict
+  if (Array.isArray(result.procedure?.cptDetails)) {
+    const primaryC = String(result.procedure.cpt||'');
+    const homeSet = new Set(['95806','G0399']);
+    const anyHomePrimary = homeSet.has(primaryC);
+    if (!anyHomePrimary) {
+      const homeDetails = result.procedure.cptDetails.filter(d=>homeSet.has(d.code));
+      const allMentioned = homeDetails.length && homeDetails.every(d=>d.intent==='mentioned');
+      if (allMentioned) {
+        if (Array.isArray(result.procedure.cptAmbiguity)) {
+          const before = result.procedure.cptAmbiguity.length;
+            result.procedure.cptAmbiguity = result.procedure.cptAmbiguity.filter(a=>a!=='cpt_home_and_inlab_conflict');
+          if (before !== result.procedure.cptAmbiguity.length) trace.push({ rule: 'prune_home_inlab_conflict_weak' });
+        }
+      }
+    }
+  }
 
+  // Pediatric age guard: demote pediatric CPT if patient age > 18 unless word 'pediatric' present near code
+  {
+    try {
+      if (result.patient?.dob && result.procedure?.cpt && (result.procedure.cpt === '95782' || result.procedure.cpt === '95783')) {
+        const dobParts = result.patient.dob.split('/');
+        if (dobParts.length === 3) {
+          const yr = parseInt(dobParts[2],10);
+          if (!isNaN(yr)) {
+            const age = (new Date()).getFullYear() - yr;
+            if (age > 18 && !/pediatric|child|under\s*6/i.test(fullText||'')) {
+              // Find next best non-pediatric primary (prefer 95810 then 95811 else first candidate)
+              const altOrder = ['95810','95811'];
+              const candidates = Array.isArray(result.procedure.cptCandidates) ? result.procedure.cptCandidates : [];
+              let newPrimary = altOrder.find(c=>candidates.includes(c));
+              if (!newPrimary && candidates.length) newPrimary = candidates.find(c=>c!=='95782'&&c!=='95783');
+              if (newPrimary && newPrimary !== result.procedure.cpt) {
+                const was = result.procedure.cpt;
+                result.procedure.cpt = newPrimary;
+                result.procedure.cptPrimary = newPrimary;
+                trace.push({ rule: 'pediatric_age_guard_demote', from: was, to: newPrimary, age });
+                // Reinsert pediatric code in candidates order after primary
+                result.procedure.cptCandidates = [newPrimary, ...candidates.filter(c=>c!==newPrimary)];
+                if (Array.isArray(result.procedure.cptAmbiguity) && !result.procedure.cptAmbiguity.includes('pediatric_age_guard')) {
+                  result.procedure.cptAmbiguity.push('pediatric_age_guard');
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Inline risk scoring (triage) – aggregate heuristic flags into a numeric score & tier
+  {
+    const factors = new Set();
+    const add = (cond, key) => { if (cond) factors.add(key); };
+    const reasonsSet = new Set(result.flags.reasons || []);
+    const actionsSet = new Set(result.alerts.actions || []);
+    add(reasonsSet.has('wrong_test_ordered_possible'), 'wrong_test');
+    add(reasonsSet.has('preauth_required_possible'), 'preauth');
+    add(reasonsSet.has('ocr_low_confidence_critical'), 'ocr_low_critical');
+    add(reasonsSet.has('ocr_incomplete_pages'), 'ocr_incomplete');
+    add(reasonsSet.has('ocr_low_text_volume'), 'ocr_low_volume');
+    add(reasonsSet.has('missing_chart_notes'), 'missing_chart_notes');
+    add(reasonsSet.has('handwritten_notes_present'), 'handwritten');
+    add(reasonsSet.has('complex_medical_history'), 'complex_history');
+    add(reasonsSet.has('special_considerations_pediatric'), 'pediatric');
+    add(reasonsSet.has('special_considerations_dme'), 'dme');
+    add(reasonsSet.has('special_considerations_mobility'), 'mobility');
+    for (const r of reasonsSet) if (r.startsWith('mixed_signals_')) factors.add(r);
+    add(actionsSet.has('insurance_not_accepted'), 'insurance_not_accepted');
+    add(actionsSet.has('review_indication'), 'review_indication');
+    add(actionsSet.has('document_prior_study_evidence'), 'missing_prior_study_doc');
+    add(actionsSet.has('evaluate_hsat_prerequisite'), 'hsat_prereq');
+  add(actionsSet.has('verify_dme_prerequisites'), 'dme_prereq');
+    // Chronic / severity influence from enriched primary diagnosis
+    if (result.clinical?.primaryDiagnosis) {
+      if (result.clinical.primaryDiagnosis.chronic === true) add(true, 'chronic_condition');
+      const sev = (result.clinical.primaryDiagnosis.severity || '').toLowerCase();
+      if (sev === 'severe') add(true, 'severity_severe');
+      else if (sev === 'moderate') add(true, 'severity_moderate');
+    }
+    // Score weights
+    let score = 0;
+    const weightMap = {
+      wrong_test: 3, preauth: 2, ocr_low_critical: 2, ocr_incomplete: 2, ocr_low_volume: 2,
+      missing_chart_notes: 2, handwritten: 1, complex_history: 2, pediatric: 1, dme: 1,
+      mobility: 1, insurance_not_accepted: 2, review_indication: 2, missing_prior_study_doc: 2,
+      hsat_prereq: 1,
+  dme_prereq: 2,
+      chronic_condition: 1, // mild additive risk due to longer coordination complexity
+      severity_moderate: 1,
+      severity_severe: 2
+    };
+    for (const f of factors) score += (weightMap[f] || 1);
+    // Tiering
+    let tier = 'low';
+    if (score >= 8) tier = 'high'; else if (score >= 4) tier = 'medium';
+    // Escalate to high if confidence already Manual Review
+    if (result.confidence === 'Manual Review' && score >= 4 && tier !== 'high') tier = 'high';
+    result.risk = { score, tier, factors: Array.from(factors).sort() };
+    trace.push({ rule: 'risk_score_compute', score, tier, factors: result.risk.factors.length });
+  }
+
+  return { result, trace };
+}
+
+// After extraction, enrich with normalized dates
+export function runExtractionWithDates(ocrPages) {
+  const { result, trace } = runExtraction(ocrPages);
+  try {
+    const fullText = (ocrPages || []).map(p => p.text || '').join('\n');
+    const dates = detectDates(fullText);
+    if (dates.length) {
+      // Promote likely order/referral date
+      const order = dates.find(d => d.type === 'order') || dates.find(d => d.type === 'referral');
+      const study = dates.find(d => d.type === 'study');
+      result.documentMeta = {
+        ...(result.documentMeta||{}),
+        dates,
+        orderDate: order?.value,
+        studyDate: study?.value
+      };
+      trace.push({ rule: 'dates_detect', count: dates.length, order: order?.value || null, study: study?.value || null });
+    }
+  } catch (e) {
+    trace.push({ rule: 'dates_detect_error', error: e.message });
+  }
   return { result, trace };
 }

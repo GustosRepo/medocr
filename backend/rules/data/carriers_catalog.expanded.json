@@ -1,0 +1,21 @@
+[
+  { "name": "Aetna", "status": "accepted", "patterns": ["\\bAETNA\\b"] },
+  { "name": "Aetna Medicare", "status": "accepted", "patterns": ["AETNA\\s+MEDICARE"] },
+  { "name": "Anthem BCBS", "status": "accepted", "patterns": ["\\bANTHEM\\b","\\bBLUE\\s*CROSS\\b","\\bBLUE\\s*SHIELD\\b","\\bBCBS\\b"] },
+  { "name": "Blue Cross/Blue Shield", "status": "accepted", "patterns": ["BLUE\\s+CROSS/BLUE\\s+SHIELD"] },
+  { "name": "United Healthcare", "status": "accepted", "patterns": ["UNITED\\s*HEALTH\\s*CARE","UNITEDHEALTHCARE","\\bUHC\\b"] },
+  { "name": "United Medicare Focus", "status": "accepted", "patterns": ["UNITED\\s+MEDICARE\\s+FOCUS"] },
+  { "name": "Cigna", "status": "accepted", "patterns": ["\\bCIGNA\\b"] },
+  { "name": "Humana", "status": "accepted", "patterns": ["\\bHUMANA\\b"] },
+  { "name": "Medicare", "status": "accepted", "patterns": ["\\bMEDICARE\\b"] },
+  { "name": "Medicaid", "status": "accepted", "patterns": ["\\bMEDICAID\\b"] },
+  { "name": "Tricare", "status": "accepted", "patterns": ["\\bTRI\\s*CARE\\b","\\bTRICARE\\b"] },
+  { "name": "Molina", "status": "unknown", "patterns": ["\\bMOLINA\\b"] },
+  { "name": "Prominence", "status": "unknown", "patterns": ["\\bPROMINENCE\\b"] },
+  { "name": "Culinary", "status": "not_accepted", "patterns": ["\\bCULINARY\\b"] },
+  { "name": "Silver Summit Health Plan", "status": "unknown", "patterns": ["SILVER\\s+SUMMIT"] },
+  { "name": "Sierra Health & Life", "status": "accepted", "patterns": ["SIERRA\\s+HEALTH\\s*&\\s*LIFE"] },
+  { "name": "Sierra Healthcare Options", "status": "accepted", "patterns": ["SIERRA\\s+HEALTHCARE\\s+OPTIONS"] },
+  { "name": "WellCare", "status": "not_accepted", "patterns": ["WELL\\s*CARE","WELLCARE"] },
+  { "name": "Select Health", "status": "not_accepted", "patterns": ["SELECT\\s*HEALTH"] }
+]

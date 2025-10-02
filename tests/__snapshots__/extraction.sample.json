@@ -1,0 +1,36 @@
+{
+  "patient": {
+    "last": "John",
+    "first": "Patient",
+    "dob": "01/02/1970"
+  },
+  "procedure": {
+    "cpt": "95810",
+    "cptConfidence": "high"
+  },
+  "insurance": [
+    {
+      "carrier": "Aetna",
+      "status": "accepted",
+      "memberId": "ABC123",
+      "groupId": "GRP1"
+    }
+  ],
+  "clinical": {
+    "primaryDiagnosis": {
+      "code": "G47.33",
+      "description": "Obstructive Sleep Apnea (Adult)"
+    }
+  },
+  "flags": {
+    "verifyManually": true,
+    "reasons": [
+      "missing_chart_notes"
+    ]
+  },
+  "alerts": {
+    "info": [],
+    "actions": ["missing_chart_notes"],
+    "review": []
+  }
+}

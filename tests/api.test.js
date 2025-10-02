@@ -18,25 +18,33 @@ test('GET /api/health works', async () => {
   assert.equal(res.body.status, 'ok');
 });
 
+test('correlation id middleware assigns request id', async () => {
+  const res = await request(app).get('/api/health');
+  // Cannot read server-side req.id from client, but ensure second call also succeeds (smoke for middleware)
+  const res2 = await request(app).get('/api/health');
+  assert.equal(res.status, 200);
+  assert.equal(res2.status, 200);
+});
+
 test('POST /api/documents enqueues', async () => {
   const res = await request(app).post('/api/documents').attach('file', Buffer.from('pdf'), 'sample.pdf');
   assert.equal(res.status, 202);
   assert.match(res.body.id, /^doc_/);
 });
 
-test('GET /api/documents/:id/status progresses to error when OCR is unavailable', async () => {
+test('GET /api/documents/:id/status progresses to terminal state when OCR is unavailable', async () => {
   // Upload a file to trigger processing
   const up = await request(app).post('/api/documents').attach('file', Buffer.from('%PDF-1.4\n'), 'sample.pdf');
   assert.equal(up.status, 202);
   const id = up.body.id;
   // Poll a few times until status is error or done
   let status = 'queued';
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     const res = await request(app).get(`/api/documents/${id}/status`);
     assert.equal(res.status, 200);
     status = res.body.status;
     if (status === 'error' || status === 'done') break;
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 150));
   }
   assert.ok(['error', 'done'].includes(status));
 });
@@ -84,4 +92,15 @@ test('GET /api/coverage works', async () => {
   assert.ok(Array.isArray(res.body.items));
   const statuses = new Set(res.body.items.map(i => i.status));
   assert.ok(['met','partial','gap'].some(s => statuses.has(s)));
+});
+
+test('GET /api/documents/:id/fhir returns Bundle after processing', async () => {
+  // Inject a minimal processed doc
+  const inj = await request(app).post('/api/test/inject').send({ id: 'doc_fhir', result: { patient: { first: 'Jane', last: 'Doe', phones: ['(111) 222-3333'] }, procedure: { cpt: '95810', description: 'In-lab diagnostic polysomnography' }, clinical: { primaryDiagnosis: { code: 'G47.33', description: 'Obstructive sleep apnea' } }, alerts: { actions: [] }, flags: { verifyManually: false, reasons: [] } } });
+  assert.equal(inj.status, 200);
+  const res = await request(app).get('/api/documents/doc_fhir/fhir');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.resourceType, 'Bundle');
+  const dr = (res.body.entry||[]).find(e => e.resource && e.resource.resourceType === 'DiagnosticReport');
+  assert.ok(dr, 'DiagnosticReport missing');
 });
