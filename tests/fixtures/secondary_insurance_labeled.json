@@ -1,0 +1,37 @@
+[
+  {
+    "id": "single_primary_only",
+    "expectCarriers": ["Aetna"],
+    "text": "Patient John Doe DOB 01/02/1970\nInsurance: Aetna Member ID: ABC123 Group: GRP1\nPlease attach insurance card. Insurance information required."
+  },
+  {
+    "id": "primary_plus_other",
+    "expectCarriers": ["Aetna", "Medicare"],
+    "text": "Insurance: Aetna Member ID: ABC123 Group: GRP1\nOther Insurance: Medicare Member ID: Z99999 Group: MGRP"
+  },
+  {
+    "id": "primary_plus_secondary_keyword",
+    "expectCarriers": ["United Healthcare", "Tricare"],
+    "text": "Insurance: United Healthcare Member ID: UHC123 Group: U1\nSecondary Insurance: Tricare Member ID: TRI555 Group: T1"
+  },
+  {
+    "id": "generic_plan_mention_not_secondary",
+    "expectCarriers": ["Aetna"],
+    "text": "Insurance: Aetna Member ID: ABC123 Group: GRP1\nPlan: Sleep Program coverage details provided here."
+  },
+  {
+    "id": "instructional_lines_only",
+    "expectCarriers": ["Anthem BCBS"],
+    "text": "Insurance: Blue Cross Member ID: BC1111 Group: BLUE1\nPlease provide insurance cards front/back. Insurance must be active at time of service."
+  },
+  {
+    "id": "ambiguous_insurance_word_repeat",
+    "expectCarriers": ["Cigna"],
+    "text": "Insurance: Cigna Member ID: CIG001 Group: CG1\nInsurance information: verify eligibility prior to study. Insurance policy may require auth."
+  },
+  {
+    "id": "two_carriers_no_explicit_marker_but_distinct_lines",
+    "expectCarriers": ["Aetna", "Cigna"],
+    "text": "Insurance: Aetna Member ID: A111 Group: G1\nInsurance: Cigna Member ID: C222 Group: G2"
+  }
+]

@@ -1,0 +1,3 @@
+{"id":"fb_1759378805871_0","ts":"2025-10-02T04:20:05.871Z","docId":"d1","path":"procedure.cpt","previousValue":"95810","newValue":"95811","accepted":true,"type":"cpt"}
+{"id":"fb_1759378805890_1","ts":"2025-10-02T04:20:05.890Z","docId":"d2","path":"procedure.cpt","previousValue":"95810","newValue":"95811","accepted":true,"type":"cpt"}
+{"id":"fb_1759378805893_2","ts":"2025-10-02T04:20:05.893Z","docId":"d3","path":"patient.dob","previousValue":"01/01/1970","newValue":"01/02/1970","accepted":false,"type":"demographic"}

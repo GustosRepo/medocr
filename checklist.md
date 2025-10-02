@@ -1,6 +1,47 @@
 # Project Checklist & Roadmap
 
-Last Updated: 2025-09-30 (evening update)
+Last Updated: 2025-10-01 (frontend theming + JSON viewer enhancements; tests: 66 passing)
+
+---
+## 0. MVP Critical Focus (Due 2025-10-03 Friday)
+Goal: Stable referral extraction + usable UI + basic analytics & export. Everything else defers.
+
+Must Have (ship-blocking)
+- [ ] Frontend error boundary + fallback screen (prevents blank app on crash)
+- [ ] API error taxonomy mapping applied to HTTP responses (consistent codes/messages)
+- [ ] Download JSON button (Raw JSON) for immediate data export
+- [ ] E2E sanity test: sample upload -> processed result (assert key fields present)
+- [ ] README deployment snippet (start backend + frontend + sample doc walk-through)
+
+Nice-to-Have (only if Musts done early)
+- [ ] Persist color scheme preference (quality polish)
+- [ ] Copy to clipboard shortcut for JSON
+- [ ] Basic auth stub (if external exposure planned)
+
+Deferred (Post-MVP) – leave in existing backlog
+- Full-screen JSON modal
+- Accessibility contrast/focus pass
+- Storybook expansion
+- Lazy route loading
+- Confidence weight audit
+- Secondary insurance labeled sample expansion
+
+MVP Success Criteria
+1. User can upload PDF, see status, view structured fields, download JSON.
+2. Errors show a friendly message; network/backend failures don’t white-screen.
+3. Metrics/analytics page loads with current stats (no runtime errors).
+4. All automated tests pass (>=66) plus new e2e test.
+5. Deployment instructions allow a fresh clone to run in <5 minutes.
+
+Key Risks & Mitigations
+| Risk | Mitigation |
+|------|------------|
+| Silent UI crash (React error) | Implement error boundary + logging |
+| Inconsistent API error shapes | Central mapping layer w/ tests |
+| Regression in extraction flow | Add e2e upload -> result test |
+| Confusion on setup | Harden README deploy steps |
+
+---
 Owner: (update when you take an item)
 
 Legend: 
@@ -42,58 +83,156 @@ Legend:
 - [x] DME edge tests (presence & absence)
 - [x] Secondary insurance negative test (no false second) 
 - [x] Test suite expanded to 25 passing tests
+- [x] Emergency contact extraction enhancement (relationship + phone + adult support)
+- [x] Test suite currently 21 passing (post-consolidation + emergency contact test)
+- [x] Symptom phrase expansion + denial handling + context tagging
+- [x] Secondary insurance precision evaluation harness (no FP/FN in curated sample)
+- [x] CPT ambiguity UX improvements (confidence tier + pruning of weak home-study mentions)
+- [x] Authorization notes enrichment (carrier policy mapping + structured tags)
+- [x] Snapshot JSON contract test (core extraction subset)
+- [x] Optional: collapse/expand UI for long authorization notes
+- [x] PDF smoke fingerprint test (layout guard)
+- [x] Centralized regex patterns module (patterns.js)
+- [x] Pre-authorization heuristic rules (carrier + CPT) with test
+- [x] Carrier catalog expansion (additional variants & Medicare/Tricare nuances)
+- [x] Policy-driven action inference heuristics + tests
+- [x] Provider fax vs phone refined classification + test
+- [x] Inline risk scoring (score, tier, factors) + test
+- [x] Basic rate limiting middleware (sliding window) + test harness
+- [x] ICD enrichment (chronic/severity/note metadata) integrated into extraction + test
+// --- New completions (Oct 1, 2025) ---
+- [x] Structured logging (levels + correlation IDs middleware) + tests
+- [x] Date normalization utility (detectDates) + labeled/unknown date tests
+- [x] CPAP compliance metrics extraction (hours, AHI, p90, usage %, pressure range) + test
+- [x] Policy inference enhancements (prior study evidence, PCP referral requirement) + tests
+- [x] Provider credential expansion (MD/DO/NP/FNP/PA-C/APRN/ANP/DC/RN/PhD) + aggregation test
+- [x] Risk scoring chronic/severity weighting integration (factors extended) + test
+- [x] Authorization notes structured enrichment (source & confidence fields)
+- [x] FHIR export scaffold (Bundle + DiagnosticReport endpoint) + test
+- [x] Secondary insurance regression fix (precision-preserving heuristic)
+- [x] Secondary insurance metrics harness (precision/recall/F1 curated sample = 1.0)
+- [x] Generic second 'Insurance:' line fallback detection (distinct carrier + memberId)
+- [x] Confidence scoring recalibration (weighted anchors + OCR adjustments)
+- [x] Confidence transparency object (`confidenceDetail` anchors/score/adjustments)
+- [x] FHIR export expansion (Patient identifiers, Coverage, Condition, ServiceRequest, Observations)
+- [x] Authorization notes category enrichment (policy/carrier/carrier_policy/documentation/clinical_support)
+- [x] Error taxonomy propagation (API error responses include category)
+- [x] Confidence calibration harness (distribution stats + buckets)
+- [x] Performance harness (batch p50/p95 timing thresholds)
+- [x] Randomized phone/email noise injection robustness test
+// --- New completions (Feedback & Metrics) ---
+- [x] In-memory metrics endpoint (/api/metrics) with latency distribution
+- [x] Feedback ingestion endpoints (create/list/stats) + tests
+// --- Persistence Extensions ---
+- [x] Feedback persistence (NDJSON file) with lazy load
+- [x] Metrics persistence (counters + latency snapshot JSON)
+// --- Post-persistence Additions ---
+- [x] Metrics persistence test (file flush + counters)
+- [x] Moved docsQueued increment to include test environment (consistency)
+- [x] Flush throttle bypass in tests for deterministic assertions
+// --- New In-Progress Sprint (Analytics & Interop) ---
+- [x] OCR concurrency guard (semaphore) added
+- [x] FHIR expansion: Practitioner, Organization, Provenance
+- [x] Analytics endpoint (/api/analytics) aggregating metrics + feedback
+// --- Analytics & Drift Additions ---
+- [x] Extraction snapshot persistence (NDJSON) with ambiguous CPT tracking
+- [x] Analytics endpoint extended with snapshots & ambiguous CPT rate
+- [x] Confidence samples + drift computation (baseline vs recent)
+- [x] File hash (sha256) stored in documentMeta and FHIR Provenance extension
+- [x] Practitioner NPI mapping when available
+- [x] Provenance resource added with source file hash extension
+- [x] Confidence recording on document process & inject
+// --- Feedback Loop & Security Enhancements ---
+- [x] Feedback acceptance tracking (accepted/overridden)
+- [x] Suggestions generation (top accepted path->value pairs)
+- [x] Analytics acceptanceRate & suggestions surfaced
+- [x] Request body size limit & PDF page cap
+// --- UI / Dashboard ---
+- [x] Minimal analytics dashboard HTML (/dashboard) w/ auto-refresh
+
+// --- New completions (Carrier + Pediatric + DME Linkage) ---
+- [x] Expanded preauth rules (Cigna 95811, Humana 95782/95783, Tricare 95811, UHC 95810) + tests
+- [x] Pediatric CPT prioritization (95782/95783 outrank 95810 when explicitly ordered) + test
+- [x] Carrier catalog further expansion (Scan, Alignment, P3, Intermountain, UMR, TriWest, HPN variants)
+- [x] Secondary insurance tightening (precision restored after carrier expansion)
+- [x] DME prerequisite linkage (titration + DME issues -> verify_dme_prerequisites) + tests
+- [x] Risk scoring factor extension (dme_prereq)
+- [x] Concurrency guard + rate limiting integration reflected in risk controls
+// --- New completions (Frontend UI Modernization Oct 1, 2025) ---
+- [x] React multi-page refactor (Referral, Analytics, Legacy UI routes)
+- [x] Mantine AppShell layout (Header + Sidebar components)
+- [x] Collapsible sidebar with localStorage persistence & centered nav
+- [x] Active nav styling + soft brand highlight
+- [x] Scrollbar restyle (brand accent, thin) dark/light aware
+- [x] Theme reset & simplification (minimal tokens)
+- [x] Dual color schemes (dark/light) + glare-reduced light palette
+- [x] Paper/Panel elevation & shadow tuning
+- [x] Raw JSON collapsible viewer (expand/collapse + enlarged area)
+- [x] CollapsibleJson reusable component (centered controls)
+- [x] Expand button visibility upgrade (icons + variant) in Result panel
+- [x] Sidebar collapsed icon vertical/horizontal centering
+- [x] Centered collapse controls & improved readability for long JSON
+- [x] Placeholder panel surface & contrast adjustments
 
 ---
 ## 2. In Progress / Monitoring
-- [~] Further secondary insurance precision tuning (reduce residual false positives)
-- [~] Expand authorizationNotes richness (carrier & policy nuance)
-- [~] Confidence scoring recalibration after new fields
+- [~] Secondary insurance monitoring (expand labeled sample; watch for drift)
+- [x] Confidence transparency test (assert `confidenceDetail` shape)
+// (moved to Completed)
+- [~] Expand authorizationNotes richness (more granular policy rationale + structured categories)
+- [~] Confidence scoring recalibration after new fields (post-weight audit pending)
+// (moved to Completed)
+// (moved to Completed)
 
 ---
 ## 3. Immediate Next (Sprint Candidate)
-1. [ ] Emergency contact extraction enhancement (relationship + phone validation)
-2. [ ] Expand symptom phrase library + source tagging
-3. [~] Secondary insurance precision evaluation test harness (baseline negative test added; add multi-sample metrics)
-4. [ ] CPT ambiguity UX improvements (surface reasons & confidence hints)
-5. [ ] Authorization notes enrichment (carrier policy mapping) (Spec)
-6. [ ] Snapshot JSON contract test (freeze representative extraction payloads)
-7. [ ] Optional: collapse/expand UI for long authorization notes
+1. [x] Multi-page patient PDF support (overflow handling)
+2. [x] Expand carriers catalog with status-specific pre-auth rules (broaden dataset)
 
 ---
 ## 4. Short-Term Backlog
-- [ ] Merge multi-page PDF support for patient summary if content length grows
-- [ ] Expand carriers catalog with status-specific pre-auth rules
-- [ ] Policy-driven action inference (e.g., order needs PCP referral)
-- [ ] More robust fax vs phone separation via lexical + number pattern
-- [ ] Additional ICD enrichment (severity / chronic flags)
-- [ ] DME rules linking (e.g., CPAP + compliance prerequisites)
-- [ ] Inline risk scoring for manual review triage
-- [ ] Rate limiting & defensive controls (to prevent accidental flooding OCR service)
+// (all moved to Completed)
+- [ ] Confidence weight audit (post new factors) (next)
+- [ ] Expand labeled secondary insurance sample (monitor drift)
+- [ ] Additional carrier policy rationale enrichment (fine-grained plan notes)
+- [ ] AuthorizationNotes rationale granularity (sub-tags)
+- [ ] Prepare ML confidence calibration dataset (export accepted feedback corrections)
+- [ ] Persist user-selected color scheme (localStorage) (UI)
+- [ ] Copy / Download buttons for Raw JSON (UI)
+- [ ] Full-screen modal view for JSON (UI convenience)
+- [ ] Accessibility pass (focus rings, contrast ratios) (UI A11y)
+- [ ] Storybook stories for Section / StatCard / CollapsibleJson
+- [ ] Lazy-load Analytics & Legacy routes (bundle size)
+- [ ] Error boundary component + fallback UI
 
 ---
 ## 5. Longer-Term / Strategic
 - [ ] Confidence model ML calibration (beyond heuristic stacking)
 - [ ] Document version diffing (track changes across uploads)
-- [ ] Feedback loop ingestion (human corrections -> model refinement)
+- [ ] Feedback loop refinement (apply corrections to improve heuristics / future ML)
 - [ ] Analytics dashboard (throughput, error classes, action frequencies)
 - [ ] Multi-language / locale adaptation (future regulatory markets)
-- [ ] Structured export (FHIR mapping experiment)
+- [~] Structured export (FHIR mapping experiment) (initial Bundle + DiagnosticReport done; expand resources)
+ - [ ] Document version diffing (structural + field change audit) (promote soon)
+ - [ ] Feedback auto-application heuristic (semi-automatic rule tuning)
 
 ---
 ## 6. Quality & Testing Enhancements
-- [ ] Snapshot baseline for extraction JSON (contract tests) 
-- [ ] PDF smoke hashing (ensure no unintended layout shifts)
-- [ ] Add test harness for randomized phone/email noise injection
+- [x] Snapshot baseline for extraction JSON (contract tests)
+- [x] PDF smoke hashing (ensure no unintended layout shifts)
+// (moved to Completed)
 - [ ] Regression test: ambiguous multi-CPT with forced fallback
-- [ ] Performance test: batch of N (decide threshold) documents
+// (moved to Completed)
 
 ---
 ## 7. Technical Debt / Hygiene
-- [ ] Centralize regex patterns in a constants module
-- [ ] Logging standardization (levels + correlation IDs)
-- [ ] Error taxonomy (user vs system vs external OCR)
-- [ ] Rate-limit / concurrency guard around OCR calls
-- [ ] Normalize date parsing (single util with confidence rating)
+- [x] Centralize regex patterns in a constants module
+- [x] Logging standardization (levels + correlation IDs)
+- [~] Error taxonomy (user vs system vs external OCR) (classification helper present; response mapping pending)
+- [x] Rate-limit / concurrency guard around OCR calls (basic + semaphore implemented)
+- [x] Normalize date parsing (single util with confidence rating)
+- [ ] Migrate inline style objects to theme-driven styles (reduce scattered CSS-in-JS)
+- [ ] Audit unused tokens / CSS classes after theme reset
 
 ---
 ## 8. Risk Register
@@ -137,10 +276,10 @@ Legend:
 
 ---
 ## 13. Quick Status Snapshot (Today)
-Core extraction: Stable
-PDF: Stable (markers implemented)
-Tests: 25 passing
-Biggest near-term risk: Secondary insurance precision
+Core extraction: Stable (pediatric prioritization + DME linkage + expanded preauth)
+PDF: Stable (markers + multi-page + layout hash)
+Tests: 66 passing (all green) (performance & precision harnesses intact)
+Biggest near-term risks: Confidence weight drift, secondary insurance sample expansion, upcoming ML calibration groundwork
 
 ---
 (End of checklist)
