@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import './app.css'
+import React, { useEffect, useMemo, useState } from 'react';
+import './app.css';
+import './legacy.css';
+import { Button, Badge } from '@mantine/core';
+import ReferralPage from './pages/ReferralPage.jsx';
+
+// Default export uses the new Mantine-based ReferralPage.
+// The legacy single-page implementation is preserved below as a named export (LegacyApp)
+export default ReferralPage;
 
 const apiBase = '/api'
 
-export default function App() {
+export function LegacyApp() {
   const [file, setFile] = useState(null)
   const [docId, setDocId] = useState('')
   const [status, setStatus] = useState(null)
@@ -13,6 +20,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [fileInfo, setFileInfo] = useState(null)
   const [batchDates, setBatchDates] = useState([])
+  const [showAllAuthNotes, setShowAllAuthNotes] = useState(false)
 
   useEffect(() => {
     // Fetch available batch dates for report links
@@ -20,6 +28,8 @@ export default function App() {
       .then(j => setBatchDates(Array.isArray(j?.dates) ? j.dates : []))
       .catch(() => setBatchDates([]))
   }, [])
+
+  // analytics polling removed
 
   const confidenceBadge = useMemo(() => {
     if (!result?.confidence) return null
@@ -160,6 +170,9 @@ export default function App() {
 
   return (
     <>
+      <div style={{background:'#3b5bdb22', border:'1px solid #3b5bdb55', padding:8, margin:'8px auto 0', maxWidth:1200, fontSize:12, borderRadius:8}}>
+        This is the deprecated legacy UI. New experience lives under the default pages. Remove after verification.
+      </div>
       <div className="header">
         <div className="container header-inner">
           <div className="brand">MED<b>OCR</b></div>
@@ -192,10 +205,10 @@ export default function App() {
                 File: {fileInfo.name} • {fileInfo.type || 'unknown'} • {(fileInfo.size/1024|0)} KB • PDF header: {fileInfo.pdfHeader ? 'yes' : 'no'}
               </div>
             )}
-            <div className="controls">
-              <button className="btn" disabled={!file || loading} onClick={upload}>{loading ? <span className="row"><span className="spinner"/> Processing…</span> : 'Process Referral'}</button>
-              <button className="btn secondary" onClick={loadSample} disabled={loading}>Load sample</button>
-              {error && <span className="badge err" role="alert">{error}</span>}
+            <div className="controls" style={{ gap: 6 }}>
+              <Button size="xs" disabled={!file || loading} onClick={upload} loading={loading} variant="gradient" gradient={{ from: 'brand.4', to: 'brand.6' }}>Process</Button>
+              <Button size="xs" variant="light" onClick={loadSample} disabled={loading}>Sample</Button>
+              {error && <Badge color="red" variant="light">{error}</Badge>}
             </div>
             <hr className="sep" />
             <div className="list">
@@ -236,10 +249,11 @@ export default function App() {
                       )}
                       {Array.isArray(result.procedure?.cptDetails) && result.procedure.cptDetails.length > 0 && (
                         <div style={{ fontSize: '0.7em', marginTop: 4, opacity: 0.85 }}>
-                          {result.procedure.cptDetails.map(d => (
-                            <span key={d.code} style={{ display: 'inline-block', marginRight: 8 }}>
-                              <code>{d.code}</code>: {d.intent}{d.why && d.why !== 'pattern_match' ? `/${d.why}` : ''}
-                            </span>
+                          {result.procedure.cptDetails.map((d, i) => (
+                            <div key={d.code} style={{ marginBottom: 2, display: 'flex', alignItems: 'baseline' }}>
+                              <code style={{ minWidth: 54, display: 'inline-block' }}>{d.code}</code>
+                              <span>{d.intent}{d.why && d.why !== 'pattern_match' ? ` / ${d.why}` : ''}</span>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -249,8 +263,8 @@ export default function App() {
                       {insuranceName}
                       {Array.isArray(result.insurance) && result.insurance[0] && (result.insurance[0].memberId || result.insurance[0].groupId) && (
                         <div style={{ fontSize: '0.7em', marginTop: 2 }}>
-                          {result.insurance[0].memberId && <span style={{ marginRight: 8 }}>ID: {result.insurance[0].memberId}</span>}
-                          {result.insurance[0].groupId && <span>Group: {result.insurance[0].groupId}</span>}
+                          {result.insurance[0].memberId && <div style={{ marginRight: 8, display: 'inline-block'}}>ID: {result.insurance[0].memberId}</div>}
+                          {result.insurance[0].groupId && <div style={{ display: 'inline-block' }}>Group: {result.insurance[0].groupId}</div>}
                         </div>
                       )}
                     </div>
@@ -360,10 +374,26 @@ export default function App() {
                         </>
                       )}
                       {Array.isArray(result?.documentMeta?.authorizationNotes) && result.documentMeta.authorizationNotes.length > 0 && (
-                        <>
-                          <div className="k">Auth Notes</div>
-                          <div style={{ fontSize: '0.75em', lineHeight: 1.3 }}>{result.documentMeta.authorizationNotes.map((n,i)=>(<div key={i}>• {n}</div>))}</div>
-                        </>
+                        (() => {
+                          const notes = result.documentMeta.authorizationNotes;
+                          const limit = 4;
+                          const display = showAllAuthNotes ? notes : notes.slice(0, limit);
+                          return (
+                            <>
+                              <div className="k">Auth Notes</div>
+                              <div style={{ fontSize: '0.75em', lineHeight: 1.3 }}>
+                                {display.map((n,i)=>(<div key={i}>• {n}</div>))}
+                                {notes.length > limit && (
+                                  <div style={{ marginTop: 4 }}>
+                                    <Button size="compact-xs" variant="subtle" onClick={() => setShowAllAuthNotes(v=>!v)}>
+                                      {showAllAuthNotes ? 'Collapse' : `Show All (${notes.length})`}
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()
                       )}
                       {Array.isArray(result?.procedure?.cptCandidates) && result.procedure.cptCandidates.length > 1 && (
                         <>
@@ -383,7 +413,7 @@ export default function App() {
                 <div className="card">
                   <div className="row"><div className="badge">Rules</div><div className="meta">Trace of matched rules</div></div>
                   <div className="row" style={{ marginBottom: 8 }}>
-                    <button className="btn secondary" onClick={fetchDebug} disabled={!docId}>Show debug</button>
+                    <Button size="xs" variant="light" onClick={fetchDebug} disabled={!docId}>Show debug</Button>
                     <div className="meta" style={{ marginLeft: 8 }}>(fetches /result?debug=1)</div>
                   </div>
                   {!debugTrace && <div className="meta">No trace loaded. Click "Show debug".</div>}
@@ -404,7 +434,7 @@ export default function App() {
           </div>
         </div>
         <div className="panel">
-          <div className="title">Batch</div>
+          <div className="title">Batch <span style={{ fontSize: '0.6em', fontWeight: 'normal' }}><a href="/analytics">Analytics →</a></span></div>
           <div className="body">
             {batchDates.length === 0 && <div className="meta">No batches yet.</div>}
             {batchDates.length > 0 && (

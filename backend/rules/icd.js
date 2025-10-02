@@ -9,6 +9,7 @@ let ALLOW = new Set(); // allowed codes (normalized)
 let DESC = new Map();  // code -> description
 let KW = [];           // [{ code, res: [RegExp], label? }]
 let ICD_ALERTS = new Map(); // code -> [actions]
+let ENRICH = null; // enrichment data
 
 function normalizeCode(raw) {
   if (!raw) return null;
@@ -93,10 +94,21 @@ function loadAlertsOnce() {
   }
 }
 
+function loadEnrichmentOnce() {
+  if (ENRICH) return;
+  try {
+    const p = path.resolve(process.cwd(), 'backend/rules/data/icd_enrichment.json');
+    ENRICH = JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {
+    ENRICH = { chronic: [], severity: {}, notes: {} };
+  }
+}
+
 export function detectICDs(fullText, _lines) {
   loadCatalogOnce();
   loadKeywordsOnce();
   loadAlertsOnce();
+  loadEnrichmentOnce();
 
   const lines = String(fullText || '').split(/\r?\n/);
 
@@ -194,10 +206,21 @@ export function detectICDs(fullText, _lines) {
 
   if (seen.size === 0) return { hit: false, values: [], why: 'icd_none' };
 
+  // Apply enrichment (chronic flag, severity, note)
+  if (ENRICH && details.length) {
+    for (const d of details) {
+      const base = d.code.replace('.', '');
+      const normCode = d.code;
+      d.chronic = Array.isArray(ENRICH.chronic) && ENRICH.chronic.includes(normCode);
+      if (!d.chronic && Array.isArray(ENRICH.chronic)) d.chronic = ENRICH.chronic.includes(base);
+      d.severity = ENRICH.severity?.[normCode] || ENRICH.severity?.[base] || null;
+      d.note = ENRICH.notes?.[normCode] || ENRICH.notes?.[base] || null;
+    }
+  }
   return {
     hit: true,
     values: details.map(d => d.code),
-    details, // optional, not required by callers
+    details,
     trace: trace.slice(0, 10),
     why: 'icd_detect',
     actions: Array.from(actions)

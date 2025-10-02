@@ -1,0 +1,15 @@
+{
+  "chronic": ["G47.33", "I10", "E11.9", "J45.909"],
+  "severity": {
+    "G47.33": "moderate",
+    "I10": "variable",
+    "E11.9": "uncomplicated",
+    "J45.909": "unspecified"
+  },
+  "notes": {
+    "G47.33": "Obstructive sleep apnea is generally chronic and requires longitudinal management.",
+    "I10": "Essential hypertension is chronic; severity staging not encoded in code.",
+    "E11.9": "Type 2 diabetes without complications; monitor for progression.",
+    "J45.909": "Asthma unspecified; assess control level separately."
+  }
+}

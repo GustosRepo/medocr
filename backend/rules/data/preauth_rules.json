@@ -1,0 +1,50 @@
+[
+  {
+    "carrier": "Aetna",
+    "cpt": "95811",
+    "action": "preauth_check_needed",
+    "note": "Aetna: verify prior authorization criteria for titration (95811)."
+  },
+  {
+    "carrier": "United Healthcare",
+    "cpt": "95811",
+    "action": "preauth_check_needed",
+    "note": "United Healthcare: confirm documentation supporting in-lab titration 95811."
+  },
+  {
+    "carrier": "Anthem BCBS",
+    "cpt": "95810",
+    "action": "preauth_check_needed",
+    "note": "Anthem BCBS: check if diagnostic PSG (95810) requires prior auth when HSAT criteria not met."
+  },
+  {
+    "carrier": "Cigna",
+    "cpt": "95811",
+    "action": "preauth_check_needed",
+    "note": "Cigna: ensure prior positive diagnostic study documented before titration (95811)."
+  },
+  {
+    "carrier": "Humana",
+    "cpt": "95782",
+    "action": "preauth_check_needed",
+    "note": "Humana: pediatric PSG (95782) often requires prior authorization."
+  },
+  {
+    "carrier": "Humana",
+    "cpt": "95783",
+    "action": "preauth_check_needed",
+    "note": "Humana: pediatric titration (95783) verify medical necessity and prior diagnostic."
+  },
+  {
+    "carrier": "Tricare",
+    "cpt": "95811",
+    "action": "preauth_check_needed",
+    "note": "Tricare: confirm referral authorization and prior study before titration (95811)."
+  },
+  {
+    "carrier": "United Healthcare",
+    "cpt": "95810",
+    "action": "preauth_check_needed",
+    "note": "United Healthcare: diagnostic PSG (95810) may need prior auth if HSAT not appropriate."
+  }
+]

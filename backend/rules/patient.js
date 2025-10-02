@@ -183,3 +183,81 @@ export function detectDob(fullText) {
 
   return { hit: false, why: 'dob_none' };
 }
+
+// Detect patient phone numbers (US 10-digit) and return formatted variants
+export function detectPhones(fullText) {
+  const text = String(fullText || '');
+  const re = /\b(?:\+?1[\s\-\.()]*)?(?:\(?\d{3}\)?[\s\-\.]*)\d{3}[\s\-\.]*\d{4}\b/g;
+  const seen = new Set();
+  const rawPhones = [];
+  const lines = text.split(/\r?\n/);
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[0];
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))) {
+      const core = digits.length === 11 ? digits.slice(1) : digits;
+      if (!seen.has(core)) {
+        seen.add(core);
+        const formatted = `(${core.slice(0,3)}) ${core.slice(3,6)}-${core.slice(6)}`;
+        // Determine line for exclusion heuristics
+        let lineIdx = -1; let acc = 0;
+        for (let i=0;i<lines.length;i++) { acc += lines[i].length + 1; if (acc > m.index) { lineIdx = i; break; } }
+        const lineText = lines[lineIdx] || '';
+        const providerLine = /(provider|referring|physician|npi)/i.test(lineText);
+        rawPhones.push({ raw, normalized: core, formatted, index: m.index, lineIdx, providerLine });
+      }
+    }
+  }
+  if (!rawPhones.length) return { hit: false, value: [], why: 'patient_phones_none' };
+
+  // Helper: classify & score phones
+  const tollFree = new Set(['800','822','833','844','855','866','877','888','900']);
+  function isValidNanp(core) {
+    if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(core)) return false; // area & exchange cannot start with 0/1
+    const ac = core.slice(0,3);
+    if (tollFree.has(ac)) return false;
+    return true;
+  }
+  // Build context windows
+  function contextSnippet(idx) {
+    const start = Math.max(0, idx - 40);
+    return text.slice(start, idx + 40).toLowerCase();
+  }
+
+  // First pass: filter invalid / toll-free / fax labeled
+  const filtered = rawPhones.filter(p => {
+    if (!isValidNanp(p.normalized)) return false;
+    const ctx = contextSnippet(p.index);
+    if (/fax/.test(ctx)) return false;
+    if (p.providerLine) return false; // exclude lines likely belonging to provider section
+    return true;
+  });
+  if (!filtered.length) {
+    // fall back to any raw that are at least 10 digits if we over-filtered
+    return { hit: true, value: rawPhones, why: 'patient_phones_detect_raw_only' };
+  }
+
+  // Scoring
+  const areaFreq = filtered.reduce((acc,p)=>{ const ac=p.normalized.slice(0,3); acc[ac]=(acc[ac]||0)+1; return acc; },{});
+  function score(p) {
+    const ctx = contextSnippet(p.index);
+    let s = 0;
+    if (/phone|tel|cell|mobile/.test(ctx)) s += 5;
+    if (/patient/.test(ctx)) s += 3;
+    if (/provider|office|clinic/.test(ctx)) s -= 2;
+    if (/insurance|auth|authorization/.test(ctx)) s -= 2;
+    const ac = p.normalized.slice(0,3);
+    s += (areaFreq[ac] || 0); // boost dominant area code cluster
+    return s;
+  }
+  filtered.forEach(p => { p._score = score(p); });
+  filtered.sort((a,b) => b._score - a._score);
+
+  // Prefer dominant area code subset (likely patient locale)
+  const dominantArea = Object.entries(areaFreq).sort((a,b)=>b[1]-a[1])[0][0];
+  const dominant = filtered.filter(p => p.normalized.startsWith(dominantArea));
+  const curated = (dominant.length ? dominant : filtered).slice(0, 3); // cap to 3 to avoid noise
+
+  return { hit: curated.length > 0, value: curated, why: 'patient_phones_detect' };
+}
