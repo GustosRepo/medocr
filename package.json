@@ -22,7 +22,8 @@
   }
   ,
   "dependencies": {
-  "pdfkit": "^0.15.0",
-  "dotenv": "^16.4.5"
+    "archiver": "^5.3.2",
+    "pdfkit": "^0.15.0",
+    "dotenv": "^16.4.5"
   }
 }

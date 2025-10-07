@@ -1,40 +1,81 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, Badge, Group, Stack, Text, Code, Paper, ScrollArea, Title, JsonInput, Tooltip, ActionIcon } from '../ui/primitives.jsx';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Badge, Group, Stack, Text, Code, Paper, ScrollArea, Title, JsonInput, Tooltip, ActionIcon, Checkbox } from '../ui/primitives.jsx';
 import { notifications } from '../ui/primitives.jsx';
-import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize, IconRefresh } from '@tabler/icons-react';
+import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize } from '@tabler/icons-react';
+import { getStatusBadgeColor } from '../ui/utils.js';
 import Section from '../components/Section.jsx';
 import PlaceholderPanel from '../components/PlaceholderPanel.jsx';
 
 const apiBase = '/api';
 
-function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+// --- Global client-side polling queue to cap concurrent /status requests ---
+const POLL_CONCURRENCY = 3;
+let _pollActive = 0;
+const _pollQueue = [];
+async function queueStatusFetch(fn) {
+  return new Promise(resolve => {
+    const run = async () => {
+      _pollActive++;
+      try { resolve(await fn()); }
+      finally {
+        _pollActive--;
+        if (_pollQueue.length) {
+          const next = _pollQueue.shift();
+          setTimeout(next, 0);
+        }
+      }
+    };
+    if (_pollActive < POLL_CONCURRENCY) run(); else _pollQueue.push(run);
+  });
 }
 
 export default function ReferralPage() {
+  // Build marker for cache/debug: update this string to verify reloads
+  console.log('[ReferralPage] build marker v1-dark-cards ' + new Date().toISOString());
   const [files, setFiles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [status, setStatus] = useState(null);
-  const [processingStart, setProcessingStart] = useState(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [processingDocId, setProcessingDocId] = useState('');
   const [resultsMap, setResultsMap] = useState({});
   const [processedOrder, setProcessedOrder] = useState([]);
+  const [debugTrace, setDebugTrace] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState([]);
   const [batchDates, setBatchDates] = useState([]);
   const [showAllAuthNotes, setShowAllAuthNotes] = useState(false);
   const [showRawMap, setShowRawMap] = useState({});
-  const [hydratingFromUrl, setHydratingFromUrl] = useState(true);
-  const [resetting, setResetting] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const pendingUrlFetch = useRef(null);
+  // (Reverted) removed fileRefMap & retry feature
+  // Multi-export selection state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedExportIds, setSelectedExportIds] = useState(new Set());
+
+  // Restore persisted selection (remember across reload) once on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('exportSelection');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          setSelectedExportIds(new Set(arr));
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Persist selection whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('exportSelection', JSON.stringify(Array.from(selectedExportIds)));
+    } catch {}
+  }, [selectedExportIds]);
+
+  // Prune any selected IDs that are no longer present (e.g., after refresh before data arrives)
+  useEffect(() => {
+    setSelectedExportIds(prev => {
+      const next = new Set([...prev].filter(id => resultsMap[id]));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [resultsMap]);
 
   useEffect(() => {
     fetch(`${apiBase}/batch`).then(r => r.ok ? r.json() : Promise.reject())
@@ -42,78 +83,67 @@ export default function ReferralPage() {
       .catch(() => setBatchDates([]));
   }, []);
 
-  const pushResult = useCallback((id, data) => {
+  function pushResult(id, data) {
     setResultsMap(m => ({ ...m, [id]: data }));
     setProcessedOrder(o => o.includes(id) ? o : [id, ...o]);
-  }, []);
+  }
 
-  useEffect(() => {
-    if (processingStart && status && !['done', 'error', 'timeout'].includes(status)) {
-      setElapsedMs(Date.now() - processingStart);
-      const tick = setInterval(() => {
-        setElapsedMs(Date.now() - processingStart);
-      }, 1000);
-      return () => clearInterval(tick);
-    }
-    setElapsedMs(0);
-    return undefined;
-  }, [processingStart, status]);
+  // IDs that are fully processed (exclude placeholders/uploading)
+  const doneIds = useMemo(
+    () => processedOrder.filter(id => {
+      const r = resultsMap[id];
+      return r && !r._placeholder && !r._uploading;
+    }),
+    [processedOrder, resultsMap]
+  );
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const urlDocId = params.get('docId');
-    if (!urlDocId) {
-      setHydratingFromUrl(false);
-      return;
-    }
-    if (resultsMap[urlDocId]) {
-      setSelectedId(urlDocId);
-      setStatus('done');
-      setHydratingFromUrl(false);
-      return;
-    }
-    if (pendingUrlFetch.current === urlDocId) return;
-    pendingUrlFetch.current = urlDocId;
-    let cancelled = false;
-    setError('');
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/documents/${urlDocId}/result`);
-        if (!res.ok) throw new Error('not-ready');
-        const data = await res.json();
-        if (cancelled) return;
-        pushResult(urlDocId, data);
-        setSelectedId(urlDocId);
-        setStatus('done');
-      } catch (err) {
-        if (cancelled) return;
-        setError('Unable to load document (maybe still processing or not found).');
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setHydratingFromUrl(false);
-          pendingUrlFetch.current = null;
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [location.search, resultsMap, pushResult]);
+  function toggleSelect(id) {
+    setSelectedExportIds(s => {
+      const ns = new Set(s);
+      if (ns.has(id)) ns.delete(id); else ns.add(id);
+      return ns;
+    });
+  }
+  function clearSelection() { setSelectedExportIds(new Set()); }
+  function selectAll() { setSelectedExportIds(new Set(doneIds)); }
 
-  useEffect(() => {
-    if (hydratingFromUrl) return;
-    const params = new URLSearchParams(location.search);
-    const current = params.get('docId');
-    if (selectedId) {
-      if (current === selectedId) return;
-      params.set('docId', selectedId);
-    } else {
-      if (!current) return;
-      params.delete('docId');
+  async function exportZip(ids) {
+    if (!ids.length) return;
+    try {
+      const res = await fetch(`${apiBase}/documents/bulk-export.zip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      if (!res.ok) throw new Error('bulk-failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Referral_Packets_${new Date().toISOString().slice(0,10)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+      notifications.show({ title: 'Export ready', message: `${ids.length} packets zipped`, color: 'blue', autoClose: 1400 });
+    } catch {
+      notifications.show({ title: 'Export failed', message: 'Could not build packet ZIP', color: 'red' });
     }
-    const nextSearch = params.toString();
-    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
-  }, [selectedId, hydratingFromUrl, location.pathname, location.search, navigate]);
+  }
+
+  async function exportIndividual(ids) {
+    if (!ids.length) return;
+    for (const id of ids) {
+      const a = document.createElement('a');
+      a.href = `/api/documents/${id}/summary.pdf`;
+  const doc = resultsMap[id];
+  const base = doc?.documentMeta?.suggestedFilename?.replace(/\.pdf$/i, '') || id;
+  a.download = `${base}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      // small throttle so browser queues sanely
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise(r => setTimeout(r, 140));
+    }
+    notifications.show({ title: 'Downloads started', message: `${ids.length} PDFs`, color: 'blue', autoClose: 1400 });
+  }
 
   const selectedDoc = selectedId ? resultsMap[selectedId] : null;
   const confidenceBadge = useMemo(() => {
@@ -124,60 +154,79 @@ export default function ReferralPage() {
   }, [selectedDoc]);
 
   async function uploadSingle(fileObj, updateList = true) {
+    // Create an immediate placeholder BEFORE the network round trip so user sees it instantly
+  const tempId = `local-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    pushResult(tempId, {
+      documentMeta: { suggestedFilename: fileObj.name },
+      patient: {},
+      procedure: {},
+      _placeholder: true,
+      _uploading: true
+    });
+    if (!selectedId) setSelectedId(tempId);
+
     const fd = new FormData();
     fd.append('file', fileObj, fileObj.name || 'upload.pdf');
     try {
       const res = await fetch(`${apiBase}/documents`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();
+
+      // Replace temp placeholder id with real id (preserve ordering)
+      setResultsMap(m => {
+        const ph = m[tempId] || {};
+        const newMap = { ...m, [data.id]: { ...ph, _uploading: false } };
+        delete newMap[tempId];
+        return newMap;
+      });
+  setProcessedOrder(o => o.map(i => (i === tempId ? data.id : i)));
+  setSelectedId(s => (s === tempId ? data.id : s));
+
       if (updateList) {
-        setBatchProgress(p => p.map(it => 
+        setBatchProgress(p => p.map(it =>
           it.name === fileObj.name ? { ...it, id: data.id, status: 'submitted', error: undefined } : it
         ));
       }
-      setProcessingDocId(data.id);
-      setProcessingStart(Date.now());
+
       pollStatus(
         data.id,
         st => {
-          if (updateList) {
+          if (!updateList) return;
+          if (typeof st === 'object') {
+            setBatchProgress(p => p.map(it => it.id === data.id ? { ...it, status: st.status, errorCode: st.errorCode, suggestions: st.suggestions, error: st.error } : it));
+          } else {
             setBatchProgress(p => p.map(it => it.id === data.id ? { ...it, status: st } : it));
           }
-          setStatus(st);
-          if (st === 'processing' || st === 'submitted' || st === 'queued') {
-            setProcessingStart(prev => prev || Date.now());
-          }
         },
-        err => {
+        (err) => {
           if (updateList) {
             setBatchProgress(p => p.map(it => it.id === data.id ? { ...it, status: 'error', error: err } : it));
           }
-          setStatus('error');
-          setProcessingStart(null);
-          setProcessingDocId('');
         }
       );
       return data.id;
     } catch (e) {
+      // Remove placeholder on failure
+      setResultsMap(m => { const nm = { ...m }; delete nm[tempId]; return nm; });
+      setProcessedOrder(o => o.filter(i => i !== tempId));
       if (updateList) {
-        setBatchProgress(p => p.map(it => 
+        setBatchProgress(p => p.map(it =>
           it.name === fileObj.name ? { ...it, status: 'error', error: e.message || 'upload-error' } : it
         ));
       }
-      setStatus('error');
-      setProcessingStart(null);
-      setProcessingDocId('');
       return null;
     }
   }
 
   async function upload() {
     if (!files.length) return;
-    setError('');
-    setLoading(true);
-    const first = files[0];
-    await uploadSingle(first, true);
-    setLoading(false);
+  setError('');
+  setLoading(true);
+  const first = files[0];
+  // Ensure the single file shows up in the left status list immediately
+  setBatchProgress([{ name: first.name, status: 'uploading' }]);
+  await uploadSingle(first, true);
+  setLoading(false);
   }
 
   function sleep(ms) {
@@ -201,13 +250,12 @@ export default function ReferralPage() {
     let tries = 0;
     const maxTries = 80;
     setStatus('processing');
-    if (!processingStart) setProcessingStart(Date.now());
     let delay = 2600 + Math.random() * 400;
     let consecutive429 = 0;
 
     while (tries < maxTries) {
       try {
-        const r = await fetch(`${apiBase}/documents/${id}/status`);
+        const r = await queueStatusFetch(() => fetch(`${apiBase}/documents/${id}/status`));
         if (r.status === 429) {
           consecutive429++;
           const penalty = Math.min((consecutive429 + 1) * 1800, 15000);
@@ -221,12 +269,14 @@ export default function ReferralPage() {
         const js = await r.json();
         consecutive429 = 0;
         const st = js.status || 'processing';
-        onUpdate?.(st);
+        // If error, propagate structured code/suggestions
+        if (st === 'error' && js.errorCode) {
+          onUpdate?.({ status: st, errorCode: js.errorCode, suggestions: js.suggestions, error: js.error });
+        } else {
+          onUpdate?.(st);
+        }
 
         if (st === 'done') {
-          setStatus('done');
-          setProcessingStart(null);
-          setProcessingDocId(prev => (prev === id ? '' : prev));
           try {
             const rr = await fetch(`${apiBase}/documents/${id}/result`);
             if (rr.ok) {
@@ -243,17 +293,24 @@ export default function ReferralPage() {
           } catch {}
           return 'done';
         } else if (st === 'error') {
-          setStatus('error');
-          setProcessingStart(null);
-          setProcessingDocId(prev => (prev === id ? '' : prev));
-          onError?.(js.error || 'pipeline-error');
+          // Surface specific backend error (e.g., OCR timeout) to UI + console. js may carry errorCode
+          const reason = js.error || 'pipeline-error';
+          console.error('[pollStatus] document failed', id, reason, js.errorCode);
+            if (js.errorCode) {
+              notifications.show({
+                title: `Processing failed (${js.errorCode})`,
+                message: reason,
+                color: 'red',
+                autoClose: 4000
+              });
+            }
+          onError?.(reason, js.errorCode, js.suggestions);
           return 'error';
         }
         delay = Math.min(delay * 1.18 + 320, 12000);
         await sleep(delay);
       } catch (e) {
         onUpdate?.('net-error');
-        setStatus('net-error');
         delay = Math.min(delay * 1.4 + 500, 15000);
         tries++;
         await sleep(delay);
@@ -261,9 +318,6 @@ export default function ReferralPage() {
       tries++;
     }
     onError?.('timeout');
-    setStatus('timeout');
-    setProcessingStart(null);
-    setProcessingDocId(prev => (prev === id ? '' : prev));
     return 'timeout';
   }
 
@@ -274,6 +328,7 @@ export default function ReferralPage() {
       if (!r.ok) throw new Error();
       const js = await r.json();
       setResultsMap(m => ({ ...m, [id]: { ...(m[id] || {}), ...js } }));
+      setDebugTrace(js?.debug?.trace || []);
     } catch {
       notifications.show({
         title: 'Debug failed',
@@ -311,43 +366,6 @@ export default function ReferralPage() {
     }
   }
 
-  async function resetDocuments() {
-    if (resetting) return;
-    if (typeof window !== 'undefined' && !window.confirm('Reset all processed documents?')) return;
-    setError('');
-    setResetting(true);
-    try {
-      const res = await fetch(`${apiBase}/admin/documents/reset`, { method: 'POST' });
-      if (!res.ok) throw new Error();
-      setFiles([]);
-      setResultsMap({});
-      setProcessedOrder([]);
-      setSelectedId('');
-      setStatus(null);
-      setBatchProgress([]);
-      setProcessingDocId('');
-      setProcessingStart(null);
-      setElapsedMs(0);
-      setShowAllAuthNotes(false);
-      setShowRawMap({});
-      notifications.show({
-        title: 'Documents reset',
-        message: 'Document store cleared successfully.',
-        color: 'green',
-        autoClose: 1500
-      });
-    } catch (e) {
-      notifications.show({
-        title: 'Reset failed',
-        message: 'Unable to reset documents.',
-        color: 'red'
-      });
-    } finally {
-      setResetting(false);
-      if (pendingUrlFetch.current) pendingUrlFetch.current = null;
-    }
-  }
-
   function downloadJson(doc, id) {
     if (!doc) return;
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
@@ -365,9 +383,10 @@ export default function ReferralPage() {
   function Details({ docId, doc }) {
     if (!doc) return null;
     const showRaw = !!showRawMap[docId];
+    const conf = doc?.confidence || doc?.confidenceLevel;
 
     return (
-      <Stack gap="lg" className="border-t border-slate-700/60 pt-2.5">
+  <Stack gap={16} style={{ borderTop: '1px solid #2a323c', paddingTop: 10 }}>
         <Section title="Patient">
           <Stack gap={4}>
             <Text size="sm">
@@ -593,6 +612,16 @@ export default function ReferralPage() {
               >
                 PDF
               </Button>
+              <Button
+                size="xs"
+                variant="light"
+                component="a"
+                href={`/api/documents/${docId}/packet.zip`}
+                target="_blank"
+                disabled={!doc}
+              >
+                Packet
+              </Button>
             </Group>
           }
         >
@@ -632,23 +661,18 @@ export default function ReferralPage() {
           <Group gap="xs">
             {selectedId && <Badge variant="outline">ID: {selectedId}</Badge>}
             {status && (
-              <Badge color={status === 'done' ? 'green' : status === 'error' ? 'red' : status === 'timeout' ? 'yellow' : 'blue'}>
+              <Badge color={status === 'done' ? 'green' : status === 'error' ? 'red' : 'blue'}>
                 {status}
               </Badge>
             )}
             {confidenceBadge}
           </Group>
-          {processingStart && status && !['done', 'error', 'timeout'].includes(status) && (
-            <Text size="xs" c="dimmed">
-              {processingDocId ? `Doc ${processingDocId}` : 'Processing'} • {formatDuration(elapsedMs)} • {status}
-            </Text>
-          )}
         </Group>
       </Paper>
 
-      <div className="grid gap-6 lg:gap-8 grid-cols-1 md:grid-cols-12">
-        <div className="md:col-span-4 lg:col-span-3">
-          <Paper shadow="sm" p="xl" withBorder radius="lg" className="h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-3">
+          <Paper shadow="sm" p="xl" withBorder radius="lg" style={{ height: '100%' }}>
             <Stack gap="lg">
               <Stack gap="md">
                 <Text size="sm" fw={600} c="dimmed" tt="uppercase" className="section-heading">
@@ -694,18 +718,6 @@ export default function ReferralPage() {
                     Sample
                   </Button>
                 </Group>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  color="red"
-                  fullWidth
-                  leftSection={<IconRefresh size={14} />}
-                  onClick={resetDocuments}
-                  disabled={loading || resetting}
-                  loading={resetting}
-                >
-                  Reset Documents
-                </Button>
                 {error && <Badge color="red" variant="light">{error}</Badge>}
                 {batchProgress.length > 0 && (
                   <Stack gap={2}>
@@ -716,38 +728,47 @@ export default function ReferralPage() {
                         wrap="nowrap"
                         justify="space-between"
                         align="center"
-                        className="border-b border-slate-700/60 pb-0.5"
+                        style={{
+                          borderBottom: '1px solid #2a323c',
+                          paddingBottom: 2
+                        }}
                       >
                         <Button
                           variant={it.id === selectedId ? 'light' : 'subtle'}
                           size="compact-xs"
-                          className="flex-1 min-w-0 overflow-hidden text-ellipsis justify-start"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            justifyContent: 'flex-start'
+                          }}
                           onClick={() => {
                             if (it.id && resultsMap[it.id]) {
                               setSelectedId(it.id);
+                              setDebugTrace(resultsMap[it.id]?.debug?.trace || []);
                             }
                           }}
                           disabled={!it.id || !resultsMap[it.id]}
                         >
                           {it.name}
                         </Button>
-                        <Badge
-                          size="xs"
-                          variant="light"
-                          color={
-                            it.status === 'done'
-                              ? 'green'
-                              : it.status === 'error'
-                              ? 'red'
-                              : it.status === 'rate-limit'
-                              ? 'orange'
-                              : it.status === 'processing' || it.status === 'submitted'
-                              ? 'blue'
-                              : 'gray'
-                          }
-                        >
-                          {it.status}
-                        </Badge>
+                        <Tooltip label={
+                          it.status === 'error' ? ((it.errorCode ? `${it.errorCode}: ` : '') + (it.error || 'Processing failed') + (it.suggestions ? `\nTry: ${it.suggestions.slice(0,2).join('; ')}` : '')) :
+                          it.status === 'rate-limit' ? '429: server asked us to slow down' :
+                          it.status === 'net-error' ? 'Network error: will retry' :
+                          it.status === 'processing' ? 'Processing' :
+                          it.status === 'submitted' ? 'Submitted' :
+                          it.status === 'queued' ? 'Queued' :
+                          it.status === 'uploading' ? 'Uploading' : null
+                        }>
+                          <Badge size="xs" variant="light" color={getStatusBadgeColor(it.status)}>
+                            {it.status}
+                            {it.status === 'error' && it.errorCode && (
+                              <span style={{ marginLeft: 4, fontWeight: 500 }}>{it.errorCode}</span>
+                            )}
+                          </Badge>
+                        </Tooltip>
                       </Group>
                     ))}
                   </Stack>
@@ -780,17 +801,71 @@ export default function ReferralPage() {
               </Stack>
             </Stack>
           </Paper>
-        </div>
-
-        <div className="md:col-span-8 lg:col-span-9">
-          <Paper shadow="sm" p="xl" withBorder radius="lg" style={{ minHeight: 400 }}>
+  </div>
+  <div className="lg:col-span-9">
+          <Paper shadow="sm" p="xl" withBorder radius="lg" style={{ minHeight: 400 }} data-processed-container>
             <Stack gap="md">
               <Group justify="space-between" mb="xs">
                 <Text size="sm" fw={600} c="dimmed" tt="uppercase">
                   Processed
                 </Text>
                 {processedOrder.length > 0 && (
-                  <Badge variant="light" size="sm">{processedOrder.length}</Badge>
+                  <Group gap={6} wrap="nowrap">
+                    {!selectMode && (
+                      <>
+                        <Badge variant="light" size="sm">{processedOrder.length}</Badge>
+                        <div className="hidden md:flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 border border-slate-500 disabled:opacity-40"
+                            disabled={doneIds.length === 0}
+                            onClick={() => exportZip(doneIds)}
+                            title="Export all done packets"
+                          >Packets</button>
+                          <button
+                            type="button"
+                            className="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-600"
+                            onClick={() => { setSelectMode(true); clearSelection(); }}
+                            title="Select subset"
+                          >Select</button>
+                      </div>
+                        <Tooltip label="Export all packets as ZIP" position="bottom">
+                          <Button
+                            size="compact-xs"
+                            variant="default"
+                            disabled={doneIds.length === 0}
+                            onClick={() => exportZip(doneIds)}
+                          >
+                            Export Packets
+                          </Button>
+                        </Tooltip>
+                        <Tooltip label="Select specific docs to export">
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            onClick={() => { setSelectMode(true); clearSelection(); }}
+                          >
+                            Select
+                          </Button>
+                        </Tooltip>
+                      </>
+                    )}
+                    {selectMode && (
+                      <Group gap={4} wrap="nowrap">
+                        <Badge size="sm" variant="outline" color={selectedExportIds.size ? 'blue' : 'gray'}>
+                          {selectedExportIds.size}/{doneIds.length}
+                        </Badge>
+                        <Button size="compact-xs" variant="light" disabled={!selectedExportIds.size} onClick={() => exportZip(Array.from(selectedExportIds))}>Packets</Button>
+                        <Tooltip label="Download each PDF (no ZIP)">
+                          <Button size="compact-xs" variant="subtle" disabled={!selectedExportIds.size} onClick={() => exportIndividual(Array.from(selectedExportIds))}>PDFs</Button>
+                        </Tooltip>
+                        <Button size="compact-xs" variant="subtle" onClick={() => { if (selectedExportIds.size === doneIds.length) clearSelection(); else selectAll(); }}>
+                          {selectedExportIds.size === doneIds.length ? 'None' : 'All'}
+                        </Button>
+                        <Button size="compact-xs" variant="default" onClick={() => { setSelectMode(false); clearSelection(); }}>Done</Button>
+                      </Group>
+                    )}
+                  </Group>
                 )}
               </Group>
 
@@ -802,12 +877,14 @@ export default function ReferralPage() {
                     {processedOrder.map(pid => {
                       const r = resultsMap[pid];
                       if (!r) return null;
-                      const patientName = [r?.patient?.last, r?.patient?.first].filter(Boolean).join(', ') || '—';
+                      const patientName = [r?.patient?.last, r?.patient?.first].filter(Boolean).join(', ') || r?.documentMeta?.suggestedFilename || '—';
                       const primaryCpt = r?.procedure?.cpt || '—';
                       const conf = r?.confidence || r?.confidenceLevel;
                       const actions = r?.alerts?.actions || [];
                       const isSelected = selectedId === pid;
                       const showRaw = !!showRawMap[pid];
+                      const isError = false; // reverted error card logic
+                      const done = r && !r._placeholder && !r._uploading;
 
                       return (
                         <Paper
@@ -815,22 +892,61 @@ export default function ReferralPage() {
                           withBorder
                           radius="md"
                           p="sm"
-                          className={isSelected ? 'bg-slate-800/80 border-sky-500/40' : ''}
+                          className="processed-doc-card"
+                          style={{
+                            position: 'relative',
+                            borderColor: '#181c1f',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.55)',
+                            transition: 'background 140ms ease, box-shadow 140ms ease, border-color 140ms ease'
+                          }}
+                          data-processed-card={isSelected ? 'selected' : 'default'}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.boxShadow = '0 0 0 1px #1f2428, 0 2px 8px -2px rgba(0,0,0,0.6)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.55)';
+                          }}
                         >
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 3,
+                              borderTopLeftRadius: 'inherit',
+                              borderBottomLeftRadius: 'inherit',
+                              background: '#1f2428'
+                            }}
+                          />
                           <Stack gap={6}>
                             <Group justify="space-between" align="flex-start" wrap="nowrap" gap={8}>
                               <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Text
-                                  size="xs"
-                                  fw={600}
-                                  style={{ cursor: 'pointer' }}
-                                  onClick={() => setSelectedId(p => (p === pid ? '' : pid))}
-                                >
-                                  {patientName}
-                                </Text>
+                                <Group gap={6} align="flex-start" wrap="nowrap">
+                                  {selectMode && done && (
+                                    <Checkbox
+                                      size="xs"
+                                      checked={selectedExportIds.has(pid)}
+                                      onChange={() => toggleSelect(pid)}
+                                      styles={{ input: { cursor: 'pointer' } }}
+                                    />
+                                  )}
+                                  <Text
+                                    size="xs"
+                                    fw={600}
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => setSelectedId(p => (p === pid ? '' : pid))}
+                                  >
+                                    {patientName}
+                                  </Text>
+                                </Group>
                                 <Text size="xs" c="dimmed">
-                                  CPT: {primaryCpt}
-                                  {conf && ` • ${conf}`}
+                                  {r?._placeholder ? (r._uploading ? 'Uploading…' : 'Processing…') : (
+                                    <>
+                                      CPT: {primaryCpt}
+                                      {conf && ` • ${conf}`}
+                                    </>
+                                  )}
                                 </Text>
                                 {actions.length > 0 && !isSelected && (
                                   <Group gap={4} wrap="wrap" mt={2}>
@@ -879,6 +995,7 @@ export default function ReferralPage() {
           </Paper>
         </div>
       </div>
+
     </Stack>
   );
 }

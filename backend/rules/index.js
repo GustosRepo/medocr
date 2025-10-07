@@ -26,7 +26,14 @@ export function runExtraction(ocrPages) {
   };
 
   // Patient
-  const name = detectName(fullText, lines); if (name.hit) { result.patient = { ...result.patient, ...name.value }; trace.push({ rule: name.why, value: `${result.patient.last}, ${result.patient.first}` }); }
+  const disablePatientNameOcr = process.env.DISABLE_PATIENT_NAME_OCR === '1';
+  const name = disablePatientNameOcr ? { hit: false } : detectName(fullText, lines);
+  if (name.hit) {
+    result.patient = { ...result.patient, ...name.value };
+    trace.push({ rule: name.why, value: `${result.patient.last}, ${result.patient.first}` });
+  } else if (disablePatientNameOcr) {
+    trace.push({ rule: 'patient_name_detection_skipped' });
+  }
   const dob = detectDob(fullText); if (dob.hit) { result.patient = { ...result.patient, dob: dob.value }; trace.push({ rule: dob.why, value: dob.value }); }
   const phones = detectPhones(fullText); if (phones.hit) { result.patient.phones = phones.value.map(p => p.formatted); trace.push({ rule: phones.why, count: phones.value.length }); }
   // Email (contextual & filtered)

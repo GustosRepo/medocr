@@ -1,198 +1,113 @@
-import fs from 'fs';
-import path from 'path';
-
 // Patient name + DOB detectors used by the rules engine
 
-const CONFIG_PATH = path.join(process.cwd(), 'backend', 'rules', 'data', 'patient_config.json');
+const BASIC_BLOCK_TOKENS = new Set([
+  'patient','patients','provider','providers','clinic','clinics','hospital','sleep','study','studies','referral','referrals',
+  'forwarding','support','team','fax','cover','sheet','page','paperwork','documentation','notes','summary','request','requests',
+  'attention','veteran','veterans','home','homes','medical','company','specialty','order','orders','care','center','centers',
+  'primary','office','insurance','practice','unit','department','services','service','authorization','auth','intake','contact'
+]);
 
-const DEFAULT_ADDRESS_STOP = [
-  'road','rd','street','st','suite','ste','ave','avenue','blvd','drive','dr','court','ct','lane','ln',
-  'circle','cir','parkway','pkwy','apt','apartment','unit','floor','fl','highway','hwy','way','terrace','ter',
-  'place','pl','north','south','east','west','n','s','e','w','city','state','zip','address','phone','fax'
+const BLOCK_LINE_PATTERNS = [
+  'attention','veteran','sleep study','sleepcenter','sleep center','sleep studies','medical group','medical center','clinic',
+  'fax','cover sheet','authorization','insurance','provider','practice','referral','order form','durable medical equipment',
+  'home sleep','patient instructions','patient information','primary care','chart notes','specialty','company','summary','page'
 ];
 
-const DEFAULT_NON_PERSON_TOKENS_STRICT = [
-  'fax','efax','referral','order','orders','summary','information','info','patient','provider','practice','clinic','medical','medicine','services','service','sleep','home','unknown','report','reports','signature','signed','physician','doctor','md','do','pa','np','rn','llc','inc','corp','company','group','center','centre','hospital','imaging','lab','laboratory','department','specialty','care','health','insurance','authorization','auth','request','requests','from','to','re','attention','attn','unit','units','npi','id','member','policy','patientinformation','patientinfo'
-];
-
-const DEFAULT_NON_PERSON_TOKENS_SOFT = [
-  'support','team','office','forward','forwarding','review','reviews','documentation','disease','white','front','system','sleepcenter','dme','durable','equipment','schedule','appointment','appt','visit','pages','page','cover','sheet','notification','homecare','careteam'
-];
-
-const DEFAULT_NON_PERSON_LINE_PATTERNS = [
-  'fax','efax','referral','order','clinic','medical','services','sleep','home','information','summary','patient information','patient summary',
-  'provider','insurance','authorization','request','signature','physician','doctor','practice','department','center','hospital','imaging',
-  'lab','laboratory','durable','equipment','dme','specialty','unknown','vegas','nv','pages','cover sheet','attention','attn','subject','re:','from:'
-];
-
-let cachedConfig = null;
-let cachedConfigMTime = null;
-
-function loadConfig() {
-  try {
-    const stat = fs.statSync(CONFIG_PATH);
-    const mtime = stat.mtimeMs;
-    if (cachedConfig && cachedConfigMTime === mtime) return cachedConfig;
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    cachedConfig = JSON.parse(raw);
-    cachedConfigMTime = mtime;
-    return cachedConfig;
-  } catch {
-    cachedConfig = null;
-    cachedConfigMTime = null;
-    return null;
-  }
+function normalizePart(raw) {
+  const base = String(raw || '').trim();
+  if (!base) return '';
+  const lower = base.toLowerCase();
+  return lower.replace(/(^|[\s'\-])(\p{L})/gu, (_, prefix, char) => `${prefix}${char.toUpperCase()}`);
 }
 
-function toStopSet(values, fallback) {
-  const src = Array.isArray(values) ? values : fallback;
-  return new Set((src || []).map(s => String(s).toLowerCase()));
-}
-
-function buildLineRegex(patterns, fallbackPatterns) {
-  const src = Array.isArray(patterns) && patterns.length ? patterns : fallbackPatterns;
-  if (!src || !src.length) return null;
-  const escaped = src.map(p => String(p).trim()).filter(Boolean).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (!escaped.length) return null;
-  return new RegExp(`(${escaped.join('|')})`, 'i');
+export function looksPlausibleName(raw) {
+  const plain = String(raw || '').replace(/[^A-Za-z\p{L}]/gu, '');
+  if (plain.length < 2) return false;
+  if (/^[A-Za-z]\.?$/.test(plain)) return false;
+  if (plain.length > 2 && BASIC_BLOCK_TOKENS.has(plain.toLowerCase())) return false;
+  if (plain.length > 2 && !/[aeiouy]/i.test(plain)) return false;
+  return true;
 }
 
 export function detectName(fullText, linesLCInput) {
-  const payload = loadConfig() || {};
   const origLines = fullText.split(/\r?\n/);
   const linesLC = Array.isArray(linesLCInput)
     ? linesLCInput
     : origLines.map(l => String(l || '').toLowerCase());
 
-  // Words that indicate addresses/context, not person names
-  const addressStop = toStopSet(payload?.addressStop, DEFAULT_ADDRESS_STOP);
-  const nonPersonTokensStrict = toStopSet(payload?.nonPersonTokensStrict ?? payload?.nonPersonTokens, DEFAULT_NON_PERSON_TOKENS_STRICT);
-  const nonPersonTokensSoft = toStopSet(payload?.nonPersonTokensSoft, DEFAULT_NON_PERSON_TOKENS_SOFT);
-  const nonPersonLineRe = buildLineRegex(payload?.nonPersonLineRegex, DEFAULT_NON_PERSON_LINE_PATTERNS);
-  const strictBlockSet = new Set([...addressStop, ...nonPersonTokensStrict]);
-
-  const hasAt = s => /@/.test(s || '');
-  const stripAfterDob = s => String(s || '').replace(/\b(0[1-9]|1[0-2])[\/-](0[1-9]|[12]\d|3[01])[\/-]((?:19|20)\d{2})\b.*$/, '').trim();
-
-  function isPlausibleNameToken(token) {
-    if (!token) return false;
-    const plain = String(token).replace(/[^A-Za-z\p{L}]/gu, '');
-    if (plain.length < 2) return false;
-    if (/^[A-Za-z]\.?$/.test(plain)) return false;
-    if (plain.length > 2 && !/[aeiouy]/i.test(plain)) return false;
-    return true;
-  }
-
-  // Allow unicode letters, apostrophes, hyphens
   const nameToken = "[A-Za-z\\p{L}'’\\-]+";
   const reLastFirst = new RegExp(`\\b(${nameToken})\\s*,\\s*(${nameToken})(?:\\s+(${nameToken}))?\\b`, 'u');
   const reFirstLast = new RegExp(`\\b(${nameToken})\\s+(${nameToken})(?:\\s+(${nameToken}))?\\b`, 'u');
 
-  function looksLikeNameCandidate(text) {
-    if (!text) return false;
-    if (hasAt(text)) return false;
-    const tokens = text
-      .replace(/[^A-Za-z\p{L}'’\- ]/gu, ' ')
-      .split(/\s+/)
-      .filter(Boolean);
-    if (tokens.length < 2 || tokens.length > 4) return false;
-    const lowerTokens = tokens.map(t => t.toLowerCase());
-    let hasNameish = false;
-    for (let i = 0; i < tokens.length; i++) {
-      const lower = lowerTokens[i];
-      if (strictBlockSet.has(lower)) continue;
-      if (!nonPersonTokensSoft.has(lower)) {
-        hasNameish = true;
-        break;
-      }
-      const token = tokens[i];
-      if (token.length > 2 && token[0] === token[0].toUpperCase()) {
-        hasNameish = true;
-        break;
-      }
-    }
-    if (!hasNameish) return false;
-    if (nonPersonLineRe && nonPersonLineRe.test(text)) return false;
-    return true;
-  }
-
-  function tc(s) {
-    return String(s || '').toLowerCase().replace(/\b([a-z\p{Ll}])/gu, (_, c) => c.toUpperCase());
-  }
-
-  function assembleName(m, order) {
-    const a = m[1], b = m[2];
-    const last = order === 'lf' ? a : b;
-    const first = order === 'lf' ? b : a;
-    const lastLc = last.toLowerCase();
-    const firstLc = first.toLowerCase();
-    if (strictBlockSet.has(lastLc) || strictBlockSet.has(firstLc)) return null;
-    const normLast = tc(last);
-    const normFirst = tc(first);
-    if (!isPlausibleNameToken(normLast) || !isPlausibleNameToken(normFirst)) return null;
+  function buildResult(match, order) {
+    const lastRaw = order === 'lf' ? match[1] : match[2];
+    const firstRaw = order === 'lf' ? match[2] : match[1];
+    const normLast = normalizePart(lastRaw);
+    const normFirst = normalizePart(firstRaw);
+    if (!looksPlausibleName(normLast) || !looksPlausibleName(normFirst)) return null;
     return { last: normLast, first: normFirst };
   }
 
-  // 1) Labeled lines: “Patient Name:”, “Patient:”, “Name:”
-  let idx = linesLC.findIndex(l => /(patient\s*name|patient|name)\s*[:\-]\s*/i.test(l));
-  if (idx >= 0) {
-    const lineOrig = origLines[idx] || '';
-    const afterColon = lineOrig.split(/[:\-]/).slice(1).join(':').trim();
-    const candidateLines = [afterColon, origLines[idx + 1] || ''].map(stripAfterDob).filter(Boolean);
-    for (const cand of candidateLines) {
-      if (!looksLikeNameCandidate(cand)) continue;
-      let m = cand.match(reLastFirst);
-      if (m) {
-        const val = assembleName(m, 'lf');
+  const labelRe = /(patient\s*name|patient|name)\s*[:\-]\s*(.*)$/i;
+
+  // 1) Check for labeled lines first
+  for (let i = 0; i < linesLC.length; i++) {
+    if (!labelRe.test(linesLC[i] || '')) continue;
+    const original = origLines[i] || '';
+    const [, , after] = original.match(labelRe) || [];
+    const candidates = [];
+    if (after) candidates.push(after.trim());
+    if (origLines[i + 1]) candidates.push(origLines[i + 1].trim());
+    for (const cand of candidates) {
+      if (!cand) continue;
+      const lf = cand.match(reLastFirst);
+      if (lf) {
+        const val = buildResult(lf, 'lf');
         if (val) return { hit: true, value: val, why: 'patient_name_labeled_lf' };
       }
-      m = cand.match(reFirstLast);
-      if (m) {
-        const val = assembleName(m, 'fl');
+      const fl = cand.match(reFirstLast);
+      if (fl) {
+        const val = buildResult(fl, 'fl');
         if (val) return { hit: true, value: val, why: 'patient_name_labeled_fl' };
       }
     }
+    break; // first labeled block wins
   }
 
-  // 2) Separate First/Last labeled fields
-  let firstVal = null, lastVal = null;
-  for (let i = 0; i < linesLC.length && i < 80; i++) {
-    const o = origLines[i] || '';
-    if (!firstVal) {
-      const m1 = o.match(new RegExp(`first\\s*name\\s*[:\\-]?\\s*(${nameToken})(?:\\s+(${nameToken}))?`, 'iu'));
-      const lookNext = !m1 && /first\s*name\s*[:\-]?\s*$/i.test(o);
-      const src = m1 ? m1[1] : (lookNext ? (origLines[i + 1] || '') : '');
-      if (src && looksLikeNameCandidate(src)) firstVal = tc(src.split(/\s+/)[0]);
-    }
-    if (!lastVal) {
-      const m2 = o.match(new RegExp(`last\\s*name\\s*[:\\-]?\\s*(${nameToken})`, 'iu'));
-      const lookNext = !m2 && /last\s*name\s*[:\-]?\s*$/i.test(o);
-      const src = m2 ? m2[1] : (lookNext ? (origLines[i + 1] || '') : '');
-      if (src && looksLikeNameCandidate(src)) lastVal = tc(src.split(/\s+/)[0]);
-    }
-    if (firstVal && lastVal) return { hit: true, value: { first: firstVal, last: lastVal }, why: 'patient_name_fields' };
-  }
-
-  // 3) Fallback: scan first ~40 lines
-  const scanOrig = origLines.slice(0, Math.min(40, origLines.length));
-  for (let i = 0; i < scanOrig.length; i++) {
-    const originalLine = scanOrig[i] || '';
-    if (nonPersonLineRe && nonPersonLineRe.test(originalLine)) continue;
-    const line = stripAfterDob(originalLine);
-    if (!looksLikeNameCandidate(line)) continue;
-    let m = line.match(reLastFirst);
-    if (m) {
-      const val = assembleName(m, 'lf');
+  // 2) Fallback: scan the first few lines for the first match
+  const scanLimit = Math.min(40, origLines.length);
+  for (let i = 0; i < scanLimit; i++) {
+    const line = origLines[i] || '';
+    const lc = line.toLowerCase();
+    if (BLOCK_LINE_PATTERNS.some(p => lc.includes(p))) continue;
+    const lf = line.match(reLastFirst);
+    if (lf) {
+      const val = buildResult(lf, 'lf');
       if (val) return { hit: true, value: val, why: 'patient_name_fallback_lf' };
     }
-    m = line.match(reFirstLast);
-    if (m) {
-      const val = assembleName(m, 'fl');
+    const fl = line.match(reFirstLast);
+    if (fl) {
+      const val = buildResult(fl, 'fl');
       if (val) return { hit: true, value: val, why: 'patient_name_fallback_fl' };
     }
   }
 
   return { hit: false, why: 'name_none' };
+}
+
+export function parseNameFromFilename(filename) {
+  if (!filename) return null;
+  const base = String(filename).split(/[\\/]/).pop();
+  if (!base) return null;
+  const withoutExt = base.replace(/\.[A-Za-z0-9]+$/i, '');
+  const primary = withoutExt.split('_')[0] || withoutExt;
+  const cleaned = primary.replace(/\s+/g, ' ').trim();
+  const match = cleaned.match(/^([^,]+),\s*([^,]+)$/);
+  if (!match) return null;
+  const last = normalizePart(match[1]);
+  const first = normalizePart(match[2]);
+  if (!looksPlausibleName(last) || !looksPlausibleName(first)) return null;
+  return { last, first };
 }
 
 export function detectDob(fullText) {
