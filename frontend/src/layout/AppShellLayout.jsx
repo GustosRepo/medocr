@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AppShell } from '@mantine/core';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import AppHeader from '../components/AppHeader.jsx';
 import SidebarNav from '../components/SidebarNav.jsx';
 
@@ -11,58 +11,59 @@ export default function AppShellLayout({ children }) {
     try { localStorage.setItem('sidebar:collapsed', collapsed ? '1' : '0'); } catch {}
   }, [collapsed]);
   const toggleSidebar = () => setCollapsed(c => !c);
+  const location = useLocation();
+  const mobileLinks = useMemo(() => {
+    const base = [
+      { to: '/', label: 'Referral' },
+      { to: '/checklist', label: 'Checklist' },
+      { to: '/analytics', label: 'Analytics' },
+      { to: '/debug/ocr', label: 'OCR Debug' },
+      { to: '/admin/rules', label: 'Rules Editor' }
+    ];
+    return base;
+  }, []);
   const navWidth = collapsed ? 72 : 232;
   return (
-    <AppShell
-      header={{ height: 56 }}
-      navbar={{ width: navWidth, breakpoint: 'sm' }}
-      /* Remove internal padding so our own Box controls all spacing */
-      padding={0}
-      withBorder
-      styles={{
-        main: {
-          background: 'linear-gradient(150deg, var(--surface-0) 0%, var(--surface-1) 55%, var(--surface-2) 100%)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
-          color: 'var(--text-primary)'
-        },
-        header: {
-          backgroundColor: 'rgba(15,26,35,0.85)',
-          borderBottom: '1px solid var(--surface-border-soft)',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(8px)'
-        },
-        navbar: {
-          backgroundColor: 'rgba(15,26,35,0.9)',
-          borderRight: '1px solid var(--surface-border-soft)',
-          boxShadow: '2px 0 10px rgba(0,0,0,0.35)',
-          backdropFilter: 'blur(8px)'
-        }
-      }}
-    >
-      <AppShell.Header>
-        <AppHeader />
-      </AppShell.Header>
-      <AppShell.Navbar p={collapsed ? 4 : 'xs'}>
-        <SidebarNav collapsed={collapsed} onToggle={toggleSidebar} />
-      </AppShell.Navbar>
-      <AppShell.Main style={{ paddingTop: 0 }}>
-        <div
-          style={{
-            maxWidth: 1200,
-            width: '100%',
-            margin: '0 auto',
-            padding: 'clamp(40px,5vw,64px) clamp(24px,4.5vw,72px) 64px',
-            minHeight: 'calc(100vh - 56px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'clamp(32px,4vw,56px)',
-            transition: 'padding .25s ease, gap .25s ease, max-width .25s ease',
-            color: 'var(--text-primary)'
-          }}
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
+      <div className="flex min-h-screen">
+        <aside
+          className="hidden lg:flex border-r border-slate-800/60 bg-slate-950/30"
+          style={{ width: navWidth, transition: 'width 0.18s ease' }}
         >
-          {children}
+          <SidebarNav collapsed={collapsed} onToggle={toggleSidebar} />
+        </aside>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="border-b border-slate-800/60 bg-slate-950/40">
+            <div className="px-4 sm:px-6 lg:px-10 py-4">
+              <AppHeader />
+            </div>
+            <nav className="lg:hidden border-t border-slate-800/60 bg-slate-950/80 px-4 sm:px-6 py-3">
+              <div className="flex flex-wrap gap-2">
+                {mobileLinks.map(link => {
+                  const active = link.to === '/' ? location.pathname === '/' : location.pathname.startsWith(link.to);
+                  return (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className={[
+                        'text-xs font-medium px-3 py-1.5 rounded border transition-colors',
+                        active ? 'bg-sky-600/20 border-sky-500/60 text-sky-100' : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100'
+                      ].join(' ')}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </nav>
+          </header>
+          <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-10">
+            <div className="max-w-6xl w-full mx-auto flex flex-col gap-8">
+              {children}
+            </div>
+          </main>
         </div>
-      </AppShell.Main>
-    </AppShell>
+      </div>
+    </div>
   );
 }

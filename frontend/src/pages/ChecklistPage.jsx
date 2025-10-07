@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, Loader, ScrollArea, Card, SimpleGrid, CopyButton, Divider, Textarea, SegmentedControl, MultiSelect, Switch } from '@mantine/core';
+import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect } from '../ui/primitives.jsx';
 import { IconRefresh, IconFileText, IconEye, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import Section from '../components/Section.jsx';
 
@@ -38,7 +38,9 @@ export default function ChecklistPage() {
   const [statusFilter, setStatusFilter] = useState([]); // array of categories
   const [insuranceFilter, setInsuranceFilter] = useState([]); // carriers
   const [showArchived, setShowArchived] = useState(false);
-  const [expanded, setExpanded] = useState({}); // id -> bool (false means collapsed)
+  const [expanded, setExpanded] = useState({}); // id -> bool (false means collapsed); persisted
+  const [printExpanded, setPrintExpanded] = useState(false);
+  const COLLAPSE_KEY = 'medocr.checklist.collapsed';
 
   const buildText = useCallback((data)=>{
     if (!data) return '';
@@ -72,7 +74,7 @@ export default function ChecklistPage() {
     return lines.join('\n');
   },[]);
 
-  const load = useCallback(async ()=>{
+  async function load(){
     setLoading(true); setError(null);
     try {
       const params = new URLSearchParams();
@@ -80,6 +82,8 @@ export default function ChecklistPage() {
       if (statusFilter.length) params.set('status', statusFilter.join(','));
       if (insuranceFilter.length) params.set('insurance', insuranceFilter.join(','));
       if (showArchived) params.set('includeArchived','1');
+      // cache bust to ensure fresh when toggling archived
+      params.set('_t', Date.now().toString());
       const resp = await fetch(`/api/checklist?${params.toString()}`);
       if (!resp.ok) throw new Error('Failed to load checklist');
       const json = await resp.json();
@@ -90,17 +94,38 @@ export default function ChecklistPage() {
     } catch (e) {
       setError(String(e.message||e));
     } finally { setLoading(false); }
+  }
+
+  // Load persisted collapsed ids once
+  useEffect(()=>{
+    try {
+      const raw = localStorage.getItem(COLLAPSE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          const map = {};
+            arr.forEach(id=>{ map[id] = false; });
+          setExpanded(prev=>({ ...map, ...prev }));
+        }
+      }
+    } catch {}
   }, []);
 
-  useEffect(()=>{ load(); }, [load]);
-  useEffect(()=>{ // reload when filters change
-    load();
-  }, [statusFilter, insuranceFilter, showArchived]);
+  // Persist on changes
+  useEffect(()=>{
+    try {
+      const collapsedIds = Object.entries(expanded).filter(([,v])=>v===false).map(([k])=>k);
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsedIds));
+    } catch {}
+  }, [expanded]);
+
+  useEffect(()=>{ load(); }, []); // initial
+  useEffect(()=>{ load(); }, [statusFilter, insuranceFilter, showArchived]);
   useEffect(()=>{
     if (!autoRefresh) return;
-    const id = setInterval(()=> load().catch(()=>{}), 5000);
+    const id = setInterval(()=> { load().catch(()=>{}); }, 5000);
     return ()=> clearInterval(id);
-  }, [autoRefresh, load]);
+  }, [autoRefresh, statusFilter, insuranceFilter, showArchived]);
   useEffect(()=>{ // refresh textual view when rows change via /api/checklist for authoritative counts
     (async ()=>{ try { const r = await fetch('/api/checklist'); if (r.ok){ const j = await r.json(); setTextView(buildText(j)); } } catch{} })();
   }, [rows, buildText]);
@@ -113,27 +138,25 @@ export default function ChecklistPage() {
             <Button size="xs" variant={autoRefresh ? 'default':'outline'} onClick={()=>setAutoRefresh(a=>!a)}>{autoRefresh?'Auto':'Manual'}</Button>
             <ActionIcon size="sm" variant="subtle" onClick={()=>load()} disabled={loading}><IconRefresh size={16} /></ActionIcon>
           </Group>
+          {/* Simplified filters (inputs) */}
           <MultiSelect
-            size="xs"
-            searchable
-            placeholder="Filter status"
-            data={['ready','attention','processing','error'].map(v=>({value:v,label:v}))}
+            placeholder="Status"
+            data={[ 'ready','attention','processing','error' ]}
             value={statusFilter}
             onChange={setStatusFilter}
-            clearable
-            style={{ minWidth:180 }}
+            className="min-w-[160px]"
           />
           <MultiSelect
-            size="xs"
-            searchable
-            placeholder="Filter insurance"
-            data={Array.from(new Set(rows.map(r=>r.insurance).filter(Boolean))).sort().map(c=>({value:c?.toLowerCase()||'', label:c}))}
+            placeholder="Insurance"
+            data={[...new Set(rows.map(r=>r.insurance).filter(Boolean))].slice(0,40)}
             value={insuranceFilter}
             onChange={setInsuranceFilter}
-            clearable
-            style={{ minWidth:220 }}
+            searchable
+            className="min-w-[200px]"
           />
-          <Switch size="xs" checked={showArchived} onChange={e=>setShowArchived(e.currentTarget.checked)} label="Show Archived" />
+          <label className="flex items-center gap-1 text-xs text-slate-300">
+            <input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)} /> Archived
+          </label>
         </Group>
       }>
         {error && <Text c="red" size="xs" mb="xs">{error}</Text>}
@@ -155,38 +178,51 @@ export default function ChecklistPage() {
               const cat = categoryMeta(r, effCategory);
               const isExpanded = expanded[r.id] !== false; // default expanded
               return (
-                <Card
-                  key={r.id}
-                  radius="md"
-                  padding="sm"
-                  withBorder
-                  style={{
-                    display:'flex', flexDirection:'column', gap:6,
-                    borderLeft: `5px solid ${cat.border}`,
-                    background: `linear-gradient(135deg, ${cat.tone} 0%, transparent 80%)`,
-                    overflow: 'visible',
-                    flex: r.status === 'error' ? '1 1 100%' : '1 1 560px',
-                    width: r.status === 'error' ? '100%' : 'auto',
-                    maxWidth: '780px',
-                    minWidth: 0
-                  }}
-                  aria-label={`${cat.label} referral for ${name}`}
-                >
+        <div
+          key={r.id}
+          className="ref-card"
+          style={{
+            borderLeft: `5px solid ${cat.border}`,
+            background: `linear-gradient(135deg, ${cat.tone} 0%, transparent 80%)`,
+            flex: r.status === 'error' ? '1 1 100%' : '1 1 560px',
+            width: r.status === 'error' ? '100%' : 'auto',
+            maxWidth: '780px'
+          }}
+          aria-label={`${cat.label} referral for ${name}`}
+        >
                   <Group justify="space-between" wrap="nowrap" gap={6}>
                     <Badge color={statusColor(r.status)} variant="light" size="sm">{r.status}</Badge>
                     <Group gap={4} wrap="nowrap">
                       {r.status==='done' && (
                         <Tooltip label="Download PDF"><ActionIcon size="sm" component="a" href={`/api/documents/${r.id}/summary.pdf`} target="_blank" rel="noopener"><IconFileText size={14} /></ActionIcon></Tooltip>
                       )}
-                      <Tooltip label={r.archived? 'Unarchive':'Archive'}><ActionIcon size="sm" variant="subtle" onClick={async ()=>{
-                        const prev = overrides[r.id];
-                        setOverrides(o=>({ ...o, [r.id]: { ...(prev||{}), archived: !prev?.archived } }));
-                        try { await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ archived: !(prev?.archived) }) }); } catch { setOverrides(o=>({ ...o, [r.id]: prev })); }
-                      }}>{r.archived? '↩':'🗄'}</ActionIcon></Tooltip>
+                      {(() => { const isArchived = override?.archived ?? r.archived; return (
+                        <Tooltip label={isArchived? 'Unarchive':'Archive'}>
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            aria-label={isArchived? 'Unarchive referral':'Archive referral'}
+                            onClick={async ()=>{
+                              const prevOv = overrides[r.id];
+                              const nextArchived = ! (prevOv?.archived ?? r.archived);
+                              // Optimistic override update
+                              setOverrides(o=>({ ...o, [r.id]: { ...(prevOv||{}), archived: nextArchived } }));
+                              // Optimistic rows update: if hiding, remove; if showing archived, just flag
+                              setRows(curr => curr.map(row => row.id === r.id ? { ...row, archived: nextArchived, override: { ...(row.override||{}), archived: nextArchived } } : row).filter(row => (showArchived || !row.archived)));
+                              try {
+                                const resp = await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ archived: nextArchived }) });
+                                if (!resp.ok) throw new Error('fail');
+                              } catch {
+                                // revert
+                                setOverrides(o=>({ ...o, [r.id]: prevOv }));
+                                setRows(()=> rows); // fallback reload soon via auto refresh
+                              }
+                            }}
+                          >{isArchived? '↩':'🗄'}</ActionIcon>
+                        </Tooltip>
+                      ); })()}
                       <Tooltip label="Open in Referral"><ActionIcon size="sm" component="a" href={`/?docId=${r.id}`}><IconEye size={14} /></ActionIcon></Tooltip>
-                      <CopyButton value={r.id}>{({ copy }) => (
-                        <Tooltip label="Copy ID"><ActionIcon size="sm" variant="subtle" onClick={copy}>ID</ActionIcon></Tooltip>
-                      )}</CopyButton>
+                        <Tooltip label="Copy ID"><ActionIcon size="sm" variant="subtle" onClick={()=>{ navigator.clipboard.writeText(r.id).catch(()=>{}); }}>ID</ActionIcon></Tooltip>
                     </Group>
                   </Group>
                   <Group justify="space-between" wrap="nowrap" gap={6} mt={2}>
@@ -202,54 +238,43 @@ export default function ChecklistPage() {
                     {r.confidence && <Badge size="xs" color="grape" variant="light">{r.confidence}</Badge>}
                     {needs && <Badge size="xs" color="orange" variant="outline">Review</Badge>}
                   </Group>
-                  {isExpanded && <Divider my={6} />}
+                  {isExpanded && <div style={{ borderTop:'1px solid #2a323c', margin:'6px 0' }} />}
                   {isExpanded && (
                   <Stack gap={4}>
                     <Group gap={6} justify="space-between" wrap="wrap" align="flex-start">
                       <Text size="xs" fw={500}>Tracking</Text>
-                      <SegmentedControl
-                        size="xs"
-                        value={effCategory || 'auto'}
-                        onChange={async (val)=>{
-                          const desired = val === 'auto' ? null : val;
-                          const prev = overrides[r.id];
-                          setOverrides(o=>({ ...o, [r.id]: { ...(prev||{}), category: desired || undefined } }));
-                          try {
-                            await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ category: desired }) });
-                          } catch (e) { /* revert on error */ setOverrides(o=>({ ...o, [r.id]: prev })); }
-                        }}
-                        data={[
-                          { label: 'Auto', value: 'auto' },
-                          { label: 'Ready', value: 'ready' },
-                          { label: 'Attention', value: 'attention' },
-                          { label: 'Processing', value: 'processing' },
-                          { label: 'Error', value: 'error' }
-                        ]}
-                      />
+                        <select
+                          className="bg-slate-800 text-xs rounded border border-slate-600 px-2 py-1"
+                          value={effCategory || 'auto'}
+                          onChange={async e=>{
+                            const val = e.target.value;
+                            const desired = val === 'auto' ? null : val;
+                            const prev = overrides[r.id];
+                            setOverrides(o=>({ ...o, [r.id]: { ...(prev||{}), category: desired || undefined } }));
+                            try { await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ category: desired }) }); } catch { setOverrides(o=>({ ...o, [r.id]: prev })); }
+                          }}
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="ready">Ready</option>
+                          <option value="attention">Attention</option>
+                          <option value="processing">Processing</option>
+                          <option value="error">Error</option>
+                        </select>
                     </Group>
-                    <Textarea
+                    <textarea
                       placeholder="Add note (internal)"
-                      autosize
-                      minRows={1}
-                      maxRows={4}
+                      className="bg-slate-900 border border-slate-600 rounded p-2 text-[11px] resize-y"
+                      rows={2}
                       value={override?.note || ''}
-                      onChange={e=>{
-                        const val = e.target.value;
-                        setOverrides(o=>({ ...o, [r.id]: { ...(o[r.id]||{}), note: val } }));
-                      }}
-                      onBlur={async ()=>{
-                        const ov = overrides[r.id];
-                        try { await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: ov?.note || '' }) }); } catch {}
-                      }}
-                      size="xs"
-                      styles={{ input:{ fontSize:11 } }}
+                      onChange={e=>{ const val = e.target.value; setOverrides(o=>({ ...o, [r.id]: { ...(o[r.id]||{}), note: val } })); }}
+                      onBlur={async ()=>{ const ov = overrides[r.id]; try { await fetch(`/api/checklist/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: ov?.note || '' }) }); } catch {} }}
                     />
                   </Stack>
                   )}
                   {isExpanded && r.status === 'error' && r.error && (
-                    <Card withBorder padding="xs" radius="sm" style={{ background:'rgba(255,0,0,0.05)' }} mb={4}>
+                    <div style={{ background:'rgba(255,0,0,0.05)', border:'1px solid #ff6b6b55', borderRadius:6, padding:6, marginBottom:4 }}>
                       <Text size="xs" c="red" style={{ whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{r.error}</Text>
-                    </Card>
+                    </div>
                   )}
                   {isExpanded && <Text size="xs" fw={500} mt={8} mb={4}>Actions</Text>}
                   {isExpanded && acts.length === 0 && !r.manual && <Text size="xs" c="dimmed">None</Text>}
@@ -263,21 +288,31 @@ export default function ChecklistPage() {
                     <Text size="xs" mt={6} c="dimmed" lineClamp={3}>Note: {override.note}</Text>
                   )}
                   {isExpanded && <Text size="xs" mt={10} c="dimmed" style={{wordBreak:'break-all'}}>{r.id}</Text>}
-                </Card>
+                </div>
               );
             })}
             {rows.length === 0 && !loading && (
-              <Card withBorder padding="md" style={{ flex:'1 1 100%' }}><Text ta="center" c="dimmed" size="xs">No documents yet</Text></Card>
+              <div style={{ flex:'1 1 100%', border:'1px solid #27313b', borderRadius:8, padding:12, textAlign:'center' }}><Text c="dimmed" size="xs">No documents yet</Text></div>
             )}
             {loading && (
-              <Card withBorder padding="md" style={{ flex:'1 1 100%' }}><Group justify="center"><Loader size="xs" /><Text size="xs" c="dimmed">Loading...</Text></Group></Card>
+              <div style={{ flex:'1 1 100%', border:'1px solid #27313b', borderRadius:8, padding:12 }}><Group justify="center"><Text size="xs" c="dimmed">Loading...</Text></Group></div>
             )}
   </div>
       </Section>
-      <Section title="Printable View" actions={<Button size="xs" variant="light" onClick={()=>{ const blob = new Blob([textView],{type:'text/plain'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Patient_Checklist.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1200);}}>Download .txt</Button>}>
-        <ScrollArea h={360} offsetScrollbars>
-          <Text component="pre" size="xs" style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{textView || '—'}</Text>
-        </ScrollArea>
+      <Section
+        title="Printable View"
+        actions={<Group gap={6} wrap="nowrap">
+          <Button size="xs" variant="light" onClick={()=>{ const blob = new Blob([textView],{type:'text/plain'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Patient_Checklist.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1200);}}>Download .txt</Button>
+          <ActionIcon size="sm" variant="subtle" aria-label={printExpanded? 'Collapse printable view':'Expand printable view'} onClick={()=>setPrintExpanded(v=>!v)}>
+            {printExpanded? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+          </ActionIcon>
+        </Group>}
+      >
+        {printExpanded && (
+          <ScrollArea h={360} offsetScrollbars>
+            <Text component="pre" size="xs" style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{textView || '—'}</Text>
+          </ScrollArea>
+        )}
       </Section>
     </Stack>
   );

@@ -1,20 +1,87 @@
+import fs from 'fs';
+import path from 'path';
+
 // Patient name + DOB detectors used by the rules engine
 
+const CONFIG_PATH = path.join(process.cwd(), 'backend', 'rules', 'data', 'patient_config.json');
+
+const DEFAULT_ADDRESS_STOP = [
+  'road','rd','street','st','suite','ste','ave','avenue','blvd','drive','dr','court','ct','lane','ln',
+  'circle','cir','parkway','pkwy','apt','apartment','unit','floor','fl','highway','hwy','way','terrace','ter',
+  'place','pl','north','south','east','west','n','s','e','w','city','state','zip','address','phone','fax'
+];
+
+const DEFAULT_NON_PERSON_TOKENS_STRICT = [
+  'fax','efax','referral','order','orders','summary','information','info','patient','provider','practice','clinic','medical','medicine','services','service','sleep','home','unknown','report','reports','signature','signed','physician','doctor','md','do','pa','np','rn','llc','inc','corp','company','group','center','centre','hospital','imaging','lab','laboratory','department','specialty','care','health','insurance','authorization','auth','request','requests','from','to','re','attention','attn','unit','units','npi','id','member','policy','patientinformation','patientinfo'
+];
+
+const DEFAULT_NON_PERSON_TOKENS_SOFT = [
+  'support','team','office','forward','forwarding','review','reviews','documentation','disease','white','front','system','sleepcenter','dme','durable','equipment','schedule','appointment','appt','visit','pages','page','cover','sheet','notification','homecare','careteam'
+];
+
+const DEFAULT_NON_PERSON_LINE_PATTERNS = [
+  'fax','efax','referral','order','clinic','medical','services','sleep','home','information','summary','patient information','patient summary',
+  'provider','insurance','authorization','request','signature','physician','doctor','practice','department','center','hospital','imaging',
+  'lab','laboratory','durable','equipment','dme','specialty','unknown','vegas','nv','pages','cover sheet','attention','attn','subject','re:','from:'
+];
+
+let cachedConfig = null;
+let cachedConfigMTime = null;
+
+function loadConfig() {
+  try {
+    const stat = fs.statSync(CONFIG_PATH);
+    const mtime = stat.mtimeMs;
+    if (cachedConfig && cachedConfigMTime === mtime) return cachedConfig;
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+    cachedConfig = JSON.parse(raw);
+    cachedConfigMTime = mtime;
+    return cachedConfig;
+  } catch {
+    cachedConfig = null;
+    cachedConfigMTime = null;
+    return null;
+  }
+}
+
+function toStopSet(values, fallback) {
+  const src = Array.isArray(values) ? values : fallback;
+  return new Set((src || []).map(s => String(s).toLowerCase()));
+}
+
+function buildLineRegex(patterns, fallbackPatterns) {
+  const src = Array.isArray(patterns) && patterns.length ? patterns : fallbackPatterns;
+  if (!src || !src.length) return null;
+  const escaped = src.map(p => String(p).trim()).filter(Boolean).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!escaped.length) return null;
+  return new RegExp(`(${escaped.join('|')})`, 'i');
+}
+
 export function detectName(fullText, linesLCInput) {
+  const payload = loadConfig() || {};
   const origLines = fullText.split(/\r?\n/);
   const linesLC = Array.isArray(linesLCInput)
     ? linesLCInput
     : origLines.map(l => String(l || '').toLowerCase());
 
   // Words that indicate addresses/context, not person names
-  const addressStop = new Set([
-    'road','rd','street','st','suite','ste','ave','avenue','blvd','drive','dr','court','ct','lane','ln',
-    'circle','cir','parkway','pkwy','apt','apartment','unit','floor','fl','highway','hwy','way','terrace','ter',
-    'place','pl','north','south','east','west','n','s','e','w','city','state','zip','address','phone','fax'
-  ]);
+  const addressStop = toStopSet(payload?.addressStop, DEFAULT_ADDRESS_STOP);
+  const nonPersonTokensStrict = toStopSet(payload?.nonPersonTokensStrict ?? payload?.nonPersonTokens, DEFAULT_NON_PERSON_TOKENS_STRICT);
+  const nonPersonTokensSoft = toStopSet(payload?.nonPersonTokensSoft, DEFAULT_NON_PERSON_TOKENS_SOFT);
+  const nonPersonLineRe = buildLineRegex(payload?.nonPersonLineRegex, DEFAULT_NON_PERSON_LINE_PATTERNS);
+  const strictBlockSet = new Set([...addressStop, ...nonPersonTokensStrict]);
 
   const hasAt = s => /@/.test(s || '');
   const stripAfterDob = s => String(s || '').replace(/\b(0[1-9]|1[0-2])[\/-](0[1-9]|[12]\d|3[01])[\/-]((?:19|20)\d{2})\b.*$/, '').trim();
+
+  function isPlausibleNameToken(token) {
+    if (!token) return false;
+    const plain = String(token).replace(/[^A-Za-z\p{L}]/gu, '');
+    if (plain.length < 2) return false;
+    if (/^[A-Za-z]\.?$/.test(plain)) return false;
+    if (plain.length > 2 && !/[aeiouy]/i.test(plain)) return false;
+    return true;
+  }
 
   // Allow unicode letters, apostrophes, hyphens
   const nameToken = "[A-Za-z\\p{L}'’\\-]+";
@@ -29,7 +96,23 @@ export function detectName(fullText, linesLCInput) {
       .split(/\s+/)
       .filter(Boolean);
     if (tokens.length < 2 || tokens.length > 4) return false;
-    if (tokens.some(t => addressStop.has(t.toLowerCase()))) return false;
+    const lowerTokens = tokens.map(t => t.toLowerCase());
+    let hasNameish = false;
+    for (let i = 0; i < tokens.length; i++) {
+      const lower = lowerTokens[i];
+      if (strictBlockSet.has(lower)) continue;
+      if (!nonPersonTokensSoft.has(lower)) {
+        hasNameish = true;
+        break;
+      }
+      const token = tokens[i];
+      if (token.length > 2 && token[0] === token[0].toUpperCase()) {
+        hasNameish = true;
+        break;
+      }
+    }
+    if (!hasNameish) return false;
+    if (nonPersonLineRe && nonPersonLineRe.test(text)) return false;
     return true;
   }
 
@@ -41,8 +124,13 @@ export function detectName(fullText, linesLCInput) {
     const a = m[1], b = m[2];
     const last = order === 'lf' ? a : b;
     const first = order === 'lf' ? b : a;
-    if (addressStop.has(last.toLowerCase()) || addressStop.has(first.toLowerCase())) return null;
-    return { last: tc(last), first: tc(first) };
+    const lastLc = last.toLowerCase();
+    const firstLc = first.toLowerCase();
+    if (strictBlockSet.has(lastLc) || strictBlockSet.has(firstLc)) return null;
+    const normLast = tc(last);
+    const normFirst = tc(first);
+    if (!isPlausibleNameToken(normLast) || !isPlausibleNameToken(normFirst)) return null;
+    return { last: normLast, first: normFirst };
   }
 
   // 1) Labeled lines: “Patient Name:”, “Patient:”, “Name:”
@@ -86,8 +174,11 @@ export function detectName(fullText, linesLCInput) {
   }
 
   // 3) Fallback: scan first ~40 lines
-  const scan = origLines.slice(0, Math.min(40, origLines.length)).map(stripAfterDob);
-  for (const line of scan) {
+  const scanOrig = origLines.slice(0, Math.min(40, origLines.length));
+  for (let i = 0; i < scanOrig.length; i++) {
+    const originalLine = scanOrig[i] || '';
+    if (nonPersonLineRe && nonPersonLineRe.test(originalLine)) continue;
+    const line = stripAfterDob(originalLine);
     if (!looksLikeNameCandidate(line)) continue;
     let m = line.match(reLastFirst);
     if (m) {

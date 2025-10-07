@@ -6,8 +6,7 @@ import { detectCarrier } from './carriers.js';
 import { detectDates } from './date.js';
 import { detectDME } from './dme.js';
 import { PATTERNS } from './patterns.js';
-import fs from 'fs';
-import path from 'path';
+import { loadJsonConfig } from './utils/configLoader.js';
 
 export function runExtraction(ocrPages) {
   const { fullText, lines } = normalizePages(ocrPages);
@@ -195,21 +194,18 @@ export function runExtraction(ocrPages) {
 
   // Pre-authorization heuristic rules (carrier + CPT combos)
   try {
-    const preauthPath = path.resolve(process.cwd(), 'backend/rules/data/preauth_rules.json');
-    if (fs.existsSync(preauthPath) && result.procedure?.cpt && result.insurance.length) {
-      const rawRules = JSON.parse(fs.readFileSync(preauthPath, 'utf8'));
+    const rules = getPreauthRules();
+    if (rules.length && result.procedure?.cpt && result.insurance.length) {
       const primaryCarrier = (result.insurance[0].carrier || '').toLowerCase();
-      for (const rRule of rawRules) {
-        if ((rRule.carrier || '').toLowerCase() === primaryCarrier && String(rRule.cpt) === String(result.procedure.cpt)) {
-          // Add action & flag only once
+      for (const rRule of rules) {
+        if ((rRule?.carrier || '').toLowerCase() === primaryCarrier && String(rRule?.cpt) === String(result.procedure.cpt)) {
           const act = rRule.action || 'preauth_check';
           if (!result.alerts.actions.includes(act)) result.alerts.actions.push(act);
           if (!result.flags.reasons.includes('preauth_required_possible')) {
             result.flags.verifyManually = true;
             result.flags.reasons.push('preauth_required_possible');
           }
-          // Stash note for later authorization notes enrichment
-          result.documentMeta = { ...(result.documentMeta||{}), preauthHints: [...(result.documentMeta.preauthHints||[]), rRule.note].slice(0,8) };
+          result.documentMeta = { ...(result.documentMeta || {}), preauthHints: [...(result.documentMeta?.preauthHints || []), rRule.note].slice(0, 8) };
           trace.push({ rule: 'preauth_rule_hit', carrier: rRule.carrier, cpt: rRule.cpt, action: act });
         }
       }
@@ -1040,6 +1036,13 @@ export function runExtraction(ocrPages) {
   }
 
   return { result, trace };
+}
+
+function getPreauthRules() {
+  return loadJsonConfig('preauth_rules.json', {
+    transform: rules => (Array.isArray(rules) ? rules : []),
+    defaultFactory: () => []
+  });
 }
 
 // After extraction, enrich with normalized dates

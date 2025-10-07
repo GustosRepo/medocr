@@ -1,21 +1,44 @@
-import fs from 'fs';
-import path from 'path';
+import { loadJsonConfig } from './utils/configLoader.js';
 
-let catalog = [];
-function loadCpt() {
-  if (catalog.length) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/cpt_catalog.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const list = JSON.parse(raw);
-    catalog = list.map(item => ({ code: item.code, why: item.why, patterns: (item.patterns || []).map(p => new RegExp(p, 'i')) }));
-  } catch (e) {
-    catalog = [
-      { code: '95811', why: 'cpt_titration', patterns: [/\b95811\b/i, /titration/i] },
-      { code: '95806', why: 'cpt_hst', patterns: [/\b95806\b/i, /\bG0399\b/i, /home\s+(sleep\s+)?(apnea|study|test)/i, /\bHSAT\b/i, /\bHST\b/i] },
-      { code: '95810', why: 'cpt_diagnostic', patterns: [/\b95810\b/i, /polysomnography/i, /in[-\s]*lab\s*PSG/i, /sleep\s+study/i] }
-    ];
+const DEFAULT_CPT_RAW = [
+  { code: '95811', why: 'cpt_titration', patterns: ['\\b95811\\b', 'titration'] },
+  { code: '95806', why: 'cpt_hst', patterns: ['\\b95806\\b', '\\bG0399\\b', 'home\\s+(sleep\\s+)?(apnea|study|test)', '\\bHSAT\\b', '\\bHST\\b'] },
+  { code: '95810', why: 'cpt_diagnostic', patterns: ['\\b95810\\b', 'polysomnography', 'in[-\\s]*lab\\s*PSG', 'sleep\\s+study'] }
+];
+
+function buildCatalog(list) {
+  const compiled = [];
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      const code = String(item?.code || '').trim();
+      if (!code) continue;
+      const why = item?.why || 'pattern_match';
+      const patterns = Array.isArray(item?.patterns) ? item.patterns : [];
+      const regexes = [];
+      for (const pat of patterns) {
+        try {
+          regexes.push(new RegExp(pat, 'i'));
+        } catch {
+          // ignore invalid regex
+        }
+      }
+      if (!regexes.length) {
+        try { regexes.push(new RegExp(`\\b${code}\\b`, 'i')); } catch {}
+      }
+      if (regexes.length) compiled.push({ code, why, patterns: regexes });
+    }
   }
+  if (!compiled.length) {
+    return buildCatalog(DEFAULT_CPT_RAW);
+  }
+  return compiled;
+}
+
+function getCptCatalog() {
+  return loadJsonConfig('cpt_catalog.json', {
+    transform: buildCatalog,
+    defaultFactory: () => buildCatalog(DEFAULT_CPT_RAW)
+  });
 }
 
 const TITRATION_EVIDENCE = [
@@ -26,7 +49,7 @@ const TITRATION_EVIDENCE = [
 function hasTitrationEvidence(U) { return TITRATION_EVIDENCE.some(k => U.includes(k)); }
 
 export function detectCpt(fullText) {
-  loadCpt();
+  const catalog = getCptCatalog();
   const U = (fullText || '').toUpperCase();
   const candidates = [];
   const reasons = [];

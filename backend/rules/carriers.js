@@ -1,32 +1,50 @@
-import fs from 'fs';
-import path from 'path';
+import { loadJsonConfig } from './utils/configLoader.js';
 
-let carrierSyn = [];
-function loadCarriers() {
-  if (carrierSyn.length) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/carriers_catalog.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const list = JSON.parse(raw);
-    carrierSyn = list.map(item => {
-      const res = (item.patterns || []).map(pat => new RegExp(pat, 'i'));
-      return { name: item.name, status: item.status || 'unknown', reList: res };
-    });
-  } catch (e) {
-    carrierSyn = [];
+const DEFAULT_POLICIES = { accepted: [], doNotAccept: [], selfPay: [], sunsets: {}, contract_end: {}, auto_flag: [], planNotes: {} };
+
+function buildCarrierSynonyms(list) {
+  if (!Array.isArray(list)) return [];
+  const compiled = [];
+  for (const item of list) {
+    const name = String(item?.name || '').trim();
+    if (!name) continue;
+    const status = item?.status || 'unknown';
+    const res = [];
+    for (const pat of item?.patterns || []) {
+      try { res.push(new RegExp(pat, 'i')); } catch {}
+    }
+    if (!res.length) continue;
+    compiled.push({ name, status, reList: res });
   }
+  return compiled;
 }
 
-let policies = null;
-function loadPolicies() {
-  if (policies) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/insurance_policies.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    policies = JSON.parse(raw);
-  } catch (e) {
-    policies = { accepted: [], doNotAccept: [], selfPay: [], sunsets: {}, contract_end: {}, auto_flag: [], planNotes: {} };
+function buildPolicies(obj) {
+  const base = { ...DEFAULT_POLICIES };
+  if (obj && typeof obj === 'object') {
+    if (Array.isArray(obj.accepted)) base.accepted = obj.accepted;
+    if (Array.isArray(obj.doNotAccept)) base.doNotAccept = obj.doNotAccept;
+    if (Array.isArray(obj.selfPay)) base.selfPay = obj.selfPay;
+    if (obj.sunsets && typeof obj.sunsets === 'object') base.sunsets = obj.sunsets;
+    if (obj.contract_end && typeof obj.contract_end === 'object') base.contract_end = obj.contract_end;
+    if (Array.isArray(obj.auto_flag)) base.auto_flag = obj.auto_flag;
+    if (obj.planNotes && typeof obj.planNotes === 'object') base.planNotes = obj.planNotes;
   }
+  return base;
+}
+
+function getCarrierSynonyms() {
+  return loadJsonConfig('carriers_catalog.json', {
+    transform: buildCarrierSynonyms,
+    defaultFactory: () => []
+  });
+}
+
+function getPolicies() {
+  return loadJsonConfig('insurance_policies.json', {
+    transform: buildPolicies,
+    defaultFactory: () => ({ ...DEFAULT_POLICIES })
+  });
 }
 
 function norm(s) { return String(s || '').toUpperCase().replace(/\s+/g, ' ').trim(); }
@@ -40,8 +58,8 @@ function daysUntil(dateStr) {
 }
 
 export function detectCarrier(fullText, lines) {
-  loadCarriers();
-  loadPolicies();
+  const carrierSyn = getCarrierSynonyms();
+  const policies = getPolicies();
 
   const U = norm(fullText);
   const actions = new Set();

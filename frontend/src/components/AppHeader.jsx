@@ -1,22 +1,28 @@
 import React from 'react';
-import { Group, Title, ActionIcon, Text, Divider } from '@mantine/core';
-import { useMantineColorScheme } from '@mantine/core';
+import { Group, Title, ActionIcon, Text } from '../ui/primitives.jsx';
 import { IconSun, IconMoonStars } from '@tabler/icons-react';
+import { THEME_STORAGE_KEY, applyThemeClass } from '../ui/utils.js';
 
 export default function AppHeader() {
-  const { colorScheme, setColorScheme } = useMantineColorScheme();
-  const toggle = () => setColorScheme(colorScheme === 'dark' ? 'light' : 'dark');
+  const [dark, setDark] = React.useState(() => {
+    try { return (localStorage.getItem(THEME_STORAGE_KEY) || 'dark') === 'dark'; } catch { return true; }
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem(THEME_STORAGE_KEY, dark ? 'dark' : 'light'); } catch {}
+    applyThemeClass(dark ? 'dark' : 'light');
+  }, [dark]);
+  const toggle = () => setDark(d => !d);
   return (
-    <Group h="100%" px="md" justify="space-between">
-      <Group gap={6} wrap="nowrap">
-        <Title order={4} style={{ letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+    <Group px="md" justify="space-between" className="w-full py-3">
+      <Group gap={6} wrap="nowrap" className="items-center">
+        <Title order={4} className="tracking-tight text-slate-100">
           MED<span style={{ color: 'var(--brand-accent)' }}>OCR</span>
         </Title>
-        <Divider orientation="vertical" mx={4} style={{ borderColor: 'var(--surface-border-soft)' }} />
-        <Text size="xs" style={{ color: 'var(--text-muted)' }}>Referral Console</Text>
+        <div className="w-px h-4 bg-slate-600/50 mx-1" />
+        <Text size="xs" className="text-slate-400">Referral Console</Text>
       </Group>
-      <ActionIcon size="lg" variant="subtle" color="brand" onClick={toggle} aria-label="Toggle color scheme">
-        {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoonStars size={18} />}
+      <ActionIcon size="sm" onClick={toggle} aria-label="Toggle color scheme">
+        {dark ? <IconSun size={18} /> : <IconMoonStars size={18} />}
       </ActionIcon>
     </Group>
   );

@@ -1,124 +1,122 @@
 // Detect ICD-10 codes with label/context awareness and normalize variants (e.g., G47 33 → G47.33)
-import fs from 'fs';
-import path from 'path';
+import { loadJsonConfig } from './utils/configLoader.js';
 
-// Catalog-backed ICD detector with normalization and label-aware scanning.
-// Keeps the same external API: detectICDs(fullText, lines) -> { hit, values, why, details?, trace? }
+const DEFAULT_ICD_CATALOG = [
+  { code: 'G47.33', description: 'Obstructive sleep apnea (adult) (pediatric)' },
+  { code: 'R06.83', description: 'Snoring' },
+  { code: 'I10', description: 'Essential (primary) hypertension' },
+  { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications' },
+  { code: 'J45.909', description: 'Unspecified asthma, uncomplicated' }
+];
 
-let ALLOW = new Set(); // allowed codes (normalized)
-let DESC = new Map();  // code -> description
-let KW = [];           // [{ code, res: [RegExp], label? }]
-let ICD_ALERTS = new Map(); // code -> [actions]
-let ENRICH = null; // enrichment data
+const DEFAULT_ENRICHMENT = { chronic: [], severity: {}, notes: {} };
 
 function normalizeCode(raw) {
   if (!raw) return null;
   let s = String(raw).toUpperCase().trim();
-  s = s.replace(/\s+/g, '');       // remove spaces
-  s = s.replace(/-/g, '');          // remove dashes
-  // Insert dot when missing for patterns like G4733 -> G47.33, allow up to 4 post-dot chars
+  s = s.replace(/\s+/g, '');
+  s = s.replace(/-/g, '');
   if (!s.includes('.') && /^[A-TV-Z]\d{4,6}$/.test(s)) {
     s = s.slice(0, 3) + '.' + s.slice(3);
   }
   return s;
 }
 
-function loadCatalogOnce() {
-  if (ALLOW.size || DESC.size) return; // already loaded
-  try {
-    const catalogPath = path.resolve(process.cwd(), 'backend/rules/data/icd_catalog.json');
-    const raw = fs.readFileSync(catalogPath, 'utf8');
-    const list = JSON.parse(raw);
-    if (Array.isArray(list)) {
-      for (const item of list) {
-        const code = normalizeCode(item?.code);
-        if (!code) continue;
-        ALLOW.add(code);
-        DESC.set(code, item?.description || null);
-        // Accept dotless alias too (OCR sometimes returns without dot)
-        const alias = code.replace('.', '');
-        ALLOW.add(alias);
-        if (!DESC.has(alias)) DESC.set(alias, item?.description || null);
-      }
-    }
-  } catch (e) {
-    // Fallback to a small built-in allowlist if file missing
-    const fallback = [
-      { code: 'G47.33', description: 'Obstructive sleep apnea (adult) (pediatric)' },
-      { code: 'R06.83', description: 'Snoring' },
-      { code: 'I10', description: 'Essential (primary) hypertension' },
-      { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications' },
-      { code: 'J45.909', description: 'Unspecified asthma, uncomplicated' }
-    ];
-    for (const item of fallback) {
-      const code = normalizeCode(item.code);
-      ALLOW.add(code); DESC.set(code, item.description);
-      const alias = code.replace('.', '');
-      ALLOW.add(alias); if (!DESC.has(alias)) DESC.set(alias, item.description);
-    }
+function buildCatalog(list) {
+  const allow = new Set();
+  const desc = new Map();
+  const source = Array.isArray(list) ? list : DEFAULT_ICD_CATALOG;
+  for (const item of source) {
+    const code = normalizeCode(item?.code);
+    if (!code) continue;
+    allow.add(code);
+    desc.set(code, item?.description || null);
+    const alias = code.replace('.', '');
+    allow.add(alias);
+    if (!desc.has(alias)) desc.set(alias, item?.description || null);
   }
+  if (!allow.size) {
+    return buildCatalog(DEFAULT_ICD_CATALOG);
+  }
+  return { allow, desc };
 }
 
-function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-function loadKeywordsOnce() {
-  if (KW.length) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/icd_keywords.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const list = JSON.parse(raw);
-    if (Array.isArray(list)) {
-      KW = list.map(item => {
-        const code = item.code;
-        const res = (item.keywords || []).map(k => new RegExp(`\\b${escapeRe(k)}\\b`, 'i'));
-        return { code, res, label: item.label };
-      });
+function buildKeywords(list) {
+  if (!Array.isArray(list)) return [];
+  const result = [];
+  for (const item of list) {
+    const code = normalizeCode(item?.code);
+    if (!code) continue;
+    const keywords = Array.isArray(item?.keywords) ? item.keywords : [];
+    const res = [];
+    for (const kw of keywords) {
+      try { res.push(new RegExp(`\\b${String(kw).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')); } catch {}
     }
-  } catch (e) {
-    KW = [];
+    if (res.length) result.push({ code, res, label: item?.label });
   }
+  return result;
 }
 
-function loadAlertsOnce() {
-  if (ICD_ALERTS.size) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/icd_alerts.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const obj = JSON.parse(raw);
-    for (const [code, actions] of Object.entries(obj || {})) {
+function buildAlerts(obj) {
+  const map = new Map();
+  if (obj && typeof obj === 'object') {
+    for (const [code, actions] of Object.entries(obj)) {
       const norm = normalizeCode(code);
       if (!norm) continue;
-      ICD_ALERTS.set(norm, Array.isArray(actions) ? actions : []);
+      map.set(norm, Array.isArray(actions) ? actions : []);
     }
-  } catch (e) {
-    // optional
   }
+  return map;
 }
 
-function loadEnrichmentOnce() {
-  if (ENRICH) return;
-  try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/icd_enrichment.json');
-    ENRICH = JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch (e) {
-    ENRICH = { chronic: [], severity: {}, notes: {} };
-  }
+function buildEnrichment(obj) {
+  if (!obj || typeof obj !== 'object') return { ...DEFAULT_ENRICHMENT };
+  const chronic = Array.isArray(obj.chronic) ? obj.chronic.map(normalizeCode).filter(Boolean) : [];
+  const severity = obj.severity && typeof obj.severity === 'object' ? obj.severity : {};
+  const notes = obj.notes && typeof obj.notes === 'object' ? obj.notes : {};
+  return { chronic, severity, notes };
+}
+
+function getCatalog() {
+  return loadJsonConfig('icd_catalog.json', {
+    transform: buildCatalog,
+    defaultFactory: () => buildCatalog(DEFAULT_ICD_CATALOG)
+  });
+}
+
+function getKeywords() {
+  return loadJsonConfig('icd_keywords.json', {
+    transform: buildKeywords,
+    defaultFactory: () => []
+  });
+}
+
+function getAlerts() {
+  return loadJsonConfig('icd_alerts.json', {
+    transform: buildAlerts,
+    defaultFactory: () => new Map()
+  });
+}
+
+function getEnrichment() {
+  return loadJsonConfig('icd_enrichment.json', {
+    transform: buildEnrichment,
+    defaultFactory: () => ({ ...DEFAULT_ENRICHMENT })
+  });
 }
 
 export function detectICDs(fullText, _lines) {
-  loadCatalogOnce();
-  loadKeywordsOnce();
-  loadAlertsOnce();
-  loadEnrichmentOnce();
+  const catalog = getCatalog();
+  const allowSet = catalog?.allow || new Set();
+  const descMap = catalog?.desc || new Map();
+  const keywords = getKeywords();
+  const alertsMap = getAlerts();
+  const enrichment = getEnrichment();
 
   const lines = String(fullText || '').split(/\r?\n/);
 
-  // Candidate ICD pattern: Letter + 2 digits, optional dot/space/hyphen + up to 4 alphanum
   const codeRe = /\b([A-TV-Z][0-9]{2}(?:[.\-\s]?[0-9A-Z]{1,4})?)\b/g;
-
-  // Prefer labeled/diagnosis sections
   const labelRe = /(icd-?10|\bicd\b|\bdx\b|diagnos(?:is|es)|assessment|impression)\b/i;
-
-  // Avoid procedure/CPT lines when scanning broadly
   const skipRe = /(\bCPT\b|procedure|9580(?:6|10|11))/i;
 
   const seen = new Set();
@@ -129,21 +127,19 @@ export function detectICDs(fullText, _lines) {
   const consider = (raw, lineIdx, text, why) => {
     const norm = normalizeCode(raw);
     if (!norm) return;
-    // Accept if exact or dotless alias is allowed
-    const ok = ALLOW.has(norm) || ALLOW.has(norm.replace('.', ''));
-    if (!ok) return;
-    const desc = DESC.get(norm) || DESC.get(norm.replace('.', '')) || null;
+    const alias = norm.replace('.', '');
+    if (!allowSet.has(norm) && !allowSet.has(alias)) return;
+    const desc = descMap.get(norm) || descMap.get(alias) || null;
     if (!seen.has(norm)) {
       seen.add(norm);
-  details.push({ code: norm, description: desc });
-  // collect code-specific alerts
-  const alertList = ICD_ALERTS.get(norm) || ICD_ALERTS.get(norm.replace('.', '')) || [];
-  for (const a of alertList) actions.add(a);
+      details.push({ code: norm, description: desc });
+      const alertList = alertsMap.get(norm) || alertsMap.get(alias) || [];
+      for (const a of alertList) actions.add(a);
       trace.push({ line: lineIdx + 1, code: norm, why, text: String(text || '').trim().slice(0, 200) });
     }
   };
 
-  // Pass 1: labeled lines and up to 2 following lines
+  // Pass 1: labeled lines and neighbors
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] || '';
     if (!labelRe.test(line)) continue;
@@ -156,7 +152,6 @@ export function detectICDs(fullText, _lines) {
     }
   }
 
-  // Pass 2: global fallback scan
   if (seen.size === 0) {
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i] || '';
@@ -168,37 +163,30 @@ export function detectICDs(fullText, _lines) {
     }
   }
 
-  // Pass 3: keyword inference (label-aware first)
-  if (seen.size === 0 && KW.length) {
-    // Labeled lines and their neighbors
+  if (seen.size === 0 && keywords.length) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       if (!labelRe.test(line)) continue;
       for (let j = i; j <= Math.min(i + 2, lines.length - 1); j++) {
         const text = lines[j] || '';
         if (skipRe.test(text)) continue;
-        for (const item of KW) {
+        for (const item of keywords) {
           for (const re of item.res) {
-            if (re.test(text)) {
-              consider(item.code, j, text, 'infer_labeled');
-            }
+            if (re.test(text)) consider(item.code, j, text, 'infer_labeled');
           }
         }
       }
-      if (seen.size) break; // stop after first labeled block hits
+      if (seen.size) break;
     }
   }
 
-  // Pass 4: global keyword inference
-  if (seen.size === 0 && KW.length) {
+  if (seen.size === 0 && keywords.length) {
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i] || '';
       if (skipRe.test(text)) continue;
-      for (const item of KW) {
+      for (const item of keywords) {
         for (const re of item.res) {
-          if (re.test(text)) {
-            consider(item.code, i, text, 'infer_global');
-          }
+          if (re.test(text)) consider(item.code, i, text, 'infer_global');
         }
       }
     }
@@ -206,17 +194,17 @@ export function detectICDs(fullText, _lines) {
 
   if (seen.size === 0) return { hit: false, values: [], why: 'icd_none' };
 
-  // Apply enrichment (chronic flag, severity, note)
-  if (ENRICH && details.length) {
+  if (enrichment && details.length) {
     for (const d of details) {
       const base = d.code.replace('.', '');
       const normCode = d.code;
-      d.chronic = Array.isArray(ENRICH.chronic) && ENRICH.chronic.includes(normCode);
-      if (!d.chronic && Array.isArray(ENRICH.chronic)) d.chronic = ENRICH.chronic.includes(base);
-      d.severity = ENRICH.severity?.[normCode] || ENRICH.severity?.[base] || null;
-      d.note = ENRICH.notes?.[normCode] || ENRICH.notes?.[base] || null;
+      const chronicArr = Array.isArray(enrichment.chronic) ? enrichment.chronic : [];
+      d.chronic = chronicArr.includes(normCode) || chronicArr.includes(base);
+      d.severity = enrichment.severity?.[normCode] || enrichment.severity?.[base] || null;
+      d.note = enrichment.notes?.[normCode] || enrichment.notes?.[base] || null;
     }
   }
+
   return {
     hit: true,
     values: details.map(d => d.code),

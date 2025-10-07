@@ -1,0 +1,31 @@
+{
+  "addressStop": [
+    "road","rd","street","st","suite","ste","ave","avenue","blvd","drive","dr","court","ct","lane","ln",
+    "circle","cir","parkway","pkwy","apt","apartment","unit","floor","fl","highway","hwy","way","terrace","ter",
+    "place","pl","north","south","east","west","n","s","e","w","city","state","zip","address","phone","fax"
+  ],
+  "nonPersonTokensStrict": [
+    "fax","efax","referral","order","orders","summary","information","info","patient","provider","practice","clinic",
+    "medical","medicine","services","service","sleep","home","unknown","report","reports","signature","signed",
+    "physician","doctor","md","do","pa","np","rn","llc","inc","corp","company","group","center","centre",
+    "hospital","imaging","lab","laboratory","department","specialty","care","health","insurance","authorization",
+    "auth","request","requests","from","to","re","attention","attn","unit","units","npi","id","member","policy",
+    "patientinformation","patientinfo"
+  ],
+  "nonPersonTokensSoft": [
+    "support","team","office","front","forward","forwarding","documentation","documents","disease","review",
+    "reviews","system","sleepcenter","dme","durable","equipment","schedule","appointment","appt","visit",
+    "pages","page","cover","sheet","notification","language","preferred","reply","please","response",
+    "contact","urgent","message","notes","instructions"
+  ],
+  "nonPersonLineRegex": [
+    "fax","efax","referral","order","clinic","medical","services","sleep","home","information","summary",
+    "patient information","patient summary","provider","insurance","authorization","request","signature","physician",
+    "doctor","practice","department","center","hospital","imaging","lab","laboratory","durable","equipment","dme",
+    "specialty","pages","cover sheet","attention","attn","subject","re:","from:",
+    "preferred language","language preferred","reply please","see please","please reply","please see",
+    "language of correspondence","preferred contact","fax cover","patient instructions","patient notes",
+    "documentation supporting","sleep studies","home sleep","sleep study","study sleep","medical group",
+    "medical center","home care","care team","front desk","forwarding","forwarded","referred"
+  ]
+}
