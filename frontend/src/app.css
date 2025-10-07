@@ -1,21 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-accent: #4dabf7;
+  --brand-soft: rgba(77, 171, 247, 0.18);
+  --surface-border: rgba(148, 163, 184, 0.35);
+  --surface-border-soft: rgba(148, 163, 184, 0.18);
+  --surface-2: rgba(15, 23, 42, 0.75);
+  --text-muted: #94a3b8;
+  --text-primary: #e2e8f0;
+}
+
 html, body, #root { height: 100%; }
-body {
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  position: relative;
-  /* Background now driven by Mantine theme globalStyles in theme.js; remove light gradients that made UI overly white */
-  background: transparent;
-  color: var(--text-primary);
-}
-body:before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(45deg, rgba(23, 194, 181, 0.05) 0 2px, transparent 2px 6px);
-  mix-blend-mode: soft-light;
-  opacity: .08;
-}
+body { margin:0; -webkit-font-smoothing:antialiased; position:relative; background: #0d0f11; color: #e3edf5; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+body:before { content:''; position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(45deg, rgba(52,159,255,0.05) 0 2px, transparent 2px 6px); mix-blend-mode:soft-light; opacity:.07; }
 /* Keep a simple utility container for legacy route if needed */
 .container { max-width: 1200px; margin: 0 auto; padding: 0 16px; width: 100%; }
 
@@ -26,21 +25,17 @@ body:before {
 
 .page-title { font-size: 1.5rem; font-weight: 600; line-height: 1.25; letter-spacing: -0.3px; }
 
-.card-content-stack { display:flex; flex-direction:column; gap: var(--mantine-spacing-sm); line-height:1.5; }
+.card-content-stack { display:flex; flex-direction:column; gap: .75rem; line-height:1.5; }
 
 .section-heading { letter-spacing:.5px; font-size:.7rem; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom: .5rem; opacity:.85; }
 
-.stat-card { display:flex; flex-direction:column; gap: var(--mantine-spacing-xs); line-height:1.35; }
+.stat-card { display:flex; flex-direction:column; gap: .5rem; line-height:1.35; }
 
 .stat-label { letter-spacing:.45px; font-size:.68rem; font-weight:600; text-transform:uppercase; color:var(--text-muted); }
 
-.text-yellow { color: var(--mantine-color-yellow-5); }
+.text-yellow { color: #eab308; }
 
-/* Sidebar border enhancement */
-.mantine-AppShell-navbar { box-shadow: inset -1px 0 0 var(--surface-border-soft); transition: width .18s ease; }
-
-/* JSON input smoothing */
-.mantine-JsonInput-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; line-height:1.55; }
+/* Removed Mantine component class overrides */
 
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 10px; height:10px; }
@@ -53,3 +48,14 @@ body:before {
 ::-webkit-scrollbar-thumb:hover { background: rgba(52,159,255,0.28); }
 /* Firefox (limited) */
 * { scrollbar-color: rgba(52,159,255,0.28) transparent; scrollbar-width: thin; }
+
+/* Removed processed-doc Mantine specific overrides */
+
+/* Thin scrollbar util */
+.thin-scroll::-webkit-scrollbar { width:10px; height:10px; }
+.thin-scroll::-webkit-scrollbar-track { background:transparent; }
+.thin-scroll::-webkit-scrollbar-thumb { background: rgba(52,159,255,0.28); border-radius:10px; border:1px solid rgba(255,255,255,0.06); }
+.thin-scroll::-webkit-scrollbar-thumb:hover { background: rgba(52,159,255,0.4); }
+
+/* Reusable referral/card base styling */
+.ref-card { display:flex; flex-direction:column; gap:6px; overflow:visible; border:1px solid #1e2630; border-radius:10px; padding:12px; min-width:0; }

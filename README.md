@@ -7,6 +7,7 @@ Local, Electron-based referral processing for sleep study workflows. Processes s
 * Batch cover + problem log (JSON & PDF)
 * Actionable alerts (e.g. insurance issues, wrong test, missing chart notes)
 * Patient summary PDF (individual) with demographics, insurance IDs, procedure, provider, clinical, alerts, flags, confidence
+* Normalized versioned PDF model (stable contract for rendering & tests)
 
 Key files:
 - docs/api/contracts.md — REST API contracts (Node/Express)
@@ -87,7 +88,9 @@ Exposed at `result.qc` and influences `result.flags`:
 * `documentMeta.suggestedFilename`: `Last_First_DOB_IntakeDate.pdf` (sanitized) when patient fields are known.
 
 ### Individual Patient Summary PDF
-Endpoint: `GET /api/documents/:id/summary.pdf`
+Endpoints:
+* `GET /api/documents/:id/summary.pdf` (render from normalized `pdfModel`)
+* `POST /api/documents/bulk-export.zip` `{ ids: [..] }` returns a ZIP of multiple patient PDFs (stored/uncompressed minimal zip writer)
 Sections:
 1. Header (Patient, DOB, Referral Date)
 2. Demographics (phones, email, emergency contact when present)
@@ -99,6 +102,12 @@ Sections:
 8. Problem Flags (flags.reasons)
 9. Authorization Notes (derived from actions list)
 10. Confidence Level
+11. (Hidden markers for test automation: SECTION_* & REFERRAL_SUMMARY_MARKER, MULTIPAGE_PATIENT_PDF when applicable)
+
+Normalization Layer:
+* `result.pdfModel` produced at extraction time (lazy backfill if missing)
+* Captures: patient, insurance (primary/secondary), procedure, provider, clinical, infoAlerts, problemFlags, authorization, dataQuality, confidenceLevel, document meta, and `missing[]` list.
+* Versioned via `PDF_MODEL_VERSION` (see `backend/pdf/model.js`).
 
 ### Batch Reporting
 Batch groups by `documentMeta.intakeDate` (YYYY-MM-DD).
@@ -111,6 +120,7 @@ Endpoints:
 | Cover PDF | `GET /api/batch/:date/cover.pdf` |
 | Problem log JSON | `GET /api/batch/:date/problem-log.json` |
 | Problem log PDF | `GET /api/batch/:date/problem-log.pdf` |
+| Bulk export ZIP | `POST /api/documents/bulk-export.zip` |
 
 PDFs (pdfkit) include headers, optional logo (`BATCH_LOGO_PATH`), pagination, and simple tables.
 
@@ -124,8 +134,19 @@ PDFs (pdfkit) include headers, optional logo (`BATCH_LOGO_PATH`), pagination, an
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OCR_SERVICE_URL` | `http://127.0.0.1:8000` | OCR service base URL |
-| `OCR_TIMEOUT_MS` | `30000` | Abort OCR request after this many ms |
+| `OCR_SERVICE_URLS` | (unset) | Comma-separated OCR service URLs (round-robin load balancing); overrides `OCR_SERVICE_URL` |
+| `OCR_TIMEOUT_MS` | `420000` | Abort OCR request after this many ms (tune for large PDFs) |
+| `OCR_MAX_CONCURRENCY` | `4` | Max simultaneous OCR calls allowed by API queue |
+| `DOC_MAX_CONCURRENCY` | `2` | Max documents processed concurrently (uploads queued beyond this) |
+| `MEDOCR_RENDER_DPI` | `160` | Base DPI used by OCR service when rasterizing pages |
+| `MEDOCR_DOWNSAMPLE_PAGES` | `6` | Downsample pages when a PDF has ≥ this many pages |
+| `MEDOCR_DOWNSAMPLE_PAGES_HIGH` | `10` | Apply stronger downsampling when page count ≥ this threshold |
+| `MEDOCR_DOWNSAMPLE_SCALE` | `0.6` | Scaling factor for moderate downsampling |
+| `MEDOCR_DOWNSAMPLE_SCALE_HIGH` | `0.5` | Scaling factor for heavy downsampling |
 | `BATCH_LOGO_PATH` | (unset) | Optional PNG/JPG for PDF headers |
+| `METRICS_STORE_PATH` | data/metrics.json | Override metrics persistence path |
+
+Changes to the OCR tuning variables (`MEDOCR_*`) require restarting the OCR service process so the new settings take effect.
 
 ## Testing
 Run backend tests:
@@ -136,6 +157,7 @@ npm test
 
 What tests cover:
 * Health endpoint
+* pdfModel normalization + patient PDF marker assertions (see `tests/pdf_model.test.js`)
 * Document upload → OCR failure propagation (mock/no OCR) path
 * Status and result endpoints (error path)
 * Batch summary stub
@@ -169,9 +191,20 @@ Add new ICD keywords: edit `icd_keywords.json` (ensure codes exist in `icd_catal
 Add carrier policies (sunsets, notes, auto flags): `insurance_policies.json`.
 Add actions: ensure downstream UI / batch PDFs expect them; actions are surfaced verbatim.
 
+## Rules Editor UI
+Visit `/admin/rules` in the frontend to view and edit JSON catalogs under `backend/rules/data/`.
+
+Guidelines:
+* JSON must be valid before saving (the editor formats content automatically).
+* All rule catalogs hot-reload automatically; no backend restart is required after saving.
+* Keep edits in version control so you can revert if a change introduces regressions.
+
+## Admin Utilities
+* `POST /api/admin/documents/reset` clears the in-memory document cache so you can rerun the same PDFs during QA/load tests.
+
 ## Roadmap (Potential)
-* PDF snapshot tests (content assertions per section)
-* ZIP export of all batch PDFs
+* PDF snapshot tests (expanded assertions per section)
+* Compressed ZIP & streaming large batch exports
 * More robust secondary insurance parsing & prioritization
 * Multi-page patient detail sheets
 * Role-based auth & audit logging

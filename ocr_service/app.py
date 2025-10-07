@@ -1,8 +1,11 @@
+import os
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 from pdf2image import convert_from_bytes
 from typing import List, Tuple, Any
 import math
+import numpy as np
+from PIL import Image, ImageOps, ImageFilter
 
 try:
     # RapidOCR is lightweight and easy to install locally (onnxruntime backend)
@@ -12,7 +15,79 @@ except Exception:
     RapidOCR = None  # type: ignore
     _rapid_available = False
 
+try:
+    import cv2  # type: ignore
+    _cv_available = True
+except Exception:  # pragma: no cover
+    cv2 = None  # type: ignore
+    _cv_available = False
+
 app = FastAPI(title="MEDOCR OCR Service")
+
+
+def _deskew(gray: np.ndarray) -> np.ndarray:
+    if not _cv_available:
+        return gray
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    coords = np.column_stack(np.where(thresh < 255))
+    if coords.size == 0:
+        return gray
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+    if abs(angle) < 1.5 or abs(angle) > 25:
+        # Ignore tiny or extreme rotations to avoid warping forms
+        return gray
+    (h, w) = gray.shape[:2]
+    M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+    rotated = cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return rotated
+
+
+def preprocess_image(image: Image.Image) -> Image.Image:
+    """Normalize fax-quality scans for better OCR."""
+    mode = os.getenv("MEDOCR_PREPROCESS_MODE", "enhanced").lower()
+    if mode == "off":
+        return image.convert('RGB')
+
+    # Convert to grayscale and autocontrast regardless of backend.
+    gray = ImageOps.grayscale(image)
+    gray = ImageOps.autocontrast(gray, cutoff=2)
+    if mode == "basic" or not _cv_available:
+        # Conservative path: only light sharpening, no thresholding that could erase text.
+        enhanced = gray.filter(ImageFilter.UnsharpMask(radius=1.3, percent=120, threshold=5))
+        return enhanced.convert('RGB')
+
+    np_img = np.array(gray)
+    blurred = cv2.GaussianBlur(np_img, (5, 5), 0)
+    deskewed = _deskew(blurred)
+    # Adaptive threshold to enhance faded text / form boxes.
+    binary = cv2.adaptiveThreshold(
+        deskewed,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        21,
+        7,
+    )
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    refined = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    output = Image.fromarray(cv2.cvtColor(refined, cv2.COLOR_GRAY2RGB))
+
+    debug_dir = os.getenv("MEDOCR_PREPROC_DEBUG_DIR")
+    if debug_dir:
+        try:
+            os.makedirs(debug_dir, exist_ok=True)
+            # Use a simple counter based on env to avoid collisions
+            fname = os.path.join(debug_dir, f"preproc-{os.getpid()}-{id(image)}.png")
+            output.save(fname)
+        except Exception:
+            pass
+
+    return output
 
 @app.get("/health")
 def health():
@@ -35,7 +110,28 @@ async def ocr(file: UploadFile = File(...)):
     data = await file.read()
     try:
         # Render pages to images (PNG) for OCR
-        images: List = convert_from_bytes(data, dpi=220, fmt='png')
+        base_dpi = int(os.getenv('MEDOCR_RENDER_DPI', '160'))
+        images: List = convert_from_bytes(data, dpi=base_dpi, fmt='png')
+        page_count = len(images)
+
+        # Downsample large faxes to keep OCR throughput reasonable
+        if page_count:
+            threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES', '6'))
+            high_threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES_HIGH', '10'))
+            scale_primary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE', '0.6'))
+            scale_secondary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE_HIGH', '0.5'))
+            scale = None
+            if page_count >= high_threshold:
+                scale = scale_secondary
+            elif page_count >= threshold:
+                scale = scale_primary
+            if scale and scale < 1.0:
+                downsized = []
+                for img in images:
+                    w, h = img.size
+                    new_size = (max(1, int(w * scale)), max(1, int(h * scale)))
+                    downsized.append(img.resize(new_size, Image.BILINEAR))
+                images = downsized
     except Exception as e:
         return JSONResponse(status_code=400, content={
             "error": {"code": "pdf_render_failed", "message": str(e)}
@@ -52,10 +148,11 @@ async def ocr(file: UploadFile = File(...)):
         return [float(x_min), float(y_min), float(x_max - x_min), float(y_max - y_min)]
 
     for i, img in enumerate(images):
+        processed_img = preprocess_image(img)
         # RapidOCR returns: result, elapse = engine(img)
         # result is list of [text, score, boxPoints]
         try:
-            result, _ = engine(img)
+            result, _ = engine(processed_img)
         except Exception as e:
             result = []
         lines = []

@@ -1,0 +1,226 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Group, Stack, Text, Paper, ScrollArea, JsonInput, Title, Badge } from '../ui/primitives.jsx';
+
+const FILES_ENDPOINT = '/api/admin/rules/files';
+
+function formatTimestamp(ms) {
+  if (!ms && ms !== 0) return '—';
+  try {
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString();
+  } catch {
+    return '—';
+  }
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function RulesEditorPage() {
+  const [files, setFiles] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [filesError, setFilesError] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [content, setContent] = useState('');
+  const [original, setOriginal] = useState('');
+  const [fileMeta, setFileMeta] = useState(null);
+  const [loadingFile, setLoadingFile] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveMessage, setSaveMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const dirty = useMemo(() => content !== original, [content, original]);
+
+  useEffect(() => {
+    refreshList();
+  }, []);
+
+  function refreshList() {
+    setLoadingFiles(true);
+    setFilesError('');
+    fetch(FILES_ENDPOINT)
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load files (${res.status})`);
+        return res.json();
+      })
+      .then(data => setFiles(Array.isArray(data?.files) ? data.files : []))
+      .catch(err => setFilesError(err.message || String(err)))
+      .finally(() => setLoadingFiles(false));
+  }
+
+  function handleSelect(name) {
+    if (dirty) {
+      const confirmed = window.confirm('You have unsaved changes. Discard them?');
+      if (!confirmed) return;
+    }
+    setSelected(name);
+    setLoadingFile(true);
+    setSaveError('');
+    setSaveMessage('');
+    fetch(`${FILES_ENDPOINT}/${encodeURIComponent(name)}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load ${name} (${res.status})`);
+        return res.json();
+      })
+      .then(data => {
+        const body = typeof data?.content === 'string' ? data.content : '';
+        setContent(body);
+        setOriginal(body);
+        setFileMeta({ size: data?.size, mtimeMs: data?.mtimeMs, name: data?.name });
+      })
+      .catch(err => {
+        setContent('');
+        setOriginal('');
+        setFileMeta(null);
+        setSaveError(err.message || String(err));
+      })
+      .finally(() => setLoadingFile(false));
+  }
+
+  function handleSave() {
+    setSaveError('');
+    setSaveMessage('');
+    if (!selected) return;
+    try {
+      const parsed = JSON.parse(content);
+      setContent(JSON.stringify(parsed, null, 2));
+    } catch (e) {
+      setSaveError(`JSON parse error: ${e?.message || e}`);
+      return;
+    }
+    setSaving(true);
+    fetch(`${FILES_ENDPOINT}/${encodeURIComponent(selected)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    })
+      .then(res => {
+        if (!res.ok) return res.json().then(err => { throw new Error(err?.error?.message || `Save failed (${res.status})`); });
+        return res.json();
+      })
+      .then(data => {
+        setOriginal(content);
+        setSaveMessage('Saved successfully');
+        setFileMeta(meta => meta ? { ...meta, size: data?.size ?? meta.size, mtimeMs: data?.mtimeMs ?? meta.mtimeMs } : meta);
+        refreshList();
+      })
+      .catch(err => setSaveError(err.message || String(err)))
+      .finally(() => setSaving(false));
+  }
+
+  function handleFormat() {
+    try {
+      const parsed = JSON.parse(content);
+      setContent(JSON.stringify(parsed, null, 2));
+      setSaveError('');
+    } catch (e) {
+      setSaveError(`JSON parse error: ${e?.message || e}`);
+    }
+  }
+
+  function handleReset() {
+    setContent(original);
+    setSaveError('');
+    setSaveMessage('');
+  }
+
+  const filteredFiles = useMemo(() => {
+    if (!search) return files;
+    const q = search.toLowerCase();
+    return files.filter(f => f.name.toLowerCase().includes(q));
+  }, [files, search]);
+
+  return (
+    <Stack gap="lg" className="page-container">
+      <Stack gap="sm">
+        <Title order={2} className="page-title">Rules Editor</Title>
+        <Text size="sm" c="dimmed">
+          Edit the JSON catalogs that drive extraction logic. Changes are written directly to files under <code>backend/rules/data</code>{' '}.
+          All rule files hot-reload automatically, so updates take effect immediately. Always validate JSON before saving.
+        </Text>
+      </Stack>
+      <Group align="flex-start" gap="lg" wrap="wrap">
+        <Paper withBorder radius="md" className="w-full max-w-md" p="md">
+          <Stack gap="sm">
+            <input
+              placeholder="Search files"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+            <ScrollArea h={420} offsetScrollbars>
+              <Stack gap="xs">
+                {loadingFiles && <Text size="sm" c="dimmed">Loading files…</Text>}
+                {!loadingFiles && filesError && <Text size="sm" c="red">{filesError}</Text>}
+                {!loadingFiles && !filesError && filteredFiles.length === 0 && (
+                  <Text size="sm" c="dimmed">No matching files</Text>
+                )}
+                {filteredFiles.map(file => {
+                  const active = file.name === selected;
+                  return (
+                    <Button
+                      key={file.name}
+                      size="xs"
+                      variant={active ? 'filled' : 'subtle'}
+                      fullWidth
+                      onClick={() => handleSelect(file.name)}
+                    >
+                      <span className="flex-1 text-left truncate">{file.name}</span>
+                      <span className="text-[10px] text-slate-300 ml-2">{formatBytes(file.size)}</span>
+                    </Button>
+                  );
+                })}
+              </Stack>
+            </ScrollArea>
+          </Stack>
+        </Paper>
+        <Stack gap="md" className="flex-1 min-w-[360px]">
+          {loadingFile && <Paper withBorder radius="md" p="lg"><Text size="sm" c="dimmed">Loading file…</Text></Paper>}
+          {!loadingFile && !selected && (
+            <Paper withBorder radius="md" p="lg">
+              <Text size="sm" c="dimmed">Select a JSON file to view and edit its contents.</Text>
+            </Paper>
+          )}
+          {!loadingFile && selected && (
+            <Stack gap="sm">
+              <Group justify="space-between" align="center">
+                <Group gap="xs">
+                  <Title order={4}>{selected}</Title>
+                  {fileMeta && (
+                    <Badge size="xs" color="blue" variant="light">
+                      {formatBytes(fileMeta.size)} • {formatTimestamp(fileMeta.mtimeMs)}
+                    </Badge>
+                  )}
+                </Group>
+                <Group gap="xs">
+                  <Button size="xs" variant="subtle" onClick={handleFormat}>Format</Button>
+                  <Button size="xs" variant="subtle" onClick={handleReset} disabled={!dirty}>Reset</Button>
+                  <Button size="xs" onClick={handleSave} disabled={!dirty || saving} loading={saving}>
+                    Save
+                  </Button>
+                </Group>
+              </Group>
+              {saveError && <Text size="sm" c="red">{saveError}</Text>}
+              {saveMessage && <Text size="sm" c="green">{saveMessage}</Text>}
+              <JsonInput value={content} onChange={e => setContent(e.target.value)} readOnly={false} rows={28} />
+              <Paper withBorder radius="md" p="md" className="bg-slate-950/40 border-slate-800/70">
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed">Usage Tips:</Text>
+                  <Text size="xs" c="dimmed">• Ensure valid JSON before saving. Use the Format button to pretty-print.</Text>
+                  <Text size="xs" c="dimmed">• All rule catalogs hot-reload instantly; consider downloading a copy or relying on version control for rollbacks.</Text>
+                  <Text size="xs" c="dimmed">• If a change produces unexpected results, revert the JSON and save to restore prior behaviour.</Text>
+                </Stack>
+              </Paper>
+            </Stack>
+          )}
+        </Stack>
+      </Group>
+    </Stack>
+  );
+}

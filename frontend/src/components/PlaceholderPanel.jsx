@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, Text, Stack, Skeleton } from '@mantine/core';
+import { Paper, Text, Stack } from '../ui/primitives.jsx';
 
 export function PlaceholderPanel({ loading }) {
   if (loading) {
@@ -16,10 +16,10 @@ export function PlaceholderPanel({ loading }) {
         }}
       >
         <Stack gap="md">
-          <Skeleton height={16} width="40%" />
-          <Skeleton height={60} radius="md" />
-          <Skeleton height={120} radius="md" />
-          <Skeleton height={160} radius="md" />
+          <div className="h-4 w-2/5 bg-slate-800 rounded animate-pulse" />
+          <div className="h-14 w-full bg-slate-800 rounded-md animate-pulse" />
+          <div className="h-32 w-full bg-slate-800 rounded-md animate-pulse" />
+          <div className="h-40 w-full bg-slate-800 rounded-md animate-pulse" />
         </Stack>
       </Paper>
     );
@@ -38,8 +38,8 @@ export function PlaceholderPanel({ loading }) {
       }}
     >
       <Stack gap="xs" align="center">
-        <Text size="sm" c="dimmed">Upload a PDF or load a sample to see extracted referral data.</Text>
-        <Text size="xs" c="dimmed" style={{ opacity:.7 }}>Supported: PDF • Max 10MB</Text>
+  <Text size="sm" c="dimmed">Upload a PDF or load a sample to see extracted referral data.</Text>
+  <Text size="xs" c="dimmed" style={{ opacity:.7 }}>Supported: PDF • Max 10MB</Text>
       </Stack>
     </Paper>
   );

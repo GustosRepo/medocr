@@ -1,8 +1,14 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // (Mantine removed) Aliases cleaned; ensure no stale '@mantine/*' imports remain.
+    }
+  },
   server: {
     proxy: {
       '/api': {
@@ -11,4 +17,4 @@ export default defineConfig({
       }
     }
   }
-})
+});
