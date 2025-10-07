@@ -1,45 +1,63 @@
-import fs from 'fs';
-import path from 'path';
+import { loadJsonConfig } from './utils/configLoader.js';
 
-let vendorRe = null;
-let codeRe = null;
-let issueRes = [];
-function loadDme() {
-  if (vendorRe && codeRe && issueRes.length) return;
+const DEFAULT_DME = {
+  vendors: ['APRIA','LINCARE','ROTECH','ADAPT','PACIFIC','PRISM','PHILIPS','RESMED'],
+  codes: ['E0\d{3}','A703[4-9]'],
+  issues: [
+    'not\s*tolerating|cannot\s*tolerate|intoleran',
+    'pressure\s*too\s*high|high\s*pressure',
+    'pressure\s*too\s*low|low\s*pressure',
+    'mask\s*leak|air\s*leak',
+    'mask\s*uncomfortable|uncomfortable\s*mask',
+    'machine\s*broken|equipment\s*malfunction',
+    'lifetime\s*usage\s*limit|insurance\s*limit\s*reached',
+    'cpap\s*user|uses\s*cpap|on\s*cpap',
+    'cpap\s*compliant|cpap\s*non-?compliant',
+    'cpap\s*supplies|cpap\s*replacement',
+    'dme\s*provider|equipment\s*provider'
+  ]
+};
+
+function escapeUnion(values) {
+  return values.map(v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+}
+
+function buildDmeConfig(cfg) {
+  const vendors = Array.isArray(cfg?.vendors) && cfg.vendors.length ? cfg.vendors : DEFAULT_DME.vendors;
+  const codes = Array.isArray(cfg?.codes) && cfg.codes.length ? cfg.codes : DEFAULT_DME.codes;
+  const issues = Array.isArray(cfg?.issues) && cfg.issues.length ? cfg.issues : DEFAULT_DME.issues;
+  let vendorRe = null;
+  let codeRe = null;
   try {
-    const p = path.resolve(process.cwd(), 'backend/rules/data/dme_catalog.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const cfg = JSON.parse(raw);
-    const vendorUnion = (cfg.vendors || []).map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    vendorRe = new RegExp(`\\b(${vendorUnion})\\b`, 'i');
-    const codeUnion = (cfg.codes || []).join('|');
-    codeRe = new RegExp(`\\b(${codeUnion})\\b`, 'gi');
-    issueRes = [
-      /not\s*tolerating|cannot\s*tolerate|intoleran/i,
-      /pressure\s*too\s*high|high\s*pressure/i,
-      /pressure\s*too\s*low|low\s*pressure/i,
-      /mask\s*leak|air\s*leak/i,
-      /mask\s*uncomfortable|uncomfortable\s*mask/i,
-      /machine\s*broken|equipment\s*malfunction/i,
-      /lifetime\s*usage\s*limit|insurance\s*limit\s*reached/i,
-      /cpap\s*user|uses\s*cpap|on\s*cpap/i,
-      /cpap\s*compliant|cpap\s*non-?compliant/i,
-      /cpap\s*supplies|cpap\s*replacement/i,
-      /dme\s*provider|equipment\s*provider/i
-    ];
-  } catch (e) {
-    vendorRe = /\b(APRIA|LINCARE|ROTECH|ADAPT|PACIFIC|PRISM|PHILIPS|RESMED)\b/i;
-    codeRe = /\b(E0\d{3}|A703[4-9])\b/gi;
-    issueRes = [];
+    vendorRe = new RegExp(`\\b(${escapeUnion(vendors)})\\b`, 'i');
+  } catch {
+    vendorRe = null;
   }
+  try {
+    codeRe = new RegExp(`\\b(${codes.join('|')})\\b`, 'gi');
+  } catch {
+    codeRe = null;
+  }
+  const issueRes = [];
+  for (const pattern of issues) {
+    try { issueRes.push(new RegExp(pattern, 'i')); } catch {}
+  }
+  return { vendorRe, codeRe, issueRes };
+}
+
+function getDmeConfig() {
+  return loadJsonConfig('dme_catalog.json', {
+    transform: buildDmeConfig,
+    defaultFactory: () => buildDmeConfig(DEFAULT_DME)
+  });
 }
 
 export function detectDME(fullText) {
-  loadDme();
+  const { vendorRe, codeRe, issueRes } = getDmeConfig();
   const vendors = [];
-  const vm = fullText.match(vendorRe);
+  const vm = vendorRe ? fullText.match(vendorRe) : null;
   if (vm) vendors.push(vm[0]);
-  const codes = [...fullText.matchAll(codeRe)].map(m => m[0]);
+  const codes = codeRe ? [...fullText.matchAll(codeRe)].map(m => m[0]) : [];
   if (!vendors.length && !codes.length) return { hit: false, why: 'dme_none' };
   const issues = [];
   for (const re of issueRes) { if (re.test(fullText)) issues.push(re.source); }

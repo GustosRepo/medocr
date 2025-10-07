@@ -12,11 +12,14 @@ const state = {
     ocrFailures: 0,
     apiErrorsUser: 0,
     apiErrorsExternal: 0,
-    apiErrorsSystem: 0
+    apiErrorsSystem: 0,
+    pdfModelsBuilt: 0
   },
   extractionLatencyMs: [],
   confidenceSamples: [],
+  pdfModelMissingCounts: [],
   maxConcurrentOcr: 0,
+  ocrQueueSamples: [],
   lastFlush: 0
 };
 
@@ -46,8 +49,9 @@ function flush(force=false) {
   try {
     fs.writeFileSync(METRICS_PATH, JSON.stringify({
       counters: state.counters,
-      extractionLatencyMs: state.extractionLatencyMs.slice(-500),
-      confidenceSamples: state.confidenceSamples.slice(-500)
+  extractionLatencyMs: state.extractionLatencyMs.slice(-500),
+  confidenceSamples: state.confidenceSamples.slice(-500),
+  pdfModelMissingCounts: state.pdfModelMissingCounts.slice(-500)
     }, null, 2));
   } catch {
     // ignore
@@ -94,7 +98,19 @@ export function snapshot() {
   if (drift && Math.abs(drift.pct) > 0.10) {
     driftAlert = { level: 'warn', message: `Confidence drift ${(drift.pct*100).toFixed(1)}% vs baseline` };
   }
-  return { counters: state.counters, extractionLatency: dist, confidenceDrift: drift, confidenceDriftAlert: driftAlert, concurrency: { maxConcurrentOcr: state.maxConcurrentOcr } };
+  return { counters: state.counters, extractionLatency: dist, confidenceDrift: drift, confidenceDriftAlert: driftAlert, concurrency: { maxConcurrentOcr: state.maxConcurrentOcr }, ocrQueue: { samples: state.ocrQueueSamples.slice(-100) }, pdfModel: { missingCounts: state.pdfModelMissingCounts.slice(-50) } };
+}
+
+export function recordPdfModelStats(model) {
+  load();
+  try {
+    state.counters.pdfModelsBuilt += 1;
+    if (Array.isArray(model?.missing)) {
+      state.pdfModelMissingCounts.push(model.missing.length);
+      if (state.pdfModelMissingCounts.length > 500) state.pdfModelMissingCounts.splice(0, state.pdfModelMissingCounts.length - 500);
+    }
+  } catch {}
+  flush();
 }
 
 export function _resetForTests() {
@@ -119,5 +135,14 @@ export function recordConfidence(score) {
 export function recordConcurrency(current) {
   load();
   if (current > state.maxConcurrentOcr) state.maxConcurrentOcr = current;
+  flush();
+}
+
+export function recordOcrQueueDepth(depth) {
+  load();
+  if (typeof depth === 'number') {
+    state.ocrQueueSamples.push({ t: Date.now(), depth });
+    if (state.ocrQueueSamples.length > 500) state.ocrQueueSamples.splice(0, state.ocrQueueSamples.length - 500);
+  }
   flush();
 }

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
 import { mapAction, mapActions } from '../actionMap.js';
+import { buildPdfModel } from '../pdf/model.js';
 
 // Centralized typography + spacing constants for PDF layout consistency
 const PDF_STYLE = {
@@ -234,11 +235,12 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   doc.restore();
 
   const r = extractionResult || {};
-  const p = r.patient || {};
-  const insArr = Array.isArray(r.insurance) ? r.insurance : [];
-  const primaryIns = insArr[0] || {};
-  const secondaryIns = insArr[1] || null;
-  const clinical = r.clinical || {};
+  if (!r.pdfModel) { try { r.pdfModel = buildPdfModel(r); } catch {} }
+  const m = r.pdfModel || {};
+  const p = m.patient || {};
+  const primaryIns = m.insurance?.primary || {};
+  const secondaryIns = m.insurance?.secondary || null;
+  const clinical = m.clinical || {};
   const vitals = clinical.vitals || {};
 
   function section(title) {
@@ -250,7 +252,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   }
 
   // Header line
-  const hdr = `PATIENT: ${[p.last, p.first].filter(Boolean).join(', ') || 'Unknown'} | DOB: ${p.dob || '—'} | REFERRAL DATE: ${r.documentMeta?.intakeDate || '—'}`;
+  const hdr = `PATIENT: ${[p.last, p.first].filter(Boolean).join(', ') || 'Unknown'} | DOB: ${p.dob || '—'} | REFERRAL DATE: ${m.document?.intakeDate || r.documentMeta?.intakeDate || '—'}`;
   doc.fontSize(PDF_STYLE.sizes.meta).text(hdr, { continued: false });
   doc.moveDown(0.5);
 
@@ -260,7 +262,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   const phoneLine = p.phones && p.phones.length ? `Phone: ${p.phones[0]}${p.phones[1] ? ' / ' + p.phones[1] : ''}` : 'Phone: —';
   doc.text(phoneLine);
   doc.text(`Email: ${p.email || '—'}`);
-  if (p.emergencyContact) {
+  if (p.emergencyContact && p.emergencyContact.raw) {
     doc.text(`Emergency Contact: ${p.emergencyContact.raw}${p.emergencyContact.relationship ? ' (' + p.emergencyContact.relationship + ')' : ''}${p.emergencyContact.phone ? ' / ' + p.emergencyContact.phone : ''}`);
   }
 
@@ -275,7 +277,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   // Procedure
   section('PROCEDURE ORDERED');
   doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_PROCEDURE'); doc.restore();
-  const proc = r.procedure || {};
+  const proc = m.procedure || {};
   doc.text(`CPT Code: ${proc.cpt || '—'}`);
   doc.text(`Description: ${proc.description || '—'}`);
   if (Array.isArray(proc.providerNotes) && proc.providerNotes.length) {
@@ -285,7 +287,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   // Referring Physician
   section('REFERRING PHYSICIAN');
   doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_PROVIDER'); doc.restore();
-  const prov = r.provider || {};
+  const prov = m.provider || {};
   doc.text(`Name: ${prov.name || '—'}`);
   doc.text(`NPI: ${prov.npi || '—'}`);
   if (prov.practice) doc.text(`Practice: ${prov.practice}`);
@@ -297,7 +299,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   section('CLINICAL INFORMATION');
   doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_CLINICAL'); doc.restore();
   if (clinical.primaryDiagnosis) {
-    doc.text(`Primary Diagnosis: ${clinical.primaryDiagnosis.code}${clinical.primaryDiagnosis.description ? ' — ' + clinical.primaryDiagnosis.description : ''}`);
+    doc.text(`Primary Diagnosis: ${clinical.primaryDiagnosis.code || ''}${clinical.primaryDiagnosis.description ? ' — ' + clinical.primaryDiagnosis.description : ''}`);
   } else {
     doc.text('Primary Diagnosis: —');
   }
@@ -313,7 +315,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
 
   // Information Alerts
   section('INFORMATION ALERTS');
-  const info = r.infoAlerts || {};
+  const info = m.infoAlerts || {};
   doc.text(`PPE Requirements: ${info.ppeRequired === true ? 'Yes' : info.ppeRequired === false ? 'No' : '—'}`);
   if (Array.isArray(info.safety) && info.safety.length) doc.text('Safety Precautions: ' + info.safety.join(', '));
   if (Array.isArray(info.communication) && info.communication.length) doc.text('Communication Needs: ' + info.communication.join(', '));
@@ -321,15 +323,15 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
 
   // Problem Flags
   section('PROBLEM FLAGS');
-  const reasonsRaw = r.flags?.reasons || [];
-  const actions = r.alerts?.actions || [];
+  const reasonsRaw = m.problemFlags?.reasons || [];
+  const actions = m.problemFlags?.actions || [];
   const combined = [...reasonsRaw, ...actions];
   const pretty = combined.length ? mapActions(combined) : [];
   if (pretty.length) doc.text(pretty.join('; ')); else doc.text('None');
 
   // Authorization Notes (placeholder derived from actions)
   section('AUTHORIZATION NOTES');
-  const authNotes = r.documentMeta?.authorizationNotes || [];
+  const authNotes = m.authorization?.notes || [];
   if (authNotes.length) {
   for (const n of authNotes) { ensureSpace(2); doc.text('- ' + n); }
   // Also add a small hidden summary line for regex fallback
@@ -338,24 +340,23 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   doc.save(); doc.fillColor('#fff').fontSize(1).text(authNotes.map(a => a.toLowerCase()).join(' | ')); doc.restore();
   try { doc.info.AuthorizationNotes = authNotes.join(' || '); } catch (e) {}
   } else {
-    const acts = r.alerts?.actions || [];
+  const acts = m.problemFlags?.actions || [];
     if (acts.length) doc.text(acts.join(', ')); else doc.text('None');
   }
 
   // Data Quality Summary
   section('DATA QUALITY');
   doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_DATA_QUALITY'); doc.restore();
-  const qc = r.qc || {};
-  doc.text(`Confidence: ${r.confidence || '—'}`);
-  // Group QC inline for compactness
+  const qc = m.dataQuality?.qc || {};
+  doc.text(`Confidence: ${m.dataQuality?.confidence || '—'}`);
   doc.text(`QC: name=${qc.nameConsistency||'unk'} | dob=${qc.dateValidity||'unk'} | phone=${qc.phoneValidity||'unk'} | cpt=${qc.cptValid||'unk'}`);
-  if (Array.isArray(r.procedure?.cptCandidates) && r.procedure.cptCandidates.length > 1) {
-    doc.text('CPT Ambiguity: ' + r.procedure.cptCandidates.join(', '));
+  if (Array.isArray(m.procedure?.cptCandidates) && m.procedure.cptCandidates.length > 1) {
+    doc.text('CPT Ambiguity: ' + m.procedure.cptCandidates.join(', '));
   }
 
   // Confidence
   section('CONFIDENCE LEVEL');
-  doc.text(r.confidenceLevel || r.confidence || '—');
+  doc.text(m.confidenceLevel || m.dataQuality?.confidence || '—');
 
   // Hidden multi-page marker fallback (in case no break triggered ensureSpace after content growth)
   if (pageCount > 1 && !multiPageMarkerInserted) {

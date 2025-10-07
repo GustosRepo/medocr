@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Title, Stack, Group, Button, Badge, Text, SimpleGrid, ScrollArea, Code, Skeleton } from '@mantine/core';
+import { Title, Stack, Group, Button, Badge, Text, ScrollArea, Code } from '../ui/primitives.jsx';
 import Section from '../components/Section.jsx';
 import StatCard from '../components/StatCard.jsx';
 
@@ -43,22 +43,20 @@ export default function AnalyticsPage() {
 
       {!data && (
         <Stack gap="sm">
-          <SimpleGrid cols={{ base:2, sm:4 }} spacing="sm">
-            {Array.from({ length:6 }).map((_,i)=><Skeleton key={i} height={70} radius="md" />)}
-          </SimpleGrid>
-          <Skeleton height={140} radius="md" />
-          <Skeleton height={160} radius="md" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Array.from({ length:6 }).map((_,i)=><div key={i} className="h-20 rounded-md bg-slate-800 animate-pulse" />)}
+          </div>
+          <div className="h-36 rounded-md bg-slate-800 animate-pulse" />
+          <div className="h-40 rounded-md bg-slate-800 animate-pulse" />
         </Stack>
       )}
       {data && (
         <Stack gap="lg">
-          <SimpleGrid cols={{ base: 2, sm: 4, lg: 6 }} spacing="md">
-            {Object.entries(metrics).map(([k,v]) => (
-              <StatCard key={k} label={k} value={v} />
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+            {Object.entries(metrics).map(([k,v]) => (<StatCard key={k} label={k} value={v} />))}
             {latency?.count && <StatCard label="Latency p50" value={`${latency.p50}ms`} />}
             {latency?.count && <StatCard label="Latency p95" value={`${latency.p95}ms`} />}
-          </SimpleGrid>
+          </div>
           <Section title="Confidence Drift">
             {data.confidenceDrift ? (
               <Group gap="md" wrap="wrap">
@@ -73,7 +71,7 @@ export default function AnalyticsPage() {
               <Stack gap="xs">
                 {data.feedback.topPaths.map((p,i)=>(
                   <Group key={i} gap="xs">
-                    <Code fz="xs">{p[0]}</Code>
+                    <Code size="xs">{p[0]}</Code>
                     <Badge variant="light" size="sm">{p[1]}</Badge>
                   </Group>
                 ))}
@@ -86,7 +84,7 @@ export default function AnalyticsPage() {
                 <Stack gap="xs">
                   {data.snapshots.recent.map((s,i)=>(
                     <Group key={i} gap="sm" wrap="nowrap">
-                      <Code fz="xs">{s.docId}</Code>
+                      <Code size="xs">{s.docId}</Code>
                       <Text size="sm" style={{ flex: 1 }}>{s.cpt}</Text>
                       <Badge size="sm" color={s.ambiguous ? 'yellow' : 'green'}>{s.confidence?.level || s.confidence || ''}</Badge>
                     </Group>

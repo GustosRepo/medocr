@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Button, ScrollArea, JsonInput, Text, Group } from '@mantine/core';
+import { Button, ScrollArea, JsonInput, Text, Group } from '../ui/primitives.jsx';
 
 /* Generic collapsible JSON viewer; pass object or stringified JSON */
 export default function CollapsibleJson({ value, maxHeight=360, initiallyOpen=false }) {

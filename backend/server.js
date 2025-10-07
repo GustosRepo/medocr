@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { performance } from 'perf_hooks';
-import { incCounter, recordLatency, snapshot as metricsSnapshot, recordConfidence, recordConcurrency } from './metrics/store.js';
+import { incCounter, recordLatency, snapshot as metricsSnapshot, recordConfidence, recordConcurrency, recordOcrQueueDepth } from './metrics/store.js';
 import crypto from 'crypto';
 import { addSnapshot, ambiguousCptRate, recentSnapshots } from './snapshot/store.js';
 import { fileURLToPath } from 'url';
@@ -14,6 +14,7 @@ import { runExtraction, runExtractionWithDates } from './rules/index.js';
 import { log, withReq, classifyError } from './logging/logger.js';
 import { toFhirBundle } from './fhir/export.js';
 import { listBatchDates, collectBatchDocs as collectDocsSvc, summarizeActions as summarizeActionsSvc, buildCoverJson, buildProblemLogJson, renderCoverPdf, renderProblemLogPdf, renderPatientPdf } from './batch/report.js';
+import { buildPdfModel } from './pdf/model.js';
 import { mapAction, mapActions } from './actionMap.js';
 import { addFeedback, listFeedback, stats as feedbackStats } from './feedback/store.js';
 import { buildCoverage } from './coverage.js';
@@ -59,7 +60,51 @@ const uploadDir = path.join(process.cwd(), 'data', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir });
 const port = process.env.PORT || 4387;
-const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://127.0.0.1:8000';
+const ocrServiceUrls = (() => {
+  const multi = (process.env.OCR_SERVICE_URLS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (multi.length) return multi;
+  const single = process.env.OCR_SERVICE_URL || 'http://127.0.0.1:8000';
+  return [single];
+})();
+let ocrServiceUrlIndex = 0;
+function nextOcrServiceUrl() {
+  if (!ocrServiceUrls.length) return 'http://127.0.0.1:8000';
+  const url = ocrServiceUrls[ocrServiceUrlIndex % ocrServiceUrls.length];
+  ocrServiceUrlIndex = (ocrServiceUrlIndex + 1) % ocrServiceUrls.length;
+  return url;
+}
+const rulesDataDir = path.join(__dirname, 'rules', 'data');
+
+function listRuleFilesMeta() {
+  try {
+    const entries = fs.readdirSync(rulesDataDir).filter(name => name.endsWith('.json'));
+    return entries.map(name => {
+      const abs = path.join(rulesDataDir, name);
+      const stat = fs.statSync(abs);
+      return {
+        name,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (e) {
+    log('error', 'rules_dir_read_failed', { err: String(e?.message || e) });
+    return [];
+  }
+}
+
+function resolveRuleFileName(rawName) {
+  if (typeof rawName !== 'string') return null;
+  const name = rawName.trim();
+  if (!name || !/^[A-Za-z0-9_.\-]+\.json$/.test(name)) return null;
+  const abs = path.join(rulesDataDir, name);
+  if (!abs.startsWith(rulesDataDir)) return null;
+  if (!fs.existsSync(abs)) return null;
+  return abs;
+}
 // Concurrency guard for OCR calls
 const OCR_MAX_CONCURRENCY = parseInt(process.env.OCR_MAX_CONCURRENCY || '4', 10);
 let ocrInFlight = 0;
@@ -77,18 +122,85 @@ function scheduleOcr(fn) {
           const next = ocrQueue.shift();
           setTimeout(next,0);
         }
+    recordOcrQueueDepth(ocrQueue.length);
       }
     };
   if (ocrInFlight < OCR_MAX_CONCURRENCY) { recordConcurrency(ocrInFlight+1); task(); } else { ocrQueue.push(() => { recordConcurrency(ocrInFlight+1); task(); }); }
+  recordOcrQueueDepth(ocrQueue.length);
   });
+}
+
+// Top-level document processing queue so massive batches don't saturate OCR all at once
+const DOC_MAX_CONCURRENCY = parseInt(process.env.DOC_MAX_CONCURRENCY || '5', 10);
+let docInFlight = 0;
+const docQueue = [];
+const docInQueue = new Map(); // id -> { promise, resolve, reject }
+
+function scheduleDocumentProcessing(id) {
+  if (docInQueue.has(id)) {
+    return docInQueue.get(id).promise;
+  }
+
+  let resolvePromise;
+  let rejectPromise;
+  const promise = new Promise((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  docInQueue.set(id, { promise, resolve: resolvePromise, reject: rejectPromise });
+
+  const runTask = () => {
+    docInFlight++;
+    processDocument(id)
+      .then(result => docInQueue.get(id)?.resolve(result))
+      .catch(err => docInQueue.get(id)?.reject(err))
+      .finally(() => {
+        docInFlight = Math.max(0, docInFlight - 1);
+        docInQueue.delete(id);
+        if (docQueue.length) {
+          const next = docQueue.shift();
+          setTimeout(next, 0);
+        }
+      });
+  };
+
+  if (docInFlight < DOC_MAX_CONCURRENCY) {
+    runTask();
+  } else {
+    docQueue.push(runTask);
+  }
+
+  return promise;
 }
 
 // In-memory doc store for dev
 const docs = new Map(); // id -> { filePath, status, result, error }
 
-// In-memory checklist overrides: id -> { note, category, updatedAt }
-// category: 'ready' | 'attention'
-const checklistOverrides = new Map();
+// Checklist overrides persistent store
+import fsPromises from 'fs/promises';
+const CHECKLIST_PATH = path.join(process.cwd(), 'data', 'checklist-overrides.json');
+let checklistOverrides = new Map();
+function loadChecklistOverrides() {
+  try {
+    if (fs.existsSync(CHECKLIST_PATH)) {
+      const json = JSON.parse(fs.readFileSync(CHECKLIST_PATH,'utf8'));
+      checklistOverrides = new Map(Object.entries(json));
+    }
+  } catch {}
+}
+let _clFlushTimer = null;
+function flushChecklistOverrides() {
+  if (_clFlushTimer) return;
+  _clFlushTimer = setTimeout(async () => {
+    _clFlushTimer = null;
+    try {
+      const obj = Object.fromEntries(checklistOverrides.entries());
+      await fsPromises.mkdir(path.dirname(CHECKLIST_PATH), { recursive: true });
+      await fsPromises.writeFile(CHECKLIST_PATH, JSON.stringify(obj, null, 2));
+    } catch {}
+  }, 500);
+}
+loadChecklistOverrides();
 
 // List recent documents (simple in-memory enumeration) for checklist dashboard
 app.get('/api/documents', (req, res) => {
@@ -204,6 +316,7 @@ app.patch('/api/checklist/:id', (req, res) => {
   if (archived !== undefined) updated.archived = !!archived;
   updated.updatedAt = new Date().toISOString();
   checklistOverrides.set(id, updated);
+  try { flushChecklistOverrides(); } catch {}
   res.json({ ok: true, id, override: updated });
 });
 
@@ -253,12 +366,13 @@ app.post('/api/documents', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: { code: 'read_error', message: 'Could not read uploaded file' } });
     }
   }
-  const id = `doc_${Date.now()}`;
+  // Use timestamp + short random suffix to avoid collisions during rapid batch uploads
+  const id = `doc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
   const filePath = req.file?.path;
   const originalName = req.file?.originalname;
   docs.set(id, { filePath, originalName, status: 'queued', result: null, error: null });
   // Kick off async processing
-  setTimeout(() => processDocument(id).catch(() => {}), 0);
+  scheduleDocumentProcessing(id).catch(() => {});
   req.logger?.info('doc_queued', { id });
   res.status(202).json({ id, status: 'queued' });
 });
@@ -269,7 +383,17 @@ app.get('/api/documents/:id/status', (req, res) => {
   const entry = docs.get(id);
   if (!entry) { req.logger?.warn('status_missing_doc', { id }); return res.json({ id, status: 'done', progress: 1, flags: { verifyManually: false, reasons: [] }, error: null }); }
   const status = entry.status;
-  res.json({ id, status, progress: status === 'done' ? 1 : status === 'processing' ? 0.5 : 0.1, flags: entry.result?.flags || { verifyManually: false, reasons: [] }, error: entry.error });
+  let errorCode = null; let suggestions = undefined;
+  if (status === 'error' && entry.error) {
+    const err = entry.error.toLowerCase();
+    if (err.includes('timeout')) { errorCode = 'ocr_timeout'; suggestions = ['Split large PDF', 'Reduce resolution / scan DPI', 'Retry at lower load']; }
+    else if (err.includes('exceeds max pages')) { errorCode = 'too_many_pages'; suggestions = ['Remove filler pages', 'Split into smaller documents']; }
+    else if (err.includes('invalid pdf')) { errorCode = 'invalid_pdf'; suggestions = ['Re-export original file as PDF', 'Ensure file not encrypted/password protected']; }
+    else if (err.includes('service error')) { errorCode = 'ocr_service_error'; suggestions = ['Check OCR service health / logs', 'Restart OCR service']; }
+    else if (err.includes('input file not found')) { errorCode = 'file_missing'; suggestions = ['Re-upload the document']; }
+    else { errorCode = 'ocr_failed'; }
+  }
+  res.json({ id, status, progress: status === 'done' ? 1 : status === 'processing' ? 0.5 : 0.1, flags: entry.result?.flags || { verifyManually: false, reasons: [] }, error: entry.error, errorCode, suggestions });
 });
 
 // Result: returns extraction result or error if processing failed/unavailable
@@ -292,7 +416,7 @@ app.get('/api/documents/:id/result', (req, res) => {
     return res.json(entry.result);
   }
   // If not yet processed, attempt now (sync)
-  processDocument(id).then(() => {
+  scheduleDocumentProcessing(id).then(() => {
     const after = docs.get(id);
     if (after.status === 'error') {
   res.status(502).json({ error: { code: 'ocr_failed', category: classifyError('ocr_failed'), message: after.error || 'processing error' } });
@@ -352,7 +476,8 @@ if (IS_TEST) {
   app.post('/api/test/inject', (req, res) => {
     const { id, result } = req.body || {};
     if (!id || !result) return res.status(400).json({ error: { code: 'bad_request', message: 'id and result required' } });
-    docs.set(id, { filePath: null, originalName: result?.documentMeta?.filename || 'injected.pdf', status: 'done', result, error: null, _trace: [] });
+  try { if (!result.pdfModel) result.pdfModel = buildPdfModel(result); } catch {}
+  docs.set(id, { filePath: null, originalName: result?.documentMeta?.filename || 'injected.pdf', status: 'done', result, error: null, _trace: [] });
     try { addSnapshot(id, result); } catch {}
     if (result?.confidenceDetail?.score != null) recordConfidence(Number(result.confidenceDetail.score));
     req.logger?.info('doc_injected', { id });
@@ -483,6 +608,64 @@ app.get('/api/feedback/stats', (_req, res) => {
   res.json(feedbackStats());
 });
 
+app.get('/api/admin/rules/files', (_req, res) => {
+  const files = listRuleFilesMeta();
+  res.json({ files });
+});
+
+app.get('/api/admin/rules/files/:name', async (req, res) => {
+  const abs = resolveRuleFileName(req.params.name);
+  if (!abs) return res.status(404).json({ error: { code: 'not_found', message: 'rules file not found' } });
+  try {
+    const raw = await fsPromises.readFile(abs, 'utf8');
+    let normalized = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      normalized = JSON.stringify(parsed, null, 2);
+    } catch {
+      // keep raw (may be invalid JSON)
+    }
+    const stat = await fsPromises.stat(abs);
+    res.json({
+      name: path.basename(abs),
+      content: normalized,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs
+    });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'read_failed', message: String(e?.message || e) } });
+  }
+});
+
+app.put('/api/admin/rules/files/:name', async (req, res) => {
+  const abs = resolveRuleFileName(req.params.name);
+  if (!abs) return res.status(404).json({ error: { code: 'not_found', message: 'rules file not found' } });
+  const content = req.body?.content;
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: { code: 'invalid_payload', message: 'content string required' } });
+  }
+  let normalized;
+  try {
+    const parsed = JSON.parse(content);
+    normalized = JSON.stringify(parsed, null, 2) + '\n';
+  } catch (e) {
+    return res.status(400).json({ error: { code: 'invalid_json', message: `JSON parse error: ${e?.message || e}` } });
+  }
+  try {
+    await fsPromises.writeFile(abs, normalized, 'utf8');
+    const stat = await fsPromises.stat(abs);
+    res.json({ ok: true, size: stat.size, mtimeMs: stat.mtimeMs });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'write_failed', message: String(e?.message || e) } });
+  }
+});
+
+app.post('/api/admin/documents/reset', (_req, res) => {
+  docs.clear();
+  log('info', 'admin_docs_reset');
+  res.json({ ok: true });
+});
+
 // Analytics aggregation endpoint
 app.get('/api/analytics', (_req, res) => {
   const metrics = metricsSnapshot();
@@ -505,6 +688,8 @@ async function processDocument(id) {
   const entry = docs.get(id);
   if (!entry) return;
   const t0 = performance.now();
+  const ocrTimeoutMsConfig = parseInt(process.env.OCR_TIMEOUT_MS || '60000', 10);
+  let lastQueueWaitMs = 0;
   if (!entry.filePath || !fs.existsSync(entry.filePath)) {
   // No file available -> mark error (do not fallback to sample)
   entry.status = 'error';
@@ -525,14 +710,26 @@ async function processDocument(id) {
   const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
   const blob = new Blob([fileBuffer], { type: 'application/pdf' });
   form.append('file', blob, path.basename(entry.filePath));
-    // Abort if OCR takes too long
-    const controller = new AbortController();
-    const ocrTimeoutMs = parseInt(process.env.OCR_TIMEOUT_MS || '30000', 10);
-    const timeoutHandle = setTimeout(() => controller.abort(), ocrTimeoutMs);
-    let resp;
-    try {
-      resp = await scheduleOcr(() => fetch(`${ocrServiceUrl}/ocr`, { method: 'POST', body: form, signal: controller.signal }));
-    } finally { clearTimeout(timeoutHandle); }
+    // NOTE: Previously the AbortController timer started BEFORE entering the OCR concurrency slot.
+    // If the queue wait exceeded the timeout, a doc could "timeout" without the OCR ever starting.
+    // Fix: start timeout only once a concurrency slot is acquired (inside scheduleOcr closure).
+    const queueEnqueuedAt = performance.now();
+    const resp = await scheduleOcr(() => {
+      const queueWait = performance.now() - queueEnqueuedAt;
+      lastQueueWaitMs = queueWait;
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), ocrTimeoutMsConfig);
+      const serviceUrl = nextOcrServiceUrl();
+      log('debug','ocr_start',{ id, queueWaitMs: Math.round(queueWait), timeoutMs: ocrTimeoutMsConfig, serviceUrl });
+      try { incCounter('ocrQueueWaitSamples'); } catch {}
+      try {
+        // Simple bucketing of queue wait into latency histogram style counters
+        const bucket = queueWait < 1000 ? 'lt1s' : queueWait < 5000 ? 'lt5s' : queueWait < 15000 ? 'lt15s' : 'ge15s';
+        incCounter(`ocrQueueWait_${bucket}`);
+      } catch {}
+      return fetch(`${serviceUrl.replace(/\/$/, '')}/ocr`, { method: 'POST', body: form, signal: controller.signal })
+        .finally(() => clearTimeout(timeoutHandle));
+    });
     if (!resp.ok) throw new Error(`OCR service error: ${resp.status}`);
   const ocrJson = await resp.json();
   const ocrPages = Array.isArray(ocrJson.ocr) ? ocrJson.ocr : [];
@@ -561,6 +758,13 @@ async function processDocument(id) {
     fileHash
       }
     };
+  // Build pdfModel defensively; recordPdfModelStats may be absent in some builds
+  try {
+    result.pdfModel = buildPdfModel(result);
+    if (result.pdfModel && typeof recordPdfModelStats === 'function') {
+      recordPdfModelStats(result.pdfModel);
+    }
+  } catch (e) { log('warn','pdf_model_build_failed',{ id, err: String(e.message||e) }); }
   // Enrichment: confidence level alias & provider heuristics & emergency contact suppression
   try {
     if (result?.confidenceDetail?.score != null && !result.confidenceLevel) {
@@ -601,7 +805,13 @@ async function processDocument(id) {
   entry.result = null;
   entry.status = 'error';
   const msg = String(e.message || e);
-  entry.error = msg.includes('aborted') ? `OCR timeout after ${process.env.OCR_TIMEOUT_MS || 30000}ms` : msg;
+  if (msg.includes('aborted')) {
+    const durationMs = performance.now() - t0;
+    const queueSegment = Number.isFinite(lastQueueWaitMs) ? `${Math.round(lastQueueWaitMs)}ms queue wait` : 'queue wait unknown';
+    entry.error = `OCR timeout after ${ocrTimeoutMsConfig}ms (${queueSegment}, total elapsed ${Math.round(durationMs)}ms)`;
+  } else {
+    entry.error = msg;
+  }
   docs.set(id, entry);
   log('error','doc_process_failed',{ id, err: entry.error });
   incCounter('docsErrored');
@@ -613,6 +823,114 @@ async function processDocument(id) {
 // Metrics endpoint
 app.get('/api/metrics', (_req, res) => {
   res.json(metricsSnapshot());
+});
+
+// Backfill pdfModel for legacy documents
+app.post('/api/admin/backfill-pdf-models', (req, res) => {
+  let built = 0;
+  for (const [id, entry] of docs.entries()) {
+    if (entry.status === 'done' && entry.result && !entry.result.pdfModel) {
+      try {
+        entry.result.pdfModel = buildPdfModel(entry.result);
+        if (entry.result.pdfModel && typeof recordPdfModelStats === 'function') {
+          recordPdfModelStats(entry.result.pdfModel);
+        }
+        if (entry.result.pdfModel) built++;
+      } catch {}
+    }
+  }
+  res.json({ ok: true, built });
+});
+
+// Bulk export (zip) of multiple referral PDFs
+import { PassThrough } from 'stream';
+app.post('/api/documents/bulk-export.zip', express.json({limit:'256kb'}), async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0,200) : [];
+    if (!ids.length) return res.status(400).json({ error: { code: 'bad_request', message: 'ids required' } });
+    const files = [];
+    for (const id of ids) {
+      const entry = docs.get(id);
+      if (!entry || entry.status !== 'done' || !entry.result) continue;
+      const chunks = [];
+      await new Promise((resolve) => {
+        const sink = new PassThrough();
+        sink.on('data', c=>chunks.push(c));
+        sink.on('end', resolve);
+        const fakeRes = new PassThrough();
+        fakeRes.setHeader = () => {};
+        fakeRes.write = (c) => sink.write(c);
+        fakeRes.end = (c) => { if (c) sink.write(c); sink.end(); };
+        renderPatientPdf(fakeRes, entry.result, process.env.BATCH_LOGO_PATH);
+      });
+      const pdf = Buffer.concat(chunks);
+      let fname = 'Referral_Summary.pdf';
+      try {
+        const r = entry.result; const p = r.patient||{};
+        const safe = (s)=>String(s||'').trim().replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+        const parts = [safe(p.last), safe(p.first), safe(p.dob), safe(r.documentMeta?.intakeDate)].filter(Boolean);
+        if (parts.length>=2) fname = parts.join('_') + '.pdf';
+      } catch {}
+      files.push({ name: fname, data: pdf });
+    }
+    if (!files.length) return res.status(404).json({ error: { code: 'none_ready', message: 'no documents available' } });
+    let offset = 0; const central = []; const parts = [];
+    const DOS_DATE = 0x4B21; const DOS_TIME = 0x3A10;
+    for (const f of files) {
+      const nameBuf = Buffer.from(f.name,'utf8');
+      const header = Buffer.alloc(30);
+      header.writeUInt32LE(0x04034b50,0);
+      header.writeUInt16LE(20,4);
+      header.writeUInt16LE(0,6);
+      header.writeUInt16LE(0,8);
+      header.writeUInt16LE(DOS_TIME,10);
+      header.writeUInt16LE(DOS_DATE,12);
+      const crcVal = f.data.reduce((a,b)=>(a + b)>>>0,0)>>>0;
+      header.writeUInt32LE(crcVal,14);
+      header.writeUInt32LE(f.data.length,18);
+      header.writeUInt32LE(f.data.length,22);
+      header.writeUInt16LE(nameBuf.length,26);
+      header.writeUInt16LE(0,28);
+      parts.push(header, nameBuf, f.data);
+      const cent = Buffer.alloc(46);
+      cent.writeUInt32LE(0x02014b50,0);
+      cent.writeUInt16LE(20,4);
+      cent.writeUInt16LE(20,6);
+      cent.writeUInt16LE(0,8);
+      cent.writeUInt16LE(0,10);
+      cent.writeUInt16LE(0,12);
+      cent.writeUInt16LE(DOS_TIME,14);
+      cent.writeUInt16LE(DOS_DATE,16);
+      cent.writeUInt32LE(crcVal,18);
+      cent.writeUInt32LE(f.data.length,22);
+      cent.writeUInt32LE(f.data.length,26);
+      cent.writeUInt16LE(nameBuf.length,30);
+      cent.writeUInt16LE(0,32);
+      cent.writeUInt16LE(0,34);
+      cent.writeUInt16LE(0,36);
+      cent.writeUInt16LE(0,38);
+      cent.writeUInt32LE(0,40);
+      cent.writeUInt32LE(offset,42);
+      central.push(cent, nameBuf);
+      offset += header.length + nameBuf.length + f.data.length;
+    }
+    const centralSize = central.reduce((s,b)=>s+b.length,0);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50,0);
+    end.writeUInt16LE(0,4);
+    end.writeUInt16LE(0,6);
+    end.writeUInt16LE(files.length,8);
+    end.writeUInt16LE(files.length,10);
+    end.writeUInt32LE(centralSize,12);
+    end.writeUInt32LE(offset,16);
+    end.writeUInt16LE(0,20);
+    const zip = Buffer.concat([...parts, ...central, end]);
+    res.setHeader('Content-Type','application/zip');
+    res.setHeader('Content-Disposition','attachment; filename="Referral_PDFs.zip"');
+    return res.send(zip);
+  } catch (e) {
+    return res.status(500).json({ error: { code: 'bulk_export_failed', message: String(e.message||e) } });
+  }
 });
 
 if (!IS_TEST) {

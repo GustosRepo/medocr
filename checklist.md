@@ -1,6 +1,6 @@
 # Project Checklist & Roadmap
 
-Last Updated: 2025-10-01 (frontend theming + JSON viewer enhancements; tests: 66 passing)
+Last Updated: 2025-10-01 (checklist collapsible cards + archive persistence + printable view collapse; tests: 66 passing)
 
 ---
 ## 0. MVP Critical Focus (Due 2025-10-03 Friday)
@@ -173,6 +173,15 @@ Legend:
 - [x] Sidebar collapsed icon vertical/horizontal centering
 - [x] Centered collapse controls & improved readability for long JSON
 - [x] Placeholder panel surface & contrast adjustments
+// --- Checklist UX Enhancements (Oct 1, 2025) ---
+- [x] Checklist cards: flex wrap layout (removed internal scroll container)
+- [x] Per-card collapse/expand toggle (default expanded)
+- [x] LocalStorage persistence of collapsed state across reloads
+- [x] Printable View section collapsible with chevron + .txt download
+- [x] Archive toggle (optimistic update) + Show Archived filter functioning
+- [x] Category override segmented control + note editing retained after collapse
+- [x] Actions badges wrap (no overlap) and responsive layout
+- [x] Collapsed state hides tracking/actions/error blocks (summary only)
 
 ---
 ## 2. In Progress / Monitoring
