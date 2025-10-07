@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectName } from '../backend/rules/patient.js';
+import { detectName, parseNameFromFilename } from '../backend/rules/patient.js';
 
 test('detectName extracts patient when soft stop words surround the line', () => {
   const text = [
@@ -41,4 +41,18 @@ test('detectName still handles short legitimate names', () => {
   const res = detectName(text);
   assert.ok(res.hit, 'expected name hit');
   assert.deepEqual(res.value, { first: 'An', last: 'Ng' });
+});
+
+test('detectName ignores header such as "Attention Veterans"', () => {
+  const text = [
+    'Attention Veterans',
+    'Please see attached sleep study order'
+  ].join('\n');
+  const res = detectName(text);
+  assert.equal(res.hit, false);
+});
+
+test('parseNameFromFilename extracts last and first from common pattern', () => {
+  const res = parseNameFromFilename('Brissette Jr., Normand_95806.pdf');
+  assert.deepEqual(res, { last: 'Brissette Jr.', first: 'Normand' });
 });

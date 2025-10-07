@@ -5,12 +5,15 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { performance } from 'perf_hooks';
+import { PassThrough } from 'stream';
+import archiver from 'archiver';
 import { incCounter, recordLatency, snapshot as metricsSnapshot, recordConfidence, recordConcurrency, recordOcrQueueDepth } from './metrics/store.js';
 import crypto from 'crypto';
 import { addSnapshot, ambiguousCptRate, recentSnapshots } from './snapshot/store.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { runExtraction, runExtractionWithDates } from './rules/index.js';
+import { parseNameFromFilename } from './rules/patient.js';
 import { log, withReq, classifyError } from './logging/logger.js';
 import { toFhirBundle } from './fhir/export.js';
 import { listBatchDates, collectBatchDocs as collectDocsSvc, summarizeActions as summarizeActionsSvc, buildCoverJson, buildProblemLogJson, renderCoverPdf, renderProblemLogPdf, renderPatientPdf } from './batch/report.js';
@@ -175,6 +178,36 @@ function scheduleDocumentProcessing(id) {
 
 // In-memory doc store for dev
 const docs = new Map(); // id -> { filePath, status, result, error }
+
+function buildSummaryFileStem(result) {
+  const r = result || {};
+  const patient = r.patient || {};
+  const first = patient.first || '';
+  const last = patient.last || '';
+  const dob = patient.dob || '';
+  const referralDate = r.documentMeta?.intakeDate || r.pdfModel?.document?.intakeDate || '';
+  const safe = (s) => String(s).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const partsRaw = [safe(last), safe(first), safe(dob), safe(referralDate)];
+  const parts = partsRaw.filter((segment, idx) => segment || (idx === 3 && referralDate));
+  const stem = parts.length >= 2 ? parts.join('_') : (parts[0] || 'Referral_Summary');
+  return stem || 'Referral_Summary';
+}
+
+function renderSummaryPdfBuffer(result, logoPath) {
+  return new Promise((resolve, reject) => {
+    const stream = new PassThrough();
+    const chunks = [];
+    stream.setHeader = () => {};
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    try {
+      renderPatientPdf(stream, result, logoPath);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
 // Checklist overrides persistent store
 import fsPromises from 'fs/promises';
@@ -455,20 +488,60 @@ app.get('/api/documents/:id/summary.pdf', (req, res) => {
   }
   // Apply naming convention: LastName_FirstName_DOB_ReferralDate.pdf
   try {
-    const r = entry.result;
-    const p = r.patient || {};
-    const first = p.first || '';
-    const last = p.last || '';
-    const dob = p.dob || '';
-    const referralDate = r.documentMeta?.intakeDate || '';
-    const safe = (s) => String(s).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const partsRaw = [safe(last), safe(first), safe(dob), safe(referralDate)];
-    // Keep empty placeholders out but ensure referral date present if available
-    const parts = partsRaw.filter((p,i)=>p || (i === 3));
-    const fname = (parts.length >= 2 ? parts.join('_') : (parts[0] || 'Referral_Summary')) + '.pdf';
+    const stem = buildSummaryFileStem(entry.result);
+    const fname = `${stem}.pdf`;
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"; filename*=UTF-8''${encodeURIComponent(fname)}`);
   } catch {}
   renderPatientPdf(res, entry.result, process.env.BATCH_LOGO_PATH);
+});
+
+app.get('/api/documents/:id/packet.zip', async (req, res) => {
+  const id = req.params.id;
+  const entry = docs.get(id);
+  if (!entry || entry.status !== 'done' || !entry.result) {
+    return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
+  }
+
+  try {
+    const stem = buildSummaryFileStem(entry.result);
+    const packetName = `${stem}_packet.zip`;
+    const folderName = `${stem}_packet`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${packetName}"; filename*=UTF-8''${encodeURIComponent(packetName)}`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', err => {
+      req.logger?.error('packet_zip_failed', { id, err: String(err?.message || err) });
+      if (!res.headersSent) {
+        res.status(500).json({ error: { code: 'packet_zip_failed', message: 'unable to build packet' } });
+      } else {
+        res.end();
+      }
+    });
+
+    archive.pipe(res);
+
+    try {
+      const summaryBuffer = await renderSummaryPdfBuffer(entry.result, process.env.BATCH_LOGO_PATH);
+      archive.append(summaryBuffer, { name: `${folderName}/${stem}_summary.pdf` });
+    } catch (summaryErr) {
+      req.logger?.error('packet_summary_failed', { id, err: String(summaryErr?.message || summaryErr) });
+      throw summaryErr;
+    }
+
+    if (entry.filePath && fs.existsSync(entry.filePath)) {
+      const originalName = entry.originalName || path.basename(entry.filePath);
+      archive.file(entry.filePath, { name: `${folderName}/${originalName}` });
+    } else {
+      req.logger?.warn('packet_original_missing', { id, filePath: entry.filePath });
+    }
+
+    archive.finalize();
+  } catch (err) {
+    req.logger?.error('packet_build_failed', { id, err: String(err?.message || err) });
+    res.status(500).json({ error: { code: 'packet_build_failed', message: 'unable to build packet' } });
+  }
 });
 
 // Test helper: inject a processed document (enabled in explicit test env or when using node --test)
@@ -758,6 +831,18 @@ async function processDocument(id) {
     fileHash
       }
     };
+  const filenameName = parseNameFromFilename(result.documentMeta?.filename);
+  if (filenameName) {
+    const existingFirst = result.patient?.first;
+    const existingLast = result.patient?.last;
+    const sameName = existingFirst && existingLast &&
+      existingFirst.toLowerCase() === filenameName.first.toLowerCase() &&
+      existingLast.toLowerCase() === filenameName.last.toLowerCase();
+    if (!sameName) {
+      result.patient = { ...result.patient, ...filenameName };
+      trace.push({ rule: 'patient_name_filename_fallback', value: `${filenameName.last}, ${filenameName.first}` });
+    }
+  }
   // Build pdfModel defensively; recordPdfModelStats may be absent in some builds
   try {
     result.pdfModel = buildPdfModel(result);
@@ -843,93 +928,55 @@ app.post('/api/admin/backfill-pdf-models', (req, res) => {
 });
 
 // Bulk export (zip) of multiple referral PDFs
-import { PassThrough } from 'stream';
-app.post('/api/documents/bulk-export.zip', express.json({limit:'256kb'}), async (req, res) => {
+app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), async (req, res) => {
   try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0,200) : [];
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 200) : [];
     if (!ids.length) return res.status(400).json({ error: { code: 'bad_request', message: 'ids required' } });
-    const files = [];
+
+    const items = [];
     for (const id of ids) {
       const entry = docs.get(id);
       if (!entry || entry.status !== 'done' || !entry.result) continue;
-      const chunks = [];
-      await new Promise((resolve) => {
-        const sink = new PassThrough();
-        sink.on('data', c=>chunks.push(c));
-        sink.on('end', resolve);
-        const fakeRes = new PassThrough();
-        fakeRes.setHeader = () => {};
-        fakeRes.write = (c) => sink.write(c);
-        fakeRes.end = (c) => { if (c) sink.write(c); sink.end(); };
-        renderPatientPdf(fakeRes, entry.result, process.env.BATCH_LOGO_PATH);
-      });
-      const pdf = Buffer.concat(chunks);
-      let fname = 'Referral_Summary.pdf';
       try {
-        const r = entry.result; const p = r.patient||{};
-        const safe = (s)=>String(s||'').trim().replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
-        const parts = [safe(p.last), safe(p.first), safe(p.dob), safe(r.documentMeta?.intakeDate)].filter(Boolean);
-        if (parts.length>=2) fname = parts.join('_') + '.pdf';
-      } catch {}
-      files.push({ name: fname, data: pdf });
+        const stem = buildSummaryFileStem(entry.result);
+        const summaryBuffer = await renderSummaryPdfBuffer(entry.result, process.env.BATCH_LOGO_PATH);
+        const originalPath = entry.filePath && fs.existsSync(entry.filePath) ? entry.filePath : null;
+        const originalName = originalPath ? (entry.originalName || path.basename(entry.filePath)) : null;
+        items.push({ stem, summaryBuffer, originalPath, originalName });
+      } catch (err) {
+        log('warn', 'bulk_packet_skip', { id, err: String(err?.message || err) });
+      }
     }
-    if (!files.length) return res.status(404).json({ error: { code: 'none_ready', message: 'no documents available' } });
-    let offset = 0; const central = []; const parts = [];
-    const DOS_DATE = 0x4B21; const DOS_TIME = 0x3A10;
-    for (const f of files) {
-      const nameBuf = Buffer.from(f.name,'utf8');
-      const header = Buffer.alloc(30);
-      header.writeUInt32LE(0x04034b50,0);
-      header.writeUInt16LE(20,4);
-      header.writeUInt16LE(0,6);
-      header.writeUInt16LE(0,8);
-      header.writeUInt16LE(DOS_TIME,10);
-      header.writeUInt16LE(DOS_DATE,12);
-      const crcVal = f.data.reduce((a,b)=>(a + b)>>>0,0)>>>0;
-      header.writeUInt32LE(crcVal,14);
-      header.writeUInt32LE(f.data.length,18);
-      header.writeUInt32LE(f.data.length,22);
-      header.writeUInt16LE(nameBuf.length,26);
-      header.writeUInt16LE(0,28);
-      parts.push(header, nameBuf, f.data);
-      const cent = Buffer.alloc(46);
-      cent.writeUInt32LE(0x02014b50,0);
-      cent.writeUInt16LE(20,4);
-      cent.writeUInt16LE(20,6);
-      cent.writeUInt16LE(0,8);
-      cent.writeUInt16LE(0,10);
-      cent.writeUInt16LE(0,12);
-      cent.writeUInt16LE(DOS_TIME,14);
-      cent.writeUInt16LE(DOS_DATE,16);
-      cent.writeUInt32LE(crcVal,18);
-      cent.writeUInt32LE(f.data.length,22);
-      cent.writeUInt32LE(f.data.length,26);
-      cent.writeUInt16LE(nameBuf.length,30);
-      cent.writeUInt16LE(0,32);
-      cent.writeUInt16LE(0,34);
-      cent.writeUInt16LE(0,36);
-      cent.writeUInt16LE(0,38);
-      cent.writeUInt32LE(0,40);
-      cent.writeUInt32LE(offset,42);
-      central.push(cent, nameBuf);
-      offset += header.length + nameBuf.length + f.data.length;
+
+    if (!items.length) return res.status(404).json({ error: { code: 'none_ready', message: 'no documents available' } });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="Referral_Packets.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', err => {
+      log('error', 'bulk_packet_zip_failed', { err: String(err?.message || err) });
+      if (!res.headersSent) {
+        res.status(500).json({ error: { code: 'bulk_export_failed', message: 'unable to build packet ZIP' } });
+      } else {
+        res.end();
+      }
+    });
+
+    archive.pipe(res);
+
+    for (const item of items) {
+      const folderName = `${item.stem}_packet`;
+      archive.append(item.summaryBuffer, { name: `${folderName}/${item.stem}_summary.pdf` });
+      if (item.originalPath && item.originalName) {
+        archive.file(item.originalPath, { name: `${folderName}/${item.originalName}` });
+      }
     }
-    const centralSize = central.reduce((s,b)=>s+b.length,0);
-    const end = Buffer.alloc(22);
-    end.writeUInt32LE(0x06054b50,0);
-    end.writeUInt16LE(0,4);
-    end.writeUInt16LE(0,6);
-    end.writeUInt16LE(files.length,8);
-    end.writeUInt16LE(files.length,10);
-    end.writeUInt32LE(centralSize,12);
-    end.writeUInt32LE(offset,16);
-    end.writeUInt16LE(0,20);
-    const zip = Buffer.concat([...parts, ...central, end]);
-    res.setHeader('Content-Type','application/zip');
-    res.setHeader('Content-Disposition','attachment; filename="Referral_PDFs.zip"');
-    return res.send(zip);
+
+    archive.finalize();
   } catch (e) {
-    return res.status(500).json({ error: { code: 'bulk_export_failed', message: String(e.message||e) } });
+    log('error', 'bulk_export_failed', { err: String(e?.message || e) });
+    return res.status(500).json({ error: { code: 'bulk_export_failed', message: String(e?.message || e) } });
   }
 });
 
