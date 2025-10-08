@@ -1,3 +1,5 @@
+import { loadJsonConfig } from './utils/configLoader.js';
+
 // Patient name + DOB detectors used by the rules engine
 
 const BASIC_BLOCK_TOKENS = new Set([
@@ -12,6 +14,25 @@ const BLOCK_LINE_PATTERNS = [
   'fax','cover sheet','authorization','insurance','provider','practice','referral','order form','durable medical equipment',
   'home sleep','patient instructions','patient information','primary care','chart notes','specialty','company','summary','page'
 ];
+
+const DEFAULT_PHONE_GLYPH_ENTRIES = [
+  ['O', '0'], ['o', '0'], ['D', '0'], ['Q', '0'], ['Ø', '0'],
+  ['I', '1'], ['l', '1'], ['|', '1'],
+  ['Z', '2'], ['z', '2'],
+  ['S', '5'], ['s', '5'],
+  ['B', '8'], ['b', '6'], ['G', '6'],
+  ['≤', '7'], ['∑', '7'], ['§', '5'],
+  ['—', ''], ['–', ''], ['_', ''], ['‒', ''],
+  ['◦', '0']
+];
+
+function buildPhoneGlyphMap() {
+  const overrides = loadJsonConfig('pattern_overrides.json', { defaultFactory: () => ({}) }) || {};
+  const overrideEntries = overrides && typeof overrides.phoneGlyphMap === 'object' && overrides.phoneGlyphMap
+    ? Object.entries(overrides.phoneGlyphMap).map(([k, v]) => [String(k), String(v)])
+    : [];
+  return new Map([...DEFAULT_PHONE_GLYPH_ENTRIES, ...overrideEntries]);
+}
 
 function normalizePart(raw) {
   const base = String(raw || '').trim();
@@ -48,38 +69,57 @@ export function detectName(fullText, linesLCInput) {
     return { last: normLast, first: normFirst };
   }
 
-  const labelRe = /(patient\s*name|patient|name)\s*[:\-]\s*(.*)$/i;
+  const PATIENT_LABEL_RE = /(patient\s*(?:name)?|pt\s*name)\s*[:\-]\s*(.*)$/i;
+  const GENERIC_NAME_LABEL_RE = /(name)\s*[:\-]\s*(.*)$/i;
+  const NON_PATIENT_LABEL_HINTS = /(from|to|subject|company|facility|provider|attention|attn|fax|cc|re:|regarding)/i;
 
-  // 1) Check for labeled lines first
-  for (let i = 0; i < linesLC.length; i++) {
-    if (!labelRe.test(linesLC[i] || '')) continue;
-    const original = origLines[i] || '';
-    const [, , after] = original.match(labelRe) || [];
-    const candidates = [];
-    if (after) candidates.push(after.trim());
-    if (origLines[i + 1]) candidates.push(origLines[i + 1].trim());
-    for (const cand of candidates) {
-      if (!cand) continue;
-      const lf = cand.match(reLastFirst);
-      if (lf) {
-        const val = buildResult(lf, 'lf');
-        if (val) return { hit: true, value: val, why: 'patient_name_labeled_lf' };
+  function extractFromLabeledLine(re, reason, requirePatient) {
+    for (let i = 0; i < origLines.length; i++) {
+      const line = origLines[i] || '';
+      const match = line.match(re);
+      if (!match) continue;
+      const lowerLine = line.toLowerCase();
+      if (requirePatient) {
+        if (!/patient/.test(lowerLine) && !/pt/.test(lowerLine)) continue;
+      } else if (NON_PATIENT_LABEL_HINTS.test(lowerLine)) {
+        continue;
       }
-      const fl = cand.match(reFirstLast);
-      if (fl) {
-        const val = buildResult(fl, 'fl');
-        if (val) return { hit: true, value: val, why: 'patient_name_labeled_fl' };
+      const after = match[2] || '';
+      const candidates = [];
+      if (after) candidates.push(after.trim());
+      if (origLines[i + 1]) candidates.push(origLines[i + 1].trim());
+      for (const cand of candidates) {
+        if (!cand) continue;
+        const lf = cand.match(reLastFirst);
+        if (lf) {
+          const val = buildResult(lf, 'lf');
+          if (val) return { hit: true, value: val, why: reason === 'patient_label' ? 'patient_name_labeled_lf' : 'patient_name_labeled_lf_generic' };
+        }
+        const fl = cand.match(reFirstLast);
+        if (fl) {
+          const val = buildResult(fl, 'fl');
+          if (val) return { hit: true, value: val, why: reason === 'patient_label' ? 'patient_name_labeled_fl' : 'patient_name_labeled_fl_generic' };
+        }
       }
     }
-    break; // first labeled block wins
+    return null;
   }
 
-  // 2) Fallback: scan the first few lines for the first match
+  // 1) Prefer explicit patient-labeled lines
+  const patientLabelResult = extractFromLabeledLine(PATIENT_LABEL_RE, 'patient_label', true);
+  if (patientLabelResult) return patientLabelResult;
+
+  // 2) Secondary pass for generic "Name:" lines (skip non-patient contexts)
+  const genericLabelResult = extractFromLabeledLine(GENERIC_NAME_LABEL_RE, 'generic_label', false);
+  if (genericLabelResult) return genericLabelResult;
+
+  // 3) Fallback: scan the first few lines for the first match
   const scanLimit = Math.min(40, origLines.length);
   for (let i = 0; i < scanLimit; i++) {
     const line = origLines[i] || '';
     const lc = line.toLowerCase();
     if (BLOCK_LINE_PATTERNS.some(p => lc.includes(p))) continue;
+    if (NON_PATIENT_LABEL_HINTS.test(lc)) continue;
     const lf = line.match(reLastFirst);
     if (lf) {
       const val = buildResult(lf, 'lf');
@@ -113,8 +153,9 @@ export function parseNameFromFilename(filename) {
 export function detectDob(fullText) {
   const origLines = fullText.split(/\r?\n/);
 
-  const dateRe = /\b(0?[1-9]|1[0-2])[\/-](0?[1-9]|[12]\d|3[01])[\/-]((?:19|20)\d{2})\b/;
-  const dobLabelRe = /(dob|d\.\s*o\.\s*b\.|date\s*of\s*birth)\s*[:\-]?\s*(.*)$/i;
+  const DATE_SEP_CLASS = '[\\/\\-\\.\\,_\\s\\u2010-\\u2015\\u2212]';
+  const dateRe = new RegExp(`\\b(0?[1-9]|1[0-2])${DATE_SEP_CLASS}*(0?[1-9]|[12]\\d|3[01])${DATE_SEP_CLASS}*(?:((?:19|20)\\d{2}))\\b`);
+  const dobLabelRe = /(dob(?:\s*\/\s*age)?|d\.\s*o\.\s*b\.|date\s*of\s*birth)\s*[:\-]?\s*(.*)$/i;
   const notDobContextRe = /(referral\s*date|order\s*date|date\s*of\s*service|dos\b|service\s*date|signed|signature|fax|scanned|printed|report\s*date|visit\s*date|appt|appointment|today|now)/i;
 
   const now = new Date();
@@ -197,10 +238,24 @@ export function detectPhones(fullText) {
   const seen = new Set();
   const rawPhones = [];
   const lines = text.split(/\r?\n/);
+  const PHONE_GLYPH_MAP = buildPhoneGlyphMap();
+  function extractDigits(raw) {
+    const out = [];
+    for (const ch of raw) {
+      if (/\d/.test(ch)) {
+        out.push(ch);
+      } else if (PHONE_GLYPH_MAP.has(ch)) {
+        const mapped = PHONE_GLYPH_MAP.get(ch);
+        if (mapped) out.push(mapped);
+      }
+    }
+    return out.join('');
+  }
+
   let m;
   while ((m = re.exec(text)) !== null) {
     const raw = m[0];
-    const digits = raw.replace(/\D/g, '');
+    const digits = extractDigits(raw);
     if (digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))) {
       const core = digits.length === 11 ? digits.slice(1) : digits;
       if (!seen.has(core)) {
@@ -235,7 +290,10 @@ export function detectPhones(fullText) {
   const filtered = rawPhones.filter(p => {
     if (!isValidNanp(p.normalized)) return false;
     const ctx = contextSnippet(p.index);
-    if (/fax/.test(ctx)) return false;
+    const lineLower = (lines[p.lineIdx] || '').toLowerCase();
+    if (/(^|\b)(fax|fx|facsimile)\b/.test(ctx)) return false;
+    if (/^\s*[fF](?:[:\-]|\s)/.test(lineLower)) return false;
+    if (/^\s*from\b/.test(lineLower)) return false;
     if (p.providerLine) return false; // exclude lines likely belonging to provider section
     return true;
   });

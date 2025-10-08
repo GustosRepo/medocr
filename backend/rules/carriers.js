@@ -96,14 +96,24 @@ export function detectCarrier(fullText, lines) {
     return status;
   }
 
-  // Pass 1: regex catalog
+  // Pass 1: regex catalog (choose earliest occurrence)
+  let best = null;
   for (const c of carrierSyn) {
     for (const re of c.reList) {
-      if (re.test(fullText)) {
-        let status = applyPolicyDecorations(c.name, c.status);
-        return { hit: true, value: { carrier: c.name, status }, why: 'carrier_detect', actions: Array.from(actions), notes, meta };
+      try { re.lastIndex = 0; } catch {}
+      const idx = fullText.search(re);
+      if (idx >= 0) {
+        if (!best || idx < best.idx) {
+          best = { entry: c, idx };
+        }
+        break;
       }
     }
+  }
+  if (best) {
+    const c = best.entry;
+    let status = applyPolicyDecorations(c.name, c.status);
+    return { hit: true, value: { carrier: c.name, status }, why: 'carrier_detect', actions: Array.from(actions), notes, meta };
   }
   const labeled = lines.find(l => /(insurance|plan|payer)\s*[:\-]/i.test(l));
   if (labeled) {

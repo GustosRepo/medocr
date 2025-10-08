@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Group, Stack, Text, Paper, ScrollArea, JsonInput, Title, Badge } from '../ui/primitives.jsx';
 
 const FILES_ENDPOINT = '/api/admin/rules/files';
+const PATTERN_OVERRIDES_FILE = 'pattern_overrides.json';
 
 function formatTimestamp(ms) {
   if (!ms && ms !== 0) return '—';
@@ -33,6 +34,7 @@ export default function RulesEditorPage() {
   const [saveError, setSaveError] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [search, setSearch] = useState('');
 
   const dirty = useMemo(() => content !== original, [content, original]);
@@ -49,21 +51,35 @@ export default function RulesEditorPage() {
         if (!res.ok) throw new Error(`Failed to load files (${res.status})`);
         return res.json();
       })
-      .then(data => setFiles(Array.isArray(data?.files) ? data.files : []))
+      .then(data => {
+        const list = Array.isArray(data?.files) ? data.files : [];
+        const ordered = [...list].sort((a, b) => {
+          if (a.name === PATTERN_OVERRIDES_FILE) return -1;
+          if (b.name === PATTERN_OVERRIDES_FILE) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        setFiles(ordered);
+        const hasPatternOverrides = ordered.some(file => file.name === PATTERN_OVERRIDES_FILE);
+        if (!selected && hasPatternOverrides) {
+          handleSelect(PATTERN_OVERRIDES_FILE);
+        }
+      })
       .catch(err => setFilesError(err.message || String(err)))
       .finally(() => setLoadingFiles(false));
   }
 
-  function handleSelect(name) {
-    if (dirty) {
-      const confirmed = window.confirm('You have unsaved changes. Discard them?');
-      if (!confirmed) return;
+  function loadFile(name) {
+    if (!name) {
+      setContent('');
+      setOriginal('');
+      setFileMeta(null);
+      return;
     }
-    setSelected(name);
     setLoadingFile(true);
-    setSaveError('');
-    setSaveMessage('');
-    fetch(`${FILES_ENDPOINT}/${encodeURIComponent(name)}`)
+    const endpoint = name === PATTERN_OVERRIDES_FILE
+      ? `/api/admin/rules/pattern-overrides`
+      : `${FILES_ENDPOINT}/${encodeURIComponent(name)}`;
+    fetch(endpoint)
       .then(res => {
         if (!res.ok) throw new Error(`Failed to load ${name} (${res.status})`);
         return res.json();
@@ -83,35 +99,85 @@ export default function RulesEditorPage() {
       .finally(() => setLoadingFile(false));
   }
 
+  function handleSelect(name) {
+    if (dirty) {
+      const confirmed = window.confirm('You have unsaved changes. Discard them?');
+      if (!confirmed) return;
+    }
+    setSelected(name);
+    setSaveError('');
+    setSaveMessage('');
+    loadFile(name);
+  }
+
   function handleSave() {
     setSaveError('');
     setSaveMessage('');
     if (!selected) return;
+    let payload = content;
     try {
       const parsed = JSON.parse(content);
-      setContent(JSON.stringify(parsed, null, 2));
+      const formatted = JSON.stringify(parsed, null, 2);
+      setContent(formatted);
+      payload = formatted;
     } catch (e) {
       setSaveError(`JSON parse error: ${e?.message || e}`);
       return;
     }
     setSaving(true);
-    fetch(`${FILES_ENDPOINT}/${encodeURIComponent(selected)}`, {
+    const endpoint = selected === PATTERN_OVERRIDES_FILE
+      ? `/api/admin/rules/pattern-overrides`
+      : `${FILES_ENDPOINT}/${encodeURIComponent(selected)}`;
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content: payload })
     })
       .then(res => {
         if (!res.ok) return res.json().then(err => { throw new Error(err?.error?.message || `Save failed (${res.status})`); });
         return res.json();
       })
       .then(data => {
-        setOriginal(content);
+        setOriginal(payload);
         setSaveMessage('Saved successfully');
         setFileMeta(meta => meta ? { ...meta, size: data?.size ?? meta.size, mtimeMs: data?.mtimeMs ?? meta.mtimeMs } : meta);
         refreshList();
       })
       .catch(err => setSaveError(err.message || String(err)))
       .finally(() => setSaving(false));
+  }
+
+  function handleReload() {
+    setSaveError('');
+    setSaveMessage('');
+    const target = selected && selected.trim();
+    if (dirty) {
+      const confirmed = window.confirm('You have unsaved changes. Reloading will discard them. Continue?');
+      if (!confirmed) return;
+    }
+    setReloading(true);
+    fetch('/api/admin/rules/reload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(target ? { filename: target } : {})
+    })
+      .then(res => {
+        if (!res.ok) return res.json().then(err => { throw new Error(err?.error?.message || `Reload failed (${res.status})`); });
+        return res.json();
+      })
+      .then(data => {
+        const scope = data?.scope || (target || 'all');
+        setSaveMessage(`Reloaded ${scope === 'all' ? 'all rule caches' : scope}`);
+        if (target) {
+          loadFile(target);
+        } else if (selected) {
+          loadFile(selected);
+        } else {
+          refreshList();
+        }
+      })
+      .catch(err => setSaveError(err.message || String(err)))
+      .finally(() => setReloading(false));
   }
 
   function handleFormat() {
@@ -163,6 +229,7 @@ export default function RulesEditorPage() {
                 )}
                 {filteredFiles.map(file => {
                   const active = file.name === selected;
+                  const isPatternOverrides = file.name === PATTERN_OVERRIDES_FILE;
                   return (
                     <Button
                       key={file.name}
@@ -172,6 +239,9 @@ export default function RulesEditorPage() {
                       onClick={() => handleSelect(file.name)}
                     >
                       <span className="flex-1 text-left truncate">{file.name}</span>
+                      {isPatternOverrides && (
+                        <Badge size="xs" color="grape" variant="light" className="ml-2">Primary</Badge>
+                      )}
                       <span className="text-[10px] text-slate-300 ml-2">{formatBytes(file.size)}</span>
                     </Button>
                   );
@@ -201,6 +271,9 @@ export default function RulesEditorPage() {
                 <Group gap="xs">
                   <Button size="xs" variant="subtle" onClick={handleFormat}>Format</Button>
                   <Button size="xs" variant="subtle" onClick={handleReset} disabled={!dirty}>Reset</Button>
+                  <Button size="xs" variant="outline" onClick={handleReload} loading={reloading}>
+                    Reload
+                  </Button>
                   <Button size="xs" onClick={handleSave} disabled={!dirty || saving} loading={saving}>
                     Save
                   </Button>
