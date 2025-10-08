@@ -452,5 +452,16 @@
       "rule out narcolepsy",
       "r/o narcolepsy"
     ]
+  },
+  {
+    "code": "99245",
+    "why": "cpt_consult_99245",
+    "description": "Office consultation (80 minutes)",
+    "patterns": [
+      "\\b99245\\b",
+      "consultation\\s*(?:code)?\\s*99245",
+      "consult(?:ation)?\\s+5",
+      "consult\\s*5\\s*\\(80\\s*min\\)"
+    ]
   }
 ]

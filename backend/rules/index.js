@@ -8,8 +8,106 @@ import { detectDME } from './dme.js';
 import { PATTERNS } from './patterns.js';
 import { loadJsonConfig } from './utils/configLoader.js';
 
+const BUSINESS_EMAIL_DEFAULTS = [
+  'athomesleepstudies@ymail.com',
+  'athomesleepstudies@gmail.com',
+  'athomesleepstudfes@ymall.com',
+  'athomesleepstudies@ymall.com',
+  'athomesleepstudies@athomesleep.com',
+  'athomesleepstudies@ymail.corn'
+];
+
+function getPatternOverrides() {
+  return loadJsonConfig('pattern_overrides.json', { defaultFactory: () => ({}) }) || {};
+}
+
+function buildBusinessEmailBlock(overrides) {
+  const overrideEmails = Array.isArray(overrides.businessEmails) ? overrides.businessEmails : [];
+  const entries = [
+    ...BUSINESS_EMAIL_DEFAULTS,
+    ...overrideEmails.map(e => String(e || ''))
+  ];
+  return new Set(entries.filter(Boolean).map(e => e.toLowerCase()));
+}
+
+function escapeRegex(str) {
+  return String(str || '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+
+
+const DEFAULT_PROVIDER_NAME_PATTERNS = [
+  '(referring\\s*(provider|physician))',
+  '(ordering\\s*(provider|physician))',
+  'referred\\s+by',
+  'attending\\s*(provider|physician)',
+  '\\bDr\\.?\\s+[A-Z]',
+  'provider\\s*name'
+];
+
+function buildProviderNameRegexes(overrides) {
+  const patterns = Array.isArray(overrides.providerNamePatterns)
+    ? overrides.providerNamePatterns
+    : DEFAULT_PROVIDER_NAME_PATTERNS;
+  return patterns
+    .map(pattern => {
+      try { return new RegExp(pattern, 'i'); } catch { return null; }
+    })
+    .filter(Boolean);
+}
+
+const DEFAULT_PROVIDER_CREDENTIAL_PATTERNS = [
+  { pattern: 'MD', token: 'MD' },
+  { pattern: 'DO', token: 'DO' },
+  { pattern: 'NP', token: 'NP' },
+  { pattern: 'FNP', token: 'FNP' },
+  { pattern: 'PA-?C', token: 'PA-C' },
+  { pattern: 'APRN', token: 'APRN' },
+  { pattern: 'ANP', token: 'ANP' },
+  { pattern: 'DC', token: 'DC' },
+  { pattern: 'RN', token: 'RN' },
+  { pattern: 'PhD', token: 'PhD' }
+];
+
+function buildProviderCredentialRegexes(overrides) {
+  const entries = Array.isArray(overrides.providerCredentialPatterns)
+    ? overrides.providerCredentialPatterns
+    : DEFAULT_PROVIDER_CREDENTIAL_PATTERNS;
+  return entries
+    .map(entry => {
+      const obj = typeof entry === 'string' ? { pattern: entry, token: entry } : entry || {};
+      if (!obj.pattern) return null;
+      try {
+        return {
+          regex: new RegExp(`\\b(${obj.pattern})\\b`, 'i'),
+          token: (obj.token || obj.pattern || '').toUpperCase().replace(/\s+/g, '')
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 export function runExtraction(ocrPages) {
   const { fullText, lines } = normalizePages(ocrPages);
+  const patternOverrides = getPatternOverrides();
+  const BUSINESS_EMAIL_BLOCK = buildBusinessEmailBlock(patternOverrides);
+  const PROVIDER_NAME_REGEXES = buildProviderNameRegexes(patternOverrides);
+  const PROVIDER_CREDENTIAL_REGEXES = buildProviderCredentialRegexes(patternOverrides);
+  const SYMPTOM_CONFIG = PATTERNS.SYMPTOM_CONFIG;
+  const {
+    SYMPTOM_FAMILY_CONTEXT_RE,
+    SYMPTOM_THIRD_PARTY_RE,
+    SYMPTOM_PATIENT_TOKEN_RE,
+    SYMPTOM_CONDITIONAL_RE,
+    SYMPTOM_EDUCATIONAL_RE,
+    SYMPTOM_HISTORY_RE,
+    SYMPTOM_HISTORY_OVERRIDE_RE,
+    SYMPTOM_RESOLUTION_RE,
+    SYMPTOM_MEDICATION_PATTERNS,
+    SYMPTOM_TEST_RESULT_RE
+  } = PATTERNS;
   const trace = [];
   const result = {
     documentMeta: {},
@@ -25,6 +123,22 @@ export function runExtraction(ocrPages) {
     confidence: 'Low'
   };
 
+  const infoAlerts = {
+    ppeRequired: null,
+    safety: [],
+    communication: [],
+    accommodations: [],
+    history: [],
+    resolution: [],
+    medications: [],
+    testResults: []
+  };
+
+  const pushUnique = (arr, value) => {
+    if (!value) return;
+    if (!arr.includes(value)) arr.push(value);
+  };
+
   // Patient
   const disablePatientNameOcr = process.env.DISABLE_PATIENT_NAME_OCR === '1';
   const name = disablePatientNameOcr ? { hit: false } : detectName(fullText, lines);
@@ -38,20 +152,27 @@ export function runExtraction(ocrPages) {
   const phones = detectPhones(fullText); if (phones.hit) { result.patient.phones = phones.value.map(p => p.formatted); trace.push({ rule: phones.why, count: phones.value.length }); }
   // Email (contextual & filtered)
   {
-    const BUSINESS_EMAIL_BLOCK = new Set([
-      'athomesleepstudies@ymail.com',
-      'athomesleepstudies@gmail.com'
-    ]);
     const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
     const matches = [...new Set(((fullText || '').match(emailRe) || []))];
     if (matches.length) {
       // Normalize punctuation: strip trailing commas/periods/semicolons
       const cleaned = matches.map(e => e.replace(/[.,;:]+$/,'')).filter(Boolean);
       let chosen = null;
+      const contactByEmailPattern = /contact\s*by\s*email/i;
+      const hasContactByEmail = contactByEmailPattern.test(fullText || '');
       for (const emRaw of cleaned) {
         const em = emRaw.trim();
         const lower = em.toLowerCase();
         if (BUSINESS_EMAIL_BLOCK.has(lower)) continue;
+        if (hasContactByEmail) {
+          const escaped = escapeRegex(em);
+          const inline = new RegExp(`contact\s*by\s*email[^\n]{0,80}${escaped}`, 'i');
+          const nextLine = new RegExp(`contact\s*by\s*email[^\n]*\n[^\n]{0,80}${escaped}`, 'i');
+          if (inline.test(fullText || '') || nextLine.test(fullText || '')) {
+            chosen = em;
+            break;
+          }
+        }
         if (/patient\s*email/i.test(fullText) && /patient/i.test(lower)) { chosen = em; break; }
         if (!chosen && /(gmail|yahoo|outlook|icloud|proton|hotmail)/i.test(lower)) chosen = em;
         if (!chosen) chosen = em; // fallback first non-blocked
@@ -97,7 +218,8 @@ export function runExtraction(ocrPages) {
       'G0399': 'Home sleep apnea test (Type III) - alternative code',
       '95782': 'Pediatric in-lab polysomnography',
       '95783': 'Pediatric PAP titration',
-      '95805': 'MSLT / MWT daytime sleep testing'
+      '95805': 'MSLT / MWT daytime sleep testing',
+      '99245': 'Office consultation (80 minutes)'
     };
     // Derive confidence hint for CPT selection
     let cptConfidence = 'high';
@@ -105,6 +227,8 @@ export function runExtraction(ocrPages) {
       cptConfidence = cpt.ambiguity.length >= 2 ? 'low' : 'medium';
     }
     const ambiguityReasons = Array.isArray(cpt.ambiguity) ? cpt.ambiguity : [];
+    const primaryDetail = Array.isArray(cpt.details) ? cpt.details.find(d => d.code === cpt.primary) : null;
+    const derivedDescription = primaryDetail?.description || CPT_DESCRIPTIONS[cpt.primary];
     result.procedure = { 
       ...result.procedure,
       cpt: cpt.primary,
@@ -113,7 +237,7 @@ export function runExtraction(ocrPages) {
       cptDetails: cpt.details,
       cptAmbiguity: ambiguityReasons,
       cptConfidence,
-      description: CPT_DESCRIPTIONS[cpt.primary]
+      description: derivedDescription || result.procedure?.description
     };
     trace.push({ rule: cpt.why, primary: cpt.primary, candidates: cpt.candidates, ambiguity: ambiguityReasons, confidence: cptConfidence, details: cpt.details });
     if (Array.isArray(cpt.ambiguity) && cpt.ambiguity.length) {
@@ -162,7 +286,7 @@ export function runExtraction(ocrPages) {
     const insObj = { carrier: car.value.carrier, status: car.value.status };
   // Member / Group IDs
   // Member / Group IDs (tightened: enforce word boundaries & separators to avoid concatenation 'ID: ABCGroup: DEF')
-  const memberMatch = (fullText || '').match(/\b(?:member|subscriber|policy)\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/i);
+  const memberMatch = (fullText || '').match(/\b(?:member|subscriber|policy|insured)\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/i);
   if (memberMatch) insObj.memberId = memberMatch[1];
   const groupMatch = (fullText || '').match(/\bgroup\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{2,})\b/i);
   if (groupMatch) insObj.groupId = groupMatch[1];
@@ -526,35 +650,26 @@ export function runExtraction(ocrPages) {
 
   // Provider detection (basic)
   {
-    const provLine = (fullText || '').split(/\n/).find(l => /(referring|ordering)\s*(provider|physician)|\bDr\.?\s+[A-Z]/i.test(l));
+    const providerLines = (fullText || '').split(/\n/);
+    const provLineIndex = providerLines.findIndex(line => PROVIDER_NAME_REGEXES.some(rx => rx.test(line || '')));
+    const provLine = provLineIndex >= 0 ? providerLines[provLineIndex] : null;
     if (provLine) {
-      const nameMatch = provLine.match(/(Dr\.?\s*)?([A-Z][a-zA-Z'\-]+\s+[A-Z][a-zA-Z'\-]+)/);
+      const nameMatch = provLine.match(/(Dr\.?\s*)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+)+)/);
       if (nameMatch) {
         let provName = nameMatch[2];
-        // Cleanup common OCR artifact: NPl or NP1 -> NP (word boundary)
         provName = provName.replace(/NP[l1]\b/g, 'NP');
         trace.push({ rule: 'provider_name_detect', value: provName });
-        // Credential normalization in same or nearby line
-        // Credential normalization (expand set)
-        const credLine = provLine;
+        const credSources = [provLine];
+        if (provLineIndex > 0) credSources.push(providerLines[provLineIndex - 1]);
+        if (provLineIndex >= 0 && provLineIndex + 1 < providerLines.length) credSources.push(providerLines[provLineIndex + 1]);
         const credTokens = [];
-        const credPatterns = [
-          /\b(MD)\b/i,
-          /\b(DO)\b/i,
-          /\b(NP)\b/i,
-          /\b(FNP)\b/i,
-          /\b(PA\s?-?C)\b/i,
-          /\b(APRN)\b/i,
-          /\b(ANP)\b/i,
-          /\b(DC)\b/i,
-          /\b(RN)\b/i,
-          /\b(PhD)\b/i
-        ];
-        for (const pat of credPatterns) {
-          const m = credLine.match(pat);
-          if (m) {
-            let token = m[1].toUpperCase().replace(/PA\s?C/, 'PA-C');
-            if (!credTokens.includes(token)) credTokens.push(token);
+        for (const sourceLine of credSources) {
+          for (const entry of PROVIDER_CREDENTIAL_REGEXES) {
+            const m = sourceLine && sourceLine.match(entry.regex);
+            if (m && entry.token) {
+              const token = entry.token;
+              if (!credTokens.includes(token)) credTokens.push(token);
+            }
           }
         }
         if (credTokens.length) {
@@ -564,8 +679,63 @@ export function runExtraction(ocrPages) {
         result.provider.name = provName;
       }
     }
-    const npiMatch = (fullText || '').match(/\b(\d{10})\b/);
-  if (npiMatch) { result.provider.npi = npiMatch[1]; trace.push({ rule: 'provider_npi_detect' }); }
+    const normalizeName = str => String(str || '').replace(/[^A-Za-z\s'’\-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const patientNameVariants = new Set();
+    if (result.patient?.first && result.patient?.last) {
+      const first = normalizeName(result.patient.first);
+      const last = normalizeName(result.patient.last);
+      if (first && last) {
+        patientNameVariants.add(`${first} ${last}`);
+        patientNameVariants.add(`${last} ${first}`);
+        patientNameVariants.add(`${last}, ${first}`);
+      }
+    }
+    if (!result.provider.name) {
+      const specialtyRe = /(family\s+practice|primary\s+care|pulm|pulmon|sleep|cardio|obgyn|clinic|wellness|internal\s+medicine|pediatrics|neurology|fnp|fnp-c|np\b|aprn|md\b|do\b)/i;
+      let fallback = null;
+      for (let i = 0; i < providerLines.length; i++) {
+        const line = providerLines[i] || '';
+        if (!specialtyRe.test(line)) continue;
+        for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+          const candidateLine = (providerLines[j] || '').trim();
+          if (!candidateLine) continue;
+          if (/patient|subscriber|member|policy|referral|subject|date|from\s+name|from\s+company|from\s+facility|to:?/i.test(candidateLine)) continue;
+          if (candidateLine.includes(':')) continue;
+          if (/^from\b/i.test(candidateLine)) continue;
+          const match = candidateLine.match(/([A-Z][a-zA-Z'’\-]+(?:\s+[A-Z][a-zA-Z'’\-]+){1,2})/);
+          if (!match) continue;
+          const raw = match[1].replace(/\s+/g, ' ').trim();
+          const norm = normalizeName(raw);
+          if (!norm) continue;
+          if (patientNameVariants.has(norm)) continue;
+          fallback = raw;
+          break;
+        }
+        if (fallback) break;
+      }
+      if (fallback) {
+        result.provider.name = fallback;
+        trace.push({ rule: 'provider_name_detect_fallback', value: fallback });
+      }
+    }
+    if (!result.provider.practice) {
+      for (let i = 0; i < providerLines.length; i++) {
+        const line = providerLines[i] || '';
+        if (/from\s+company|from\s+facility/i.test(line)) {
+          const candidate = (providerLines[i + 1] || '').trim();
+          if (candidate && !/sleep\s+stud/i.test(candidate.toLowerCase())) {
+            result.provider.practice = candidate;
+            trace.push({ rule: 'provider_practice_detect', value: candidate });
+            break;
+          }
+        }
+      }
+    }
+    const npiMatch = (fullText || '').match(/\bNPI\s*[:#-]?\s*(\d{10})\b/i);
+    if (npiMatch) {
+      result.provider.npi = npiMatch[1];
+      trace.push({ rule: 'provider_npi_detect' });
+    }
     // Provider phones/fax
     const linesArr = (fullText || '').split(/\n/);
     const providerPhones = new Set();
@@ -583,7 +753,7 @@ export function runExtraction(ocrPages) {
         }
       }
     }
-    const phonePattern = /(fax|fx|facsimile)?[^\n\r]{0,40}?((?:\(\d{3}\)\s*\d{3}-\d{4})|(?:\b\d{3}[-\. ]\d{3}[-\. ]\d{4}\b))/gi;
+    const phonePattern = /(fax|fx|facsimile|f)?[^\n\r]{0,40}?((?:\(\d{3}\)\s*\d{3}-\d{4})|(?:\b\d{3}[-\. ]\d{3}[-\. ]\d{4}\b)|(?:\b\d{10}\b))/gi;
     let m;
     while ((m = phonePattern.exec(fullText || '')) !== null) {
       const labelPart = m[1] || '';
@@ -595,8 +765,18 @@ export function runExtraction(ocrPages) {
       const ctxStart = Math.max(0, m.index - 40);
       const ctx = (fullText || '').slice(ctxStart, m.index + rawNum.length + 40).toLowerCase();
   const beforeLabel = (fullText || '').slice(Math.max(0, m.index - 15), m.index).toLowerCase();
-  const isFax = /(fax|fx|facsimile)/i.test(labelPart) || (/\bfax\b|\bfx\b|facsimile/.test(beforeLabel) && !/no\s*fax/.test(beforeLabel));
-  const isTel = /tel|telephone|phone|ph\b/.test(beforeLabel + ctx) && !isFax;
+  const labelLower = (labelPart || '').toLowerCase();
+  let lineIdx = 0; let accLen = 0;
+  for (let i = 0; i < linesArr.length; i++) {
+        accLen += linesArr[i].length + 1;
+        if (accLen > m.index) { lineIdx = i; break; }
+      }
+  const isFax = /(fax|fx|facsimile)/i.test(labelPart)
+    || (/\bfax\b|\bfx\b|facsimile/.test(beforeLabel) && !/no\s*fax/.test(beforeLabel))
+    || labelLower.trim() === 'f'
+    || /\bf[:\s]/.test(beforeLabel);
+  const lineLower = (linesArr[lineIdx] || '').toLowerCase();
+  const isTel = ((/tel|telephone|phone|ph\b/.test(beforeLabel + ctx) || labelLower.trim() === 't' || /\bt[:\s]/.test(beforeLabel) || /^\s*t\b/.test(lineLower)) && !isFax);
       if (isFax) {
         if (!result.provider.fax) {
           result.provider.fax = formatted;
@@ -671,26 +851,50 @@ export function runExtraction(ocrPages) {
     const linesLocal = (fullText || '').split(/\n/);
     const confirmed = [];
     const details = [];
-  // Centralized symptom configuration
-  const SYM_CONFIG = PATTERNS.SYMPTOM_CONFIG;
-    for (let i=0;i<linesLocal.length;i++) {
-      const line = linesLocal[i];
-      for (const [label,pos,neg] of SYM_CONFIG) {
-        if (pos.test(line)) {
-          const negHit = neg ? neg.test(line) : false;
+    for (const rawLine of linesLocal) {
+      const trimmed = String(rawLine || '').trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+
+      if (SYMPTOM_EDUCATIONAL_RE.test(lower)) continue;
+      if (SYMPTOM_CONDITIONAL_RE.test(lower)) continue;
+      if (SYMPTOM_FAMILY_CONTEXT_RE.test(lower)) continue;
+      if (SYMPTOM_THIRD_PARTY_RE.test(lower) && !SYMPTOM_PATIENT_TOKEN_RE.test(lower)) continue;
+
+      if (SYMPTOM_HISTORY_RE.test(lower) && !SYMPTOM_HISTORY_OVERRIDE_RE.test(lower)) {
+        pushUnique(infoAlerts.history, trimmed.slice(0, 160));
+        continue;
+      }
+      if (SYMPTOM_RESOLUTION_RE.test(lower)) {
+        pushUnique(infoAlerts.resolution, trimmed.slice(0, 160));
+        continue;
+      }
+
+      for (const medRe of SYMPTOM_MEDICATION_PATTERNS) {
+        if (medRe.test(trimmed)) {
+          pushUnique(infoAlerts.medications, trimmed.slice(0, 160));
+          break;
+        }
+      }
+      if (SYMPTOM_TEST_RESULT_RE.test(trimmed)) {
+        pushUnique(infoAlerts.testResults, trimmed.slice(0, 160));
+      }
+
+      for (const [label, pos, neg] of SYMPTOM_CONFIG) {
+        if (pos.test(trimmed)) {
+          const negHit = neg ? neg.test(trimmed) : false;
           if (!negHit && !confirmed.includes(label)) confirmed.push(label);
-          details.push({ name: label, status: negHit ? 'denied' : 'confirmed', context: line.trim().slice(0,180) });
-        } else if (neg && neg.test(line)) {
-          // Negative mention without positive form
-          details.push({ name: label, status: 'denied', context: line.trim().slice(0,180) });
+          details.push({ name: label, status: negHit ? 'denied' : 'confirmed', context: trimmed.slice(0, 180) });
+        } else if (neg && neg.test(trimmed)) {
+          details.push({ name: label, status: 'denied', context: trimmed.slice(0, 180) });
         }
       }
     }
     if (confirmed.length) {
-      result.clinical.symptoms = confirmed; // maintain existing contract
+      result.clinical.symptoms = confirmed;
     }
     if (details.length) {
-      result.clinical.symptomDetails = details.slice(0,60); // cap to avoid bloat
+      result.clinical.symptomDetails = details.slice(0, 60);
       trace.push({ rule: 'symptoms_detect', confirmed: confirmed.length, totalMentions: details.length });
     }
   }
@@ -712,21 +916,33 @@ export function runExtraction(ocrPages) {
     if (Object.keys(vitals).length) { result.clinical.vitals = vitals; trace.push({ rule: 'vitals_detect', keys: Object.keys(vitals) }); }
   }
 
-  // Info alerts (PPE, safety, communication, accommodations)
+  // Info alerts (PPE, safety, communication, accommodations, history)
   {
     const txtLower = (fullText || '').toLowerCase();
-    const info = { ppeRequired: null, safety: [], communication: [], accommodations: [] };
-    if (/(isolation|airborne|droplet|ppe required|mask required)/i.test(fullText || '')) info.ppeRequired = true; else if (/no ppe/i.test(fullText || '')) info.ppeRequired = false;
+    if (/(isolation|airborne|droplet|ppe required|mask required)/i.test(fullText || '')) infoAlerts.ppeRequired = true;
+    else if (/no ppe/i.test(fullText || '')) infoAlerts.ppeRequired = false;
     const safetyMap = [ ['seizure', /seizure|epilepsy/], ['cardiac_device', /pacemaker|defibrillator|cardiac\s+device/], ['mobility', /wheelchair|walker|limited\s+mobility|bedbound|bed\s+confined/], ['oxygen', /oxygen|o2\s+dependent/] ];
-    for (const [k,re] of safetyMap) if (re.test(txtLower)) info.safety.push(k);
+    for (const [k, re] of safetyMap) if (re.test(txtLower)) pushUnique(infoAlerts.safety, k);
     const commMap = [ ['hearing_impaired', /hearing\s+impaired|hard\s+of\s+hearing|deaf/], ['language_barrier', /spanish\s+only|interpreter|translation\s+needed|language\s+barrier/] ];
-    for (const [k,re] of commMap) if (re.test(txtLower)) info.communication.push(k);
+    for (const [k, re] of commMap) if (re.test(txtLower)) pushUnique(infoAlerts.communication, k);
     const accomMap = [ ['wheelchair', /wheelchair/], ['oxygen', /oxygen\s+dependent/], ['caretaker', /caretaker|caregiver|guardian/] ];
-    for (const [k,re] of accomMap) if (re.test(txtLower)) info.accommodations.push(k);
-    if (info.ppeRequired !== null || info.safety.length || info.communication.length || info.accommodations.length) {
-      result.infoAlerts = info; trace.push({ rule: 'info_alerts_detect', safety: info.safety.length, communication: info.communication.length, accommodations: info.accommodations.length });
+    for (const [k, re] of accomMap) if (re.test(txtLower)) pushUnique(infoAlerts.accommodations, k);
+    const infoTotals = {
+      ppe: infoAlerts.ppeRequired,
+      safety: infoAlerts.safety.length,
+      communication: infoAlerts.communication.length,
+      accommodations: infoAlerts.accommodations.length,
+      history: infoAlerts.history.length,
+      resolution: infoAlerts.resolution.length,
+      medications: infoAlerts.medications.length,
+      testResults: infoAlerts.testResults.length
+    };
+    if (infoTotals.ppe !== null || infoTotals.safety || infoTotals.communication || infoTotals.accommodations || infoTotals.history || infoTotals.resolution || infoTotals.medications || infoTotals.testResults) {
+      trace.push({ rule: 'info_alerts_detect', ...infoTotals });
     }
   }
+
+  result.infoAlerts = infoAlerts;
   // Missing Chart Notes
   if (!/(chart\s*notes?|progress\s*note|consult|H&P|history\s*&\s*physical|history\s+and\s+physical)/i.test(fullText || '')) {
     result.flags.verifyManually = true;
@@ -785,6 +1001,12 @@ export function runExtraction(ocrPages) {
     result.flags.reasons.push('ocr_low_confidence_critical');
     trace.push({ rule: 'flag_ocr_low_confidence_critical', avgConf: Number(avgConf.toFixed(3)) });
   }
+  const ambiguousHandwriting = totalBoxes && (lowCount / totalBoxes) > 0.45;
+  if (ambiguousHandwriting) {
+    result.flags.verifyManually = true;
+    result.flags.reasons.push('ocr_handwriting_unclear');
+    trace.push({ rule: 'flag_ocr_handwriting_unclear', ratio: Number((lowCount / totalBoxes).toFixed(3)) });
+  }
   if (emptyPageCount > 0) {
     result.flags.verifyManually = true;
     result.flags.reasons.push('ocr_incomplete_pages');
@@ -805,6 +1027,14 @@ export function runExtraction(ocrPages) {
       result.flags.reasons.push(`mixed_signals_${g.key}`);
       trace.push({ rule: 'flag_mixed_signals', symptom: g.key });
     }
+  }
+
+  // Additional contradictory context (explicit "but"/"however" constructs)
+  const contradictionRe = /(reports|positive|noted).{0,80}(?:but|however).{0,80}(denies|negative)/i;
+  if (contradictionRe.test(txt)) {
+    result.flags.verifyManually = true;
+    result.flags.reasons.push('contradictory_information');
+    trace.push({ rule: 'flag_contradictory_information' });
   }
 
   // 3) Complex medical history
@@ -847,11 +1077,16 @@ export function runExtraction(ocrPages) {
   const adjustments = [];
   // Adjust confidence by OCR quality (downgrade one tier if poor)
   if (avgConf && avgConf < 0.8) { adjustments.push({ type: 'ocr_quality_downgrade', avgConf }); baseConf = baseConf === 'High' ? 'Medium' : 'Low'; }
+  if (ambiguousHandwriting && baseConf !== 'Low') {
+    adjustments.push({ type: 'handwriting_downgrade' });
+    baseConf = baseConf === 'High' ? 'Medium' : 'Low';
+  }
 
   // Escalate to Manual Review when multiple uncertainties or critical missing info
-  const criticalReasons = new Set(['ocr_low_confidence_critical', 'ocr_incomplete_pages', 'ocr_low_text_volume']);
+  const criticalReasons = new Set(['ocr_low_confidence_critical', 'ocr_incomplete_pages', 'ocr_low_text_volume', 'ocr_handwriting_unclear']);
   const manualTriggers = result.flags.reasons.filter(r => criticalReasons.has(r) || r.startsWith('mixed_signals_'));
-  if (manualTriggers.length >= 2 || (lowCrit && score < 2)) {
+  if (manualTriggers.length >= 2 || (lowCrit && score < 2) || result.flags.reasons.includes('contradictory_information')) {
+    baseConf = 'Manual Review';
     result.confidence = 'Manual Review';
     adjustments.push({ type: 'manual_review_escalation', triggers: manualTriggers });
   } else {

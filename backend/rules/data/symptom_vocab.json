@@ -1,0 +1,309 @@
+[
+  {
+    "label": "snoring",
+    "positive": [
+      "snor(?:e|ing)",
+      "loud\\s+snor(?:e|ing)",
+      "disruptive\\s+snor(?:e|ing)",
+      "sawing\\s+logs",
+      "freight\\s+train",
+      "heroic\\s+snor(?:e|ing)",
+      "habitual\\s+snor(?:e|ing)",
+      "chronic\\s+snor(?:e|ing)",
+      "partner\\s+complaints?\\s+of\\s+snor(?:e|ing)",
+      "bed\\s+partner\\s+reports?\\s+snor(?:e|ing)",
+      "kids?\\s+complain\\s+about\\s+.*snor"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}snor",
+      "no[^\\n.]{0,60}snor",
+      "without[^\\n.]{0,60}snor"
+    ]
+  },
+  {
+    "label": "witnessed_apnea",
+    "positive": [
+      "witnessed\\s+(?:apnea|apneic)",
+      "apneic\\s+episodes?",
+      "stops?\\s+breathing",
+      "holds?\\s+breath",
+      "breathing\\s+pauses",
+      "gasping\\s+for\\s+air",
+      "partner\\s+observes?\\s+.*breathing",
+      "spouse\\s+reports?\\s+apneas",
+      "choking\\s+episodes",
+      "startles?\\s+awake\\s+gasping",
+      "fights?\\s+for\\s+breath",
+      "catches?\\s+breath"
+    ],
+    "negative": [
+      "denies\\s+(?:witnessed|observed)\\s+(?:apnea|apneic)",
+      "no\\s+witnessed\\s+apneas?"
+    ]
+  },
+  {
+    "label": "daytime_sleepiness",
+    "positive": [
+      "excessive\\s+daytime\\s+sleepiness",
+      "\\bEDS\\b",
+      "hypersomnia",
+      "falls?\\s+asleep\\s+(?:driving|in\\s+meetings|in\\s+conversations)",
+      "can't\\s+stay\\s+awake",
+      "nodding\\s+off",
+      "dozing",
+      "microsleep",
+      "uncontrollable\\s+sleepiness",
+      "could\\s+sleep\\s+anywhere",
+      "cat\\s+naps?\\s+constantly"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}sleepiness",
+      "no[^\\n.]{0,60}sleepiness"
+    ]
+  },
+  {
+    "label": "fatigue",
+    "positive": [
+      "fatigue",
+      "chronic\\s+fatigue",
+      "exhaustion",
+      "tired\\s+all\\s+the\\s+time",
+      "no\\s+energy",
+      "lack\\s+of\\s+energy",
+      "energy\\s+depletion",
+      "wiped\\s+out",
+      "drained",
+      "running\\s+on\\s+empty",
+      "never\\s+rested",
+      "never\\s+refreshed",
+      "unrefreshing\\s+sleep",
+      "sleep\\s+but\\s+don't\\s+feel\\s+better"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}fatigue",
+      "no[^\\n.]{0,60}fatigue"
+    ]
+  },
+  {
+    "label": "morning_symptoms",
+    "positive": [
+      "morning\\s+headaches?",
+      "AM\\s+headaches?",
+      "wakes?\\s+with\\s+headache",
+      "morning\\s+grogginess",
+      "hard\\s+to\\s+wake\\s+up",
+      "sleep\\s+inertia",
+      "dry\\s+mouth",
+      "cotton\\s+mouth",
+      "throat\\s+dryness",
+      "feels?\\s+like\\s+hangover",
+      "thick\\s+headed"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}headache",
+      "no[^\\n.]{0,60}headache"
+    ]
+  },
+  {
+    "label": "headache",
+    "positive": [
+      "headaches?",
+      "migraine",
+      "ha\\b",
+      "am\\s+ha"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}headache",
+      "no[^\\n.]{0,60}headache"
+    ]
+  },
+  {
+    "label": "cognitive_issues",
+    "positive": [
+      "difficulty\\s+concentrating",
+      "poor\\s+concentration",
+      "can't\\s+focus",
+      "memory\\s+problems",
+      "forgetful",
+      "brain\\s+fog",
+      "attention\\s+deficit",
+      "easily\\s+distracted",
+      "spacey",
+      "mental\\s+fatigue",
+      "cognitive\\s+dysfunction",
+      "can't\\s+think\\s+straight",
+      "mind\\s+feels\\s+cloudy"
+    ],
+    "negative": []
+  },
+  {
+    "label": "mood_changes",
+    "positive": [
+      "irritability",
+      "irritable",
+      "short\\s+tempered",
+      "cranky",
+      "mood\\s+swings",
+      "depression",
+      "depressed\\s+mood",
+      "anxiety",
+      "restlessness",
+      "on\\s+edge",
+      "personality\\s+changes",
+      "not\\s+myself",
+      "behavioral\\s+issues"
+    ],
+    "negative": []
+  },
+  {
+    "label": "physical_risk",
+    "positive": [
+      "obesity",
+      "morbid\\s+obesity",
+      "overweight",
+      "bmi\\s*>?=?.*30",
+      "large\\s+neck",
+      "thick\\s+neck",
+      "neck\\s+circumference",
+      "crowded\\s+airway",
+      "small\\s+airway",
+      "narrow\\s+throat",
+      "large\\s+tonsils",
+      "tonsillar\\s+hypertrophy",
+      "deviated\\s+septum",
+      "nasal\\s+obstruction",
+      "stuffy\\s+nose",
+      "small\\s+jaw",
+      "retrognathia",
+      "receding\\s+chin",
+      "micrognathia",
+      "large\\s+tongue",
+      "macroglossia"
+    ],
+    "negative": []
+  },
+  {
+    "label": "urinary_symptoms",
+    "positive": [
+      "nocturia",
+      "frequent\\s+nighttime\\s+urination",
+      "up\\s+all\\s+night\\s+pee",
+      "bathroom\\s+trips?\\s+at\\s+night",
+      "can't\\s+sleep\\s+through\\s+night",
+      "polyuria",
+      "urinary\\s+frequency"
+    ],
+    "negative": [
+      "denies[^\\n.]{0,60}nocturia",
+      "no[^\\n.]{0,60}nocturia"
+    ]
+  },
+  {
+    "label": "sleep_disruption",
+    "positive": [
+      "restless\\s+sleep",
+      "tossing\\s+and\\s+turning",
+      "can't\\s+get\\s+comfortable",
+      "frequent\\s+awakenings",
+      "wake\\s+up\\s+multiple\\s+times",
+      "light\\s+sleeper",
+      "easily\\s+awakened",
+      "any\\s+noise\\s+wakes",
+      "can't\\s+fall\\s+asleep",
+      "can't\\s+stay\\s+asleep",
+      "sleep\\s+but\\s+don't\\s+rest",
+      "tired\\s+when\\s+i\\s+wake"
+    ],
+    "negative": [
+      "denies\\s+insomnia",
+      "no\\s+sleep\\s+issues"
+    ]
+  },
+  {
+    "label": "sleep_position_issue",
+    "positive": [
+      "sleep\\s+in\\s+chair",
+      "sleeps\\s+in\\s+recliner",
+      "can\\s+only\\s+sleep\\s+sitting",
+      "orthopnea",
+      "multiple\\s+pillows",
+      "need\\s+pillows\\s+propped",
+      "can't\\s+lay\\s+flat",
+      "positional\\s+sleep\\s+issues"
+    ],
+    "negative": []
+  },
+  {
+    "label": "pediatric_behavior",
+    "positive": [
+      "hyperactivity",
+      "can't\\s+sit\\s+still",
+      "adhd",
+      "poor\\s+school\\s+performance",
+      "grades\\s+declining",
+      "trouble\\s+in\\s+school",
+      "behavioral\\s+problems",
+      "aggression",
+      "acting\\s+out",
+      "growth\\s+delays",
+      "not\\s+growing\\s+normally",
+      "short\\s+stature",
+      "bedwetting",
+      "enuresis"
+    ],
+    "negative": []
+  },
+  {
+    "label": "pediatric_physical",
+    "positive": [
+      "mouth\\s+breathing",
+      "always\\s+breathes\\s+through\\s+mouth",
+      "enlarged\\s+tonsils",
+      "big\\s+tonsils",
+      "tonsillar\\s+hypertrophy",
+      "snores\\s+like\\s+an\\s+adult",
+      "loud\\s+snoring\\s+for\\s+a\\s+child",
+      "restless\\s+sleep",
+      "tosses\\s+all\\s+night",
+      "kicks\\s+covers\\s+off"
+    ],
+    "negative": []
+  },
+  {
+    "label": "safety_risk",
+    "positive": [
+      "falls\\s+asleep\\s+driving",
+      "nodding\\s+off\\s+at\\s+wheel",
+      "motor\\s+vehicle\\s+accident",
+      "work\\s+accidents",
+      "nearly\\s+hurt\\s+at\\s+work",
+      "boss\\s+complained\\s+about\\s+sleeping",
+      "can't\\s+stay\\s+awake\\s+in\\s+meetings"
+    ],
+    "negative": []
+  },
+  {
+    "label": "functional_impairment",
+    "positive": [
+      "affects\\s+daily\\s+life",
+      "can't\\s+function\\s+normally",
+      "family\\s+complains",
+      "relationship\\s+strain",
+      "spouse\\s+frustrated",
+      "social\\s+withdrawal",
+      "don't\\s+go\\s+out\\s+anymore"
+    ],
+    "negative": []
+  },
+  {
+    "label": "partner_observation",
+    "positive": [
+      "wife\\s+says\\s+i\\s+stop\\s+breathing",
+      "husband\\s+snor(?:e|ing)",
+      "partner\\s+sleeps\\s+in\\s+other\\s+room",
+      "family\\s+worr(?:y|ied)\\s+about\\s+my\\s+breathing",
+      "loved\\s+ones\\s+concerned"
+    ],
+    "negative": []
+  }
+]

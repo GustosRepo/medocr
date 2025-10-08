@@ -7,23 +7,23 @@ import { buildPdfModel } from '../pdf/model.js';
 // Centralized typography + spacing constants for PDF layout consistency
 const PDF_STYLE = {
   sizes: {
-    header: 18,
-    section: 13,
-    body: 11,
-    tableHeader: 11,
-    tableBody: 10,
-    hidden: 1,
-    meta: 12 // header detail line (patient/dob/date)
+    header: 16,
+    section: 10,
+    body: 8,
+    tableHeader: 12,
+    tableBody: 8,
+    hidden: 12,
+    meta: 8
   },
   gaps: {
-    sectionTop: 0.75,   // vertical moveDown before a section title
-    sectionAfterTitle: 0.25, // gap after section title
+    sectionTop: 1.1,
+    sectionAfterTitle: 0.6,
     betweenLines: 0.0
   }
 };
 
 // Approximate body line height used for pre-page-break estimation (pdfkit auto leading ~ fontSize * 1.15)
-const BODY_LINE_HEIGHT = Math.round(PDF_STYLE.sizes.body * 1.25); // generous to reduce orphan lines
+const BODY_LINE_HEIGHT = Math.round(PDF_STYLE.sizes.body * 1.45);
 
 export function listBatchDates(docs) {
   const set = new Set();
@@ -57,25 +57,60 @@ export function summarizeActions(entries) {
 export function buildCoverJson(docs, date) {
   const entries = collectBatchDocs(docs, date);
   const total = entries.length;
-  let done = 0, errors = 0, inprogress = 0, manual = 0;
+  const totals = { processed: total, ready: 0, additional: 0, manual: 0, done: 0, errors: 0, inprogress: 0 };
+  const formCounts = {
+    insuranceVerification: 0,
+    authorizationRequests: 0,
+    utsReferrals: 0,
+    providerFollowUps: 0,
+    patientContacts: 0
+  };
+  const formActionMap = {
+    insurance_verification_needed: 'insuranceVerification',
+    auth_required: 'authorizationRequests',
+    out_of_network: 'utsReferrals',
+    provider_followup_needed: 'providerFollowUps',
+    missing_demographics: 'patientContacts'
+  };
+
   const patients = [];
   for (const { id, entry } of entries) {
-    if (entry.status === 'done') done++; else if (entry.status === 'error') errors++; else inprogress++;
-    if (entry?.result?.flags?.verifyManually) manual++;
-    const p = entry?.result?.patient || {};
+    if (entry.status === 'done') totals.done++; else if (entry.status === 'error') totals.errors++; else totals.inprogress++;
+    const manual = !!entry?.result?.flags?.verifyManually;
+    if (manual) totals.manual++;
+
+    const patientInfo = entry?.result?.patient || {};
+    const insuranceArr = Array.isArray(entry?.result?.insurance) ? entry.result.insurance : [];
+    const primaryIns = insuranceArr[0] || {};
+    const actions = Array.isArray(entry?.result?.alerts?.actions) ? entry.result.alerts.actions : [];
+    const readableActions = mapActions(actions);
+    let additionalActions = readableActions.length ? readableActions.join('; ') : 'None';
+    if (manual && readableActions.length === 0) {
+      additionalActions = 'Manual review required';
+    }
+    if (!manual && actions.length === 0) totals.ready++;
+    else totals.additional++;
+
+    for (const action of actions) {
+      const key = formActionMap[action];
+      if (key) formCounts[key]++;
+    }
+
     patients.push({
       id,
-      name: [p.last, p.first].filter(Boolean).join(', ') || 'Unknown',
-      dob: p.dob || null,
-      insurance: entry?.result?.insurance?.carrier || null,
-      memberId: entry?.result?.insurance?.memberId || null,
-      actions: entry?.result?.alerts?.actions || []
+      name: [patientInfo.last, patientInfo.first].filter(Boolean).join(', ') || 'Unknown',
+      dob: patientInfo.dob || '—',
+      insurance: primaryIns.carrier || '—',
+      memberId: primaryIns.memberId || '—',
+      additionalActions,
+      rawActions: actions
     });
   }
+
   return {
     date,
-    totals: { processed: total, done, errors, inprogress, manual },
-    topActions: summarizeActions(entries),
+    totals,
+    forms: formCounts,
     patients
   };
 }
@@ -120,44 +155,54 @@ export function renderCoverPdf(res, coverJson, logoPath) {
   const doc = new PDFDocument({ margin: 36, autoFirstPage: true });
   res.setHeader('Content-Type', 'application/pdf');
   doc.pipe(res);
-  drawHeader(doc, 'Batch Cover Sheet', logoPath);
+  drawHeader(doc, `REFERRAL PROCESSING SUMMARY - INTAKE DATE: ${coverJson.date || '—'}`, logoPath);
 
-  const { date, totals, topActions, patients } = coverJson;
-  doc.fontSize(PDF_STYLE.sizes.meta).fillColor('#000');
-  doc.text(`Date: ${date}`);
-  doc.text(`Processed: ${totals.processed} | Done: ${totals.done} | Error: ${totals.errors} | In-Progress: ${totals.inprogress} | Manual Review: ${totals.manual}`);
-  doc.moveDown(0.7);
+  const { totals, forms, patients } = coverJson;
+  doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body).fillColor('#000');
+  doc.text(`TOTAL REFERRALS PROCESSED: ${totals.processed}`);
+  doc.text(`READY TO SCHEDULE: ${totals.ready}`);
+  doc.text(`ADDITIONAL ACTIONS REQUIRED: ${totals.additional}`);
+  doc.text(`MANUAL REVIEW REQUIRED: ${totals.manual}`);
+  doc.moveDown(0.8);
 
-  doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('Top Actions');
+  doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('PATIENT CHECKLIST:');
+  doc.moveDown(0.4);
   doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body);
-  for (const t of topActions.slice(0, 20)) {
-    doc.text(`${t.action}: ${t.count}`);
-  }
-  doc.addPage();
-
-  doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('Patients');
-  doc.font('Helvetica').fontSize(PDF_STYLE.sizes.tableBody);
-  // Simple tabular columns
-  const colWidths = [200, 100, 150, 100];
-  const headers = ['Name', 'DOB', 'Insurance', 'Actions'];
-  const startX = doc.x, startY = doc.y + 6;
-  const drawRow = (cells) => {
-    let x = startX;
-    for (let i = 0; i < cells.length; i++) {
-      const w = colWidths[i] || 120;
-      doc.text(String(cells[i] || ''), x, doc.y, { width: w });
-      x += w + 8;
+  for (const patient of patients) {
+    doc.text(`□ ${patient.name} | DOB: ${patient.dob} | Insurance: ${patient.insurance} | ID: ${patient.memberId}`);
+    doc.text(`   Additional Actions Required: ${patient.additionalActions}`);
+    doc.moveDown(0.6);
+    if (doc.y > doc.page.height - 72) {
+      doc.addPage();
+      doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('PATIENT CHECKLIST (cont.)');
+      doc.moveDown(0.4);
+      doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body);
     }
-    doc.moveDown(0.5);
-  };
-  doc.font('Helvetica-Bold'); drawRow(headers); doc.font('Helvetica');
-  for (const p of patients) {
-  const actsRaw = (p.actions || []).slice(0, 3);
-  const acts = actsRaw.map(a=>mapAction(a)).join(', ');
-  drawRow([p.name, p.dob || '', p.insurance || '', acts]);
-    // Pagination
-    if (doc.y > doc.page.height - 72) { doc.addPage(); doc.font('Helvetica-Bold'); drawRow(headers); doc.font('Helvetica'); }
   }
+
+  doc.moveDown(0.8);
+  doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('FORMS GENERATED:');
+  doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body);
+  doc.text(`□ Insurance verification forms: ${forms.insuranceVerification}`);
+  doc.text(`□ Authorization request forms: ${forms.authorizationRequests}`);
+  doc.text(`□ UTS referral forms: ${forms.utsReferrals}`);
+  doc.text(`□ Provider follow-up requests: ${forms.providerFollowUps}`);
+  doc.text(`□ Patient contact forms: ${forms.patientContacts}`);
+
+  doc.moveDown(0.8);
+  doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('COMMON ADDITIONAL ACTIONS:');
+  doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body);
+  doc.text('- No chart notes/insurance verification required → Generate insurance verification form');
+  doc.text('- Insufficient information – sleep questionnaire required, call patient');
+  doc.text('- Wrong test ordered – need order for complete sleep study due to no testing in last 5 years');
+  doc.text('- Out of network – fax UTS');
+  doc.text('- Authorization required – submit/fax request');
+  doc.text('- Missing demographics – call provider for complete patient information');
+  doc.text('- Provider follow-up required – obtain additional clinical documentation');
+  doc.text('- Insurance expired/terminated – verify current coverage');
+  doc.text('- Pediatric specialist referral required');
+  doc.text('- DME evaluation needed before testing');
+
   doc.end();
 }
 
@@ -216,23 +261,17 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
       doc.addPage();
       pageCount++;
       // Hidden marker indicating a page break occurred
-      doc.save(); doc.fillColor('#fff').fontSize(1).text('PAGE_BREAK'); doc.restore();
       if (!multiPageMarkerInserted) {
-        // Insert the multi-page marker the moment we know it's multi-page so tests reliably catch it
-        doc.save(); doc.fillColor('#fff').fontSize(1).text('MULTIPAGE_PATIENT_PDF'); doc.restore();
-  try { doc.info.MultiPageMarker = 'MULTIPAGE_PATIENT_PDF'; } catch(e) {}
         multiPageMarkerInserted = true;
+        try { doc.info.MultiPageMarker = 'MULTIPAGE_PATIENT_PDF'; } catch (e) {}
       }
-      // Repeat small header context for continuity
-      doc.font('Helvetica-Bold').fontSize(10).text('Referral Summary (cont.)');
+      // Repeat header context for continuity on additional pages
+      doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text('Referral Summary (cont.)');
       doc.moveDown(0.4);
     }
   }
   drawHeader(doc, 'Referral Summary', logoPath);
   // Hidden markers for test assertions (draw as very small transparent text)
-  doc.save();
-  doc.fillColor('#fff').fontSize(1).text('REFERRAL_SUMMARY_MARKER');
-  doc.restore();
 
   const r = extractionResult || {};
   if (!r.pdfModel) { try { r.pdfModel = buildPdfModel(r); } catch {} }
@@ -242,6 +281,38 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   const secondaryIns = m.insurance?.secondary || null;
   const clinical = m.clinical || {};
   const vitals = clinical.vitals || {};
+  const info = m.infoAlerts || {};
+
+  function parseDateString(str) {
+    if (!str) return null;
+    if (/\d{4}-\d{2}-\d{2}/.test(str)) {
+      const d = new Date(`${str}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    const candidate = new Date(str);
+    if (!Number.isNaN(candidate.getTime())) return candidate;
+    return null;
+  }
+
+  function computeAge(dobStr, referenceStr) {
+    const dob = parseDateString(dobStr);
+    if (!dob) return null;
+    const reference = parseDateString(referenceStr) || new Date();
+    let age = reference.getFullYear() - dob.getFullYear();
+    const mDiff = reference.getMonth() - dob.getMonth();
+    if (mDiff < 0 || (mDiff === 0 && reference.getDate() < dob.getDate())) age -= 1;
+    return age;
+  }
+
+  const intakeDate = m.document?.intakeDate || r.documentMeta?.intakeDate || null;
+  const patientAge = computeAge(p.dob, intakeDate);
+  const hasCaretaker = Array.isArray(info.accommodations) && info.accommodations.includes('caretaker');
+  const mobilityConcern = Array.isArray(info.safety) && info.safety.includes('mobility');
+  const showEmergencyContact = !!(p.emergencyContact && ((patientAge !== null && patientAge < 18) || hasCaretaker || mobilityConcern));
+
+  const joinList = (arr) => Array.isArray(arr) && arr.length ? arr.slice(0, 3).join('; ') : null;
+
+  const sectionMarkers = [];
 
   function section(title) {
     ensureSpace(4);
@@ -249,6 +320,13 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
     doc.font('Helvetica-Bold').fontSize(PDF_STYLE.sizes.section).text(title, { continued: false });
     doc.moveDown(PDF_STYLE.gaps.sectionAfterTitle);
     doc.font('Helvetica').fontSize(PDF_STYLE.sizes.body);
+    sectionMarkers.push(title);
+  }
+
+  function bullet(line) {
+    if (!line) return;
+    ensureSpace(1.5);
+    doc.text(`- ${line}`);
   }
 
   // Header line
@@ -258,68 +336,89 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
 
   // Demographics
   section('DEMOGRAPHICS');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_DEMOGRAPHICS'); doc.restore();
-  const phoneLine = p.phones && p.phones.length ? `Phone: ${p.phones[0]}${p.phones[1] ? ' / ' + p.phones[1] : ''}` : 'Phone: —';
-  doc.text(phoneLine);
-  doc.text(`Email: ${p.email || '—'}`);
-  if (p.emergencyContact && p.emergencyContact.raw) {
-    doc.text(`Emergency Contact: ${p.emergencyContact.raw}${p.emergencyContact.relationship ? ' (' + p.emergencyContact.relationship + ')' : ''}${p.emergencyContact.phone ? ' / ' + p.emergencyContact.phone : ''}`);
+  const primaryPhone = (p.phones && p.phones.length) ? p.phones[0] : '—';
+  const secondaryPhone = (p.phones && p.phones.length > 1) ? ` / ${p.phones[1]}` : '';
+  bullet(`Phone: ${primaryPhone}${secondaryPhone}`);
+  bullet(`Email: ${p.email || '—'}`);
+  if (showEmergencyContact && p.emergencyContact && p.emergencyContact.raw) {
+    const ec = p.emergencyContact;
+    const pieces = [ec.raw];
+    if (ec.relationship) pieces.push(ec.relationship);
+    if (ec.phone) pieces.push(ec.phone);
+    bullet(`Emergency Contact: ${pieces.join(' / ')}`);
   }
 
   // Insurance
   section('INSURANCE');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_INSURANCE'); doc.restore();
-  doc.text(`Primary: ${primaryIns.carrier || '—'}${primaryIns.memberId ? ' | ID: ' + primaryIns.memberId : ''}${primaryIns.groupId ? ' | Group: ' + primaryIns.groupId : ''}`);
+  const primaryParts = [primaryIns.carrier || '—'];
+  if (primaryIns.memberId) primaryParts.push(`ID: ${primaryIns.memberId}`);
+  if (primaryIns.groupId) primaryParts.push(`Group: ${primaryIns.groupId}`);
+  bullet(`Primary: ${primaryParts.join(' | ')}`);
   if (secondaryIns) {
-    doc.text(`Secondary: ${secondaryIns.carrier || '—'}${secondaryIns.memberId ? ' | ID: ' + secondaryIns.memberId : ''}${secondaryIns.groupId ? ' | Group: ' + secondaryIns.groupId : ''}`);
+    const secondaryParts = [secondaryIns.carrier || '—'];
+    if (secondaryIns.memberId) secondaryParts.push(`ID: ${secondaryIns.memberId}`);
+    if (secondaryIns.groupId) secondaryParts.push(`Group: ${secondaryIns.groupId}`);
+    bullet(`Secondary: ${secondaryParts.join(' | ')}`);
   }
 
   // Procedure
   section('PROCEDURE ORDERED');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_PROCEDURE'); doc.restore();
   const proc = m.procedure || {};
-  doc.text(`CPT Code: ${proc.cpt || '—'}`);
-  doc.text(`Description: ${proc.description || '—'}`);
+  bullet(`CPT Code: ${proc.cpt || '—'}`);
+  bullet(`Description: ${proc.description || '—'}`);
   if (Array.isArray(proc.providerNotes) && proc.providerNotes.length) {
-    doc.text(`Provider Notes: ${proc.providerNotes.join(', ')}`);
+    bullet(`Provider Notes: ${proc.providerNotes.join(', ')}`);
   }
 
   // Referring Physician
   section('REFERRING PHYSICIAN');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_PROVIDER'); doc.restore();
   const prov = m.provider || {};
-  doc.text(`Name: ${prov.name || '—'}`);
-  doc.text(`NPI: ${prov.npi || '—'}`);
-  if (prov.practice) doc.text(`Practice: ${prov.practice}`);
-  if (prov.supervising) doc.text(`Supervising Physician: ${prov.supervising}`);
-  if (prov.phone) doc.text(`Phone: ${prov.phone}`);
-  if (prov.fax) doc.text(`Fax: ${prov.fax}`);
+  bullet(`Name: ${prov.name || '—'}`);
+  bullet(`NPI: ${prov.npi || '—'}`);
+  if (prov.practice) bullet(`Practice: ${prov.practice}`);
+  if (prov.supervising) bullet(`Supervising Physician: ${prov.supervising}`);
+  if (prov.phone || prov.fax) {
+    const contactParts = [];
+    if (prov.phone) contactParts.push(`Phone: ${prov.phone}`);
+    if (prov.fax) contactParts.push(`Fax: ${prov.fax}`);
+    bullet(contactParts.join(' | '));
+  }
 
   // Clinical Information
   section('CLINICAL INFORMATION');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_CLINICAL'); doc.restore();
   if (clinical.primaryDiagnosis) {
-    doc.text(`Primary Diagnosis: ${clinical.primaryDiagnosis.code || ''}${clinical.primaryDiagnosis.description ? ' — ' + clinical.primaryDiagnosis.description : ''}`);
+    const diag = clinical.primaryDiagnosis;
+    const diagParts = [diag.code || ''];
+    if (diag.description) diagParts.push(diag.description);
+    bullet(`Primary Diagnosis: ${diagParts.filter(Boolean).join(' — ') || '—'}`);
   } else {
-    doc.text('Primary Diagnosis: —');
+    bullet('Primary Diagnosis: —');
   }
   if (Array.isArray(clinical.symptoms) && clinical.symptoms.length) {
-    doc.text(`Symptoms Present: ${clinical.symptoms.join(', ')}`);
+    bullet(`Symptoms Present: ${clinical.symptoms.join(', ')}`);
   }
   const vitalsParts = [];
   if (vitals.bmi) vitalsParts.push('BMI ' + vitals.bmi);
   if (vitals.bp) vitalsParts.push('BP ' + vitals.bp);
   if (vitals.weightLbs) vitalsParts.push('Wt ' + vitals.weightLbs + ' lbs');
   if (vitals.height) vitalsParts.push('Ht ' + vitals.height);
-  if (vitalsParts.length) doc.text('Vitals: ' + vitalsParts.join(' | '));
+  if (vitalsParts.length) bullet('Vitals: ' + vitalsParts.join(' | '));
 
   // Information Alerts
   section('INFORMATION ALERTS');
-  const info = m.infoAlerts || {};
-  doc.text(`PPE Requirements: ${info.ppeRequired === true ? 'Yes' : info.ppeRequired === false ? 'No' : '—'}`);
-  if (Array.isArray(info.safety) && info.safety.length) doc.text('Safety Precautions: ' + info.safety.join(', '));
-  if (Array.isArray(info.communication) && info.communication.length) doc.text('Communication Needs: ' + info.communication.join(', '));
-  if (Array.isArray(info.accommodations) && info.accommodations.length) doc.text('Special Accommodations: ' + info.accommodations.join(', '));
+  const ppeValue = info.ppeRequired === true ? 'Yes' : info.ppeRequired === false ? 'No' : '—';
+  bullet(`PPE Requirements: ${ppeValue}`);
+  if (Array.isArray(info.safety) && info.safety.length) bullet('Safety Precautions: ' + info.safety.join(', '));
+  if (Array.isArray(info.communication) && info.communication.length) bullet('Communication Needs: ' + info.communication.join(', '));
+  if (Array.isArray(info.accommodations) && info.accommodations.length) bullet('Special Accommodations: ' + info.accommodations.join(', '));
+  const historyNote = joinList(info.history);
+  if (historyNote) bullet(`History Notes: ${historyNote}`);
+  const resolutionNote = joinList(info.resolution);
+  if (resolutionNote) bullet(`Resolution Notes: ${resolutionNote}`);
+  const medicationNote = joinList(info.medications);
+  if (medicationNote) bullet(`Medication Alerts: ${medicationNote}`);
+  const testNote = joinList(info.testResults);
+  if (testNote) bullet(`Referenced Test Results: ${testNote}`);
 
   // Problem Flags
   section('PROBLEM FLAGS');
@@ -327,45 +426,48 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   const actions = m.problemFlags?.actions || [];
   const combined = [...reasonsRaw, ...actions];
   const pretty = combined.length ? mapActions(combined) : [];
-  if (pretty.length) doc.text(pretty.join('; ')); else doc.text('None');
+  if (pretty.length) {
+    for (const line of pretty) bullet(line);
+  } else {
+    bullet('None');
+  }
 
   // Authorization Notes (placeholder derived from actions)
   section('AUTHORIZATION NOTES');
   const authNotes = m.authorization?.notes || [];
+  try {
+    const infoNotes = authNotes.length ? authNotes : (m.problemFlags?.actions || []);
+    doc.info.AuthorizationNotes = JSON.stringify(infoNotes);
+  } catch (e) { /* metadata hint only */ }
   if (authNotes.length) {
-  for (const n of authNotes) { ensureSpace(2); doc.text('- ' + n); }
-  // Also add a small hidden summary line for regex fallback
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('AUTH_NOTES_PRESENT'); doc.restore();
-  // Lowercase composite line to aid naive PDF text extraction tests
-  doc.save(); doc.fillColor('#fff').fontSize(1).text(authNotes.map(a => a.toLowerCase()).join(' | ')); doc.restore();
-  try { doc.info.AuthorizationNotes = authNotes.join(' || '); } catch (e) {}
+    for (const n of authNotes) {
+      bullet(n);
+    }
   } else {
-  const acts = m.problemFlags?.actions || [];
-    if (acts.length) doc.text(acts.join(', ')); else doc.text('None');
+    const acts = m.problemFlags?.actions || [];
+    if (acts.length) bullet(acts.join(', ')); else bullet('None');
   }
 
   // Data Quality Summary
   section('DATA QUALITY');
-  doc.save(); doc.fillColor('#fff').fontSize(1).text('SECTION_DATA_QUALITY'); doc.restore();
   const qc = m.dataQuality?.qc || {};
-  doc.text(`Confidence: ${m.dataQuality?.confidence || '—'}`);
-  doc.text(`QC: name=${qc.nameConsistency||'unk'} | dob=${qc.dateValidity||'unk'} | phone=${qc.phoneValidity||'unk'} | cpt=${qc.cptValid||'unk'}`);
+  bullet(`Confidence: ${m.dataQuality?.confidence || '—'}`);
+  bullet(`QC: name=${qc.nameConsistency || 'unk'} | dob=${qc.dateValidity || 'unk'} | phone=${qc.phoneValidity || 'unk'} | cpt=${qc.cptValid || 'unk'}`);
   if (Array.isArray(m.procedure?.cptCandidates) && m.procedure.cptCandidates.length > 1) {
-    doc.text('CPT Ambiguity: ' + m.procedure.cptCandidates.join(', '));
+    bullet('CPT Ambiguity: ' + m.procedure.cptCandidates.join(', '));
   }
 
   // Confidence
   section('CONFIDENCE LEVEL');
-  doc.text(m.confidenceLevel || m.dataQuality?.confidence || '—');
+  bullet(m.confidenceLevel || m.dataQuality?.confidence || '—');
 
   // Hidden multi-page marker fallback (in case no break triggered ensureSpace after content growth)
-  if (pageCount > 1 && !multiPageMarkerInserted) {
-    doc.save(); doc.fillColor('#fff').fontSize(1).text('MULTIPAGE_PATIENT_PDF'); doc.restore();
-  try { doc.info.MultiPageMarker = 'MULTIPAGE_PATIENT_PDF'; } catch(e) {}
-    multiPageMarkerInserted = true;
-  }
   if (pageCount > 1) {
     try { doc.info.Pages = String(pageCount); } catch (e) {}
   }
+
+  try {
+    doc.info.SectionMarkers = sectionMarkers.join('|');
+  } catch (e) {}
   doc.end();
 }
