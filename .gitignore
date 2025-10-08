@@ -27,3 +27,10 @@ htmlcov/
 
 # Logs
 *.log
+
+# Runtime data files
+data/uploads/
+data/pids/
+data/feedback.ndjson
+data/metrics.json
+data/snapshots.ndjson
