@@ -7,6 +7,7 @@ import multer from 'multer';
 import { performance } from 'perf_hooks';
 import { PassThrough } from 'stream';
 import archiver from 'archiver';
+import { PDFDocument } from 'pdf-lib';
 import { incCounter, recordLatency, snapshot as metricsSnapshot, recordConfidence, recordConcurrency, recordOcrQueueDepth } from './metrics/store.js';
 import crypto from 'crypto';
 import { addSnapshot, ambiguousCptRate, recentSnapshots } from './snapshot/store.js';
@@ -21,6 +22,7 @@ import { buildPdfModel } from './pdf/model.js';
 import { mapAction, mapActions } from './actionMap.js';
 import { addFeedback, listFeedback, stats as feedbackStats } from './feedback/store.js';
 import { buildCoverage } from './coverage.js';
+import { invalidateConfigCache } from './rules/utils/configLoader.js';
 
 const app = express();
 app.use(express.json({ limit: process.env.BODY_SIZE_LIMIT || '256kb' }));
@@ -80,6 +82,7 @@ function nextOcrServiceUrl() {
   return url;
 }
 const rulesDataDir = path.join(__dirname, 'rules', 'data');
+const PATTERN_OVERRIDES_FILE = 'pattern_overrides.json';
 
 function listRuleFilesMeta() {
   try {
@@ -207,6 +210,27 @@ function renderSummaryPdfBuffer(result, logoPath) {
       reject(err);
     }
   });
+}
+
+async function buildPacketPdf(docId, entry, logoPath) {
+  const summaryBuffer = await renderSummaryPdfBuffer(entry.result, logoPath);
+  const filePath = entry.filePath;
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      const originalBytes = await fsPromises.readFile(filePath);
+      const summaryDoc = await PDFDocument.load(summaryBuffer);
+      const originalDoc = await PDFDocument.load(originalBytes);
+      const copiedPages = await summaryDoc.copyPages(originalDoc, originalDoc.getPageIndices());
+      copiedPages.forEach(page => summaryDoc.addPage(page));
+      const merged = await summaryDoc.save();
+      return Buffer.from(merged);
+    } catch (err) {
+      log('warn', 'packet_pdf_merge_failed', { id: docId, filePath, err: String(err?.message || err) });
+    }
+  } else {
+    log('warn', 'packet_original_missing', { id: docId, filePath });
+  }
+  return summaryBuffer;
 }
 
 // Checklist overrides persistent store
@@ -495,7 +519,7 @@ app.get('/api/documents/:id/summary.pdf', (req, res) => {
   renderPatientPdf(res, entry.result, process.env.BATCH_LOGO_PATH);
 });
 
-app.get('/api/documents/:id/packet.zip', async (req, res) => {
+app.get('/api/documents/:id/packet.pdf', async (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
   if (!entry || entry.status !== 'done' || !entry.result) {
@@ -504,40 +528,12 @@ app.get('/api/documents/:id/packet.zip', async (req, res) => {
 
   try {
     const stem = buildSummaryFileStem(entry.result);
-    const packetName = `${stem}_packet.zip`;
-    const folderName = `${stem}_packet`;
+    const packetName = `${stem}_packet.pdf`;
+    const packetBuffer = await buildPacketPdf(id, entry, process.env.BATCH_LOGO_PATH);
 
-    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${packetName}"; filename*=UTF-8''${encodeURIComponent(packetName)}`);
-
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.on('error', err => {
-      req.logger?.error('packet_zip_failed', { id, err: String(err?.message || err) });
-      if (!res.headersSent) {
-        res.status(500).json({ error: { code: 'packet_zip_failed', message: 'unable to build packet' } });
-      } else {
-        res.end();
-      }
-    });
-
-    archive.pipe(res);
-
-    try {
-      const summaryBuffer = await renderSummaryPdfBuffer(entry.result, process.env.BATCH_LOGO_PATH);
-      archive.append(summaryBuffer, { name: `${folderName}/${stem}_summary.pdf` });
-    } catch (summaryErr) {
-      req.logger?.error('packet_summary_failed', { id, err: String(summaryErr?.message || summaryErr) });
-      throw summaryErr;
-    }
-
-    if (entry.filePath && fs.existsSync(entry.filePath)) {
-      const originalName = entry.originalName || path.basename(entry.filePath);
-      archive.file(entry.filePath, { name: `${folderName}/${originalName}` });
-    } else {
-      req.logger?.warn('packet_original_missing', { id, filePath: entry.filePath });
-    }
-
-    archive.finalize();
+    res.send(packetBuffer);
   } catch (err) {
     req.logger?.error('packet_build_failed', { id, err: String(err?.message || err) });
     res.status(500).json({ error: { code: 'packet_build_failed', message: 'unable to build packet' } });
@@ -726,11 +722,82 @@ app.put('/api/admin/rules/files/:name', async (req, res) => {
   }
   try {
     await fsPromises.writeFile(abs, normalized, 'utf8');
+    invalidateConfigCache(path.basename(abs));
     const stat = await fsPromises.stat(abs);
     res.json({ ok: true, size: stat.size, mtimeMs: stat.mtimeMs });
   } catch (e) {
     res.status(500).json({ error: { code: 'write_failed', message: String(e?.message || e) } });
   }
+});
+
+app.get('/api/admin/rules/pattern-overrides', async (_req, res) => {
+  const abs = resolveRuleFileName(PATTERN_OVERRIDES_FILE);
+  if (!abs) return res.status(404).json({ error: { code: 'not_found', message: 'rules file not found' } });
+  try {
+    const raw = await fsPromises.readFile(abs, 'utf8');
+    let normalized = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      normalized = JSON.stringify(parsed, null, 2);
+    } catch {
+      // keep raw to surface parse errors to the UI
+    }
+    const stat = await fsPromises.stat(abs);
+    res.json({
+      name: path.basename(abs),
+      content: normalized,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs
+    });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'read_failed', message: String(e?.message || e) } });
+  }
+});
+
+app.put('/api/admin/rules/pattern-overrides', async (req, res) => {
+  const abs = resolveRuleFileName(PATTERN_OVERRIDES_FILE);
+  if (!abs) return res.status(404).json({ error: { code: 'not_found', message: 'rules file not found' } });
+  const { content, overrides } = req.body || {};
+  let payload = content;
+  if (payload == null && typeof overrides === 'object') {
+    try {
+      payload = JSON.stringify(overrides);
+    } catch (e) {
+      return res.status(400).json({ error: { code: 'invalid_payload', message: `JSON serialization error: ${e?.message || e}` } });
+    }
+  }
+  if (typeof payload !== 'string') {
+    return res.status(400).json({ error: { code: 'invalid_payload', message: 'content string or overrides object required' } });
+  }
+  let normalized;
+  try {
+    const parsed = JSON.parse(payload);
+    normalized = JSON.stringify(parsed, null, 2) + '\n';
+  } catch (e) {
+    return res.status(400).json({ error: { code: 'invalid_json', message: `JSON parse error: ${e?.message || e}` } });
+  }
+  try {
+    await fsPromises.writeFile(abs, normalized, 'utf8');
+    invalidateConfigCache(path.basename(abs));
+    const stat = await fsPromises.stat(abs);
+    res.json({ ok: true, size: stat.size, mtimeMs: stat.mtimeMs });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'write_failed', message: String(e?.message || e) } });
+  }
+});
+
+app.post('/api/admin/rules/reload', (req, res) => {
+  const filename = typeof req.body?.filename === 'string' ? req.body.filename.trim() : '';
+  if (filename) {
+    const abs = resolveRuleFileName(filename);
+    if (!abs) {
+      return res.status(404).json({ error: { code: 'not_found', message: 'rules file not found' } });
+    }
+    invalidateConfigCache(path.basename(abs));
+    return res.json({ ok: true, scope: path.basename(abs) });
+  }
+  invalidateConfigCache();
+  res.json({ ok: true, scope: 'all' });
 });
 
 app.post('/api/admin/documents/reset', (_req, res) => {
@@ -939,10 +1006,8 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
       if (!entry || entry.status !== 'done' || !entry.result) continue;
       try {
         const stem = buildSummaryFileStem(entry.result);
-        const summaryBuffer = await renderSummaryPdfBuffer(entry.result, process.env.BATCH_LOGO_PATH);
-        const originalPath = entry.filePath && fs.existsSync(entry.filePath) ? entry.filePath : null;
-        const originalName = originalPath ? (entry.originalName || path.basename(entry.filePath)) : null;
-        items.push({ stem, summaryBuffer, originalPath, originalName });
+        const packetBuffer = await buildPacketPdf(id, entry, process.env.BATCH_LOGO_PATH);
+        items.push({ stem, packetBuffer });
       } catch (err) {
         log('warn', 'bulk_packet_skip', { id, err: String(err?.message || err) });
       }
@@ -966,11 +1031,7 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
     archive.pipe(res);
 
     for (const item of items) {
-      const folderName = `${item.stem}_packet`;
-      archive.append(item.summaryBuffer, { name: `${folderName}/${item.stem}_summary.pdf` });
-      if (item.originalPath && item.originalName) {
-        archive.file(item.originalPath, { name: `${folderName}/${item.originalName}` });
-      }
+      archive.append(item.packetBuffer, { name: `${item.stem}_packet.pdf` });
     }
 
     archive.finalize();

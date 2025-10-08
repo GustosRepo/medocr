@@ -1,30 +1,644 @@
 [
-  { "name": "Aetna", "status": "accepted", "patterns": ["\\bAETNA\\b"] },
-  { "name": "Aetna Medicare", "status": "accepted", "patterns": ["AETNA\\s+MEDICARE"] },
-  { "name": "Anthem BCBS", "status": "accepted", "patterns": ["\\bANTHEM\\b","\\bBLUE\\s*CROSS\\b","\\bBLUE\\s*SHIELD\\b","\\bBCBS\\b"] },
-  { "name": "Blue Cross/Blue Shield", "status": "accepted", "patterns": ["BLUE\\s+CROSS/BLUE\\s+SHIELD"] },
-  { "name": "United Healthcare", "status": "accepted", "patterns": ["UNITED\\s*HEALTH\\s*CARE","UNITEDHEALTHCARE","\\bUHC\\b"] },
-  { "name": "United Medicare Focus", "status": "accepted", "patterns": ["UNITED\\s+MEDICARE\\s+FOCUS"] },
-  { "name": "Cigna", "status": "accepted", "patterns": ["\\bCIGNA\\b"] },
-  { "name": "Humana", "status": "accepted", "patterns": ["\\bHUMANA\\b"] },
-  { "name": "Medicare", "status": "accepted", "patterns": ["\\bMEDICARE\\b"] },
-  { "name": "Medicaid", "status": "accepted", "patterns": ["\\bMEDICAID\\b"] },
-  { "name": "Tricare", "status": "accepted", "patterns": ["\\bTRI\\s*CARE\\b","\\bTRICARE\\b"] },
-  { "name": "Molina", "status": "unknown", "patterns": ["\\bMOLINA\\b"] },
-  { "name": "Prominence", "status": "unknown", "patterns": ["\\bPROMINENCE\\b"] },
-  { "name": "Culinary", "status": "not_accepted", "patterns": ["\\bCULINARY\\b"] },
-  { "name": "Silver Summit Health Plan", "status": "unknown", "patterns": ["SILVER\\s+SUMMIT"] },
-  { "name": "Sierra Health & Life", "status": "accepted", "patterns": ["SIERRA\\s+HEALTH\\s*&\\s*LIFE"] },
-  { "name": "Sierra Healthcare Options", "status": "accepted", "patterns": ["SIERRA\\s+HEALTHCARE\\s+OPTIONS"] },
-  { "name": "WellCare", "status": "not_accepted", "patterns": ["WELL\\s*CARE","WELLCARE"] },
-  { "name": "Select Health", "status": "not_accepted", "patterns": ["SELECT\\s*HEALTH"] },
-  { "name": "Scan Health Plan", "status": "not_accepted", "patterns": ["SCAN\\s+HEALTH", "\\bSCAN\\b"] },
-  { "name": "Alignment Health", "status": "not_accepted", "patterns": ["ALIGN(?:N)?MENT\\s+HEALTH"] },
-  { "name": "P3 Health Partners", "status": "not_accepted", "patterns": ["P3\\s+HEALTH", "P3\\s+HEALTH\\s+PARTNERS"] },
-  { "name": "Intermountain Health Plans", "status": "not_accepted", "patterns": ["INTERMOUNTAIN\\s+HEALTH"] },
-  { "name": "UMR", "status": "accepted", "patterns": ["\\bUMR\\b"] },
-  { "name": "TriWest", "status": "accepted", "patterns": ["TRIWEST"] },
-  { "name": "HPN (HMO)", "status": "accepted", "patterns": ["HPN\\s*\\(HMO\\)", "HEALTH\\s*PLAN\\s*OF\\s*NEVADA\\s*HMO"] },
-  { "name": "HPN (PPO)", "status": "accepted", "patterns": ["HPN\\s*\\(PPO\\)"] },
-  { "name": "HPN (POS)", "status": "accepted", "patterns": ["HPN\\s*\\(POS\\)"] }
+  {
+    "name": "AARP",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bAARP\\\\b"
+    ]
+  },
+  {
+    "name": "APWU",
+    "status": "accepted",
+    "patterns": [
+      "APWU"
+    ]
+  },
+  {
+    "name": "Aetna",
+    "status": "accepted",
+    "patterns": [
+      "\\bAETNA\\b"
+    ]
+  },
+  {
+    "name": "Aetna Medicare",
+    "status": "accepted",
+    "patterns": [
+      "AETNA\\s+MEDICARE"
+    ]
+  },
+  {
+    "name": "Alignment Health",
+    "status": "not_accepted",
+    "patterns": [
+      "ALIGN(?:N)?MENT\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Allegiance Benefits",
+    "status": "accepted",
+    "patterns": [
+      "ALLEG(?:IANCE)?\\\\s+BENEFITS"
+    ]
+  },
+  {
+    "name": "Allied Benefits",
+    "status": "accepted",
+    "patterns": [
+      "ALLIED\\\\s+BENEFITS"
+    ]
+  },
+  {
+    "name": "AmBetter",
+    "status": "accepted",
+    "patterns": [
+      "AMBETTER"
+    ]
+  },
+  {
+    "name": "Anthem BCBS",
+    "status": "accepted",
+    "patterns": [
+      "\\bANTHEM\\b",
+      "\\bBLUE\\s*CROSS\\b",
+      "\\bBLUE\\s*SHIELD\\b",
+      "\\bBCBS\\b"
+    ]
+  },
+  {
+    "name": "Anthem BCBS Medicaid",
+    "status": "accepted",
+    "patterns": [
+      "ANTHEM\\\\s+BCBS\\\\s+MEDICAID",
+      "ANTHEM\\\\s+MEDICAID"
+    ]
+  },
+  {
+    "name": "Anthem BCBS Medicare",
+    "status": "accepted",
+    "patterns": [
+      "ANTHEM\\\\s+BCBS\\\\s+MEDICARE",
+      "ANTHEM\\\\s+MEDIBLUE"
+    ]
+  },
+  {
+    "name": "Anthem MediBlue",
+    "status": "accepted",
+    "patterns": [
+      "ANTHEM\\\\s+MEDIBLUE"
+    ]
+  },
+  {
+    "name": "Assurant Health",
+    "status": "accepted",
+    "patterns": [
+      "ASSURANT\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Beech Street",
+    "status": "accepted",
+    "patterns": [
+      "BEECH\\\\s+STREET"
+    ]
+  },
+  {
+    "name": "Blue Cross/Blue Shield",
+    "status": "accepted",
+    "patterns": [
+      "BLUE\\s+CROSS/BLUE\\s+SHIELD"
+    ]
+  },
+  {
+    "name": "Blue HPN",
+    "status": "accepted",
+    "patterns": [
+      "BLUE\\\\s+HPN"
+    ]
+  },
+  {
+    "name": "Carpenters Health",
+    "status": "accepted",
+    "patterns": [
+      "CARPENTERS\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Cash Pay",
+    "status": "self_pay",
+    "patterns": [
+      "CASH\\\\s+PAY"
+    ]
+  },
+  {
+    "name": "Champ VA",
+    "status": "accepted",
+    "patterns": [
+      "CHAMP\\\\s*VA"
+    ]
+  },
+  {
+    "name": "Cigna",
+    "status": "accepted",
+    "patterns": [
+      "\\bCIGNA\\b"
+    ]
+  },
+  {
+    "name": "Clark County Firefighters",
+    "status": "accepted",
+    "patterns": [
+      "CLARK\\\\s+COUNTY\\\\s+FIREFIGHTERS",
+      "LAS\\\\s+VEGAS\\\\s+FIRE\\\\s+FIGHTERS"
+    ]
+  },
+  {
+    "name": "Clark County Self-Funded",
+    "status": "accepted",
+    "patterns": [
+      "CLARK\\\\s+COUNTY\\\\s+SELF\\\\s+FUNDED"
+    ]
+  },
+  {
+    "name": "Culinary",
+    "status": "not_accepted",
+    "patterns": [
+      "\\bCULINARY\\b"
+    ]
+  },
+  {
+    "name": "DCMWC",
+    "status": "accepted",
+    "patterns": [
+      "DCMWC"
+    ]
+  },
+  {
+    "name": "DEEOIC",
+    "status": "accepted",
+    "patterns": [
+      "DEEOIC"
+    ]
+  },
+  {
+    "name": "Department of Labor",
+    "status": "accepted",
+    "patterns": [
+      "DEPARTMENT\\\\s+OF\\\\s+LABOR",
+      "DOL"
+    ]
+  },
+  {
+    "name": "EBMS",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bEBMS\\\\b"
+    ]
+  },
+  {
+    "name": "Electrical Workers",
+    "status": "accepted",
+    "patterns": [
+      "ELECTRICAL\\\\s+WORKERS"
+    ]
+  },
+  {
+    "name": "GEHA",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bGEHA\\\\b"
+    ]
+  },
+  {
+    "name": "GHI",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bGHI\\\\b",
+      "EMBLEM\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Great West Health Care",
+    "status": "accepted",
+    "patterns": [
+      "GREAT\\\\s+WEST\\\\s+HEALTH\\\\s+CARE"
+    ]
+  },
+  {
+    "name": "HPN (HMO)",
+    "status": "accepted",
+    "patterns": [
+      "HPN\\s*\\(HMO\\)",
+      "HEALTH\\s*PLAN\\s*OF\\s*NEVADA\\s*HMO"
+    ]
+  },
+  {
+    "name": "HPN (POS)",
+    "status": "accepted",
+    "patterns": [
+      "HPN\\s*\\(POS\\)"
+    ]
+  },
+  {
+    "name": "HPN (PPO)",
+    "status": "accepted",
+    "patterns": [
+      "HPN\\s*\\(PPO\\)"
+    ]
+  },
+  {
+    "name": "HPN Medicaid",
+    "status": "accepted",
+    "patterns": [
+      "HPN\\s+MEDICAID"
+    ]
+  },
+  {
+    "name": "Healthscope",
+    "status": "accepted",
+    "patterns": [
+      "HEALTHSCOPE"
+    ]
+  },
+  {
+    "name": "Hometown Health",
+    "status": "accepted",
+    "patterns": [
+      "HOMETOWN\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Humana",
+    "status": "accepted",
+    "patterns": [
+      "\\bHUMANA\\b"
+    ]
+  },
+  {
+    "name": "Humana HMO",
+    "status": "accepted",
+    "patterns": [
+      "HUMANA\\\\s+HMO"
+    ]
+  },
+  {
+    "name": "Humana PPO",
+    "status": "accepted",
+    "patterns": [
+      "HUMANA\\\\s+PPO"
+    ]
+  },
+  {
+    "name": "Intermountain Health Plans",
+    "status": "not_accepted",
+    "patterns": [
+      "INTERMOUNTAIN\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "John Alden",
+    "status": "accepted",
+    "patterns": [
+      "JOHN\\\\s+ALDEN"
+    ]
+  },
+  {
+    "name": "Loomis",
+    "status": "accepted",
+    "patterns": [
+      "LOOMIS"
+    ]
+  },
+  {
+    "name": "Lucent Health",
+    "status": "accepted",
+    "patterns": [
+      "LUCENT\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "MGM Direct",
+    "status": "accepted",
+    "patterns": [
+      "MGM\\\\s+DIRECT"
+    ]
+  },
+  {
+    "name": "Mail Handlers",
+    "status": "accepted",
+    "patterns": [
+      "MAILHANDLER'S",
+      "MAIL\\\\s*HANDLERS"
+    ]
+  },
+  {
+    "name": "Medi-Share",
+    "status": "accepted",
+    "patterns": [
+      "MEDI-?SHARE"
+    ]
+  },
+  {
+    "name": "Medicaid",
+    "status": "accepted",
+    "patterns": [
+      "\\bMEDICAID\\b"
+    ]
+  },
+  {
+    "name": "Medicare",
+    "status": "accepted",
+    "patterns": [
+      "\\bMEDICARE\\b"
+    ]
+  },
+  {
+    "name": "Meritain Health",
+    "status": "accepted",
+    "patterns": [
+      "MERITAIN\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Molina",
+    "status": "accepted",
+    "patterns": [
+      "\\bMOLINA\\b"
+    ]
+  },
+  {
+    "name": "Molina Medicaid",
+    "status": "accepted",
+    "patterns": [
+      "MOLINA\\s+MEDICAID"
+    ]
+  },
+  {
+    "name": "Multiplan",
+    "status": "accepted",
+    "patterns": [
+      "MULTIPLAN",
+      "\\\\bPHCS\\\\b"
+    ]
+  },
+  {
+    "name": "Mutual of Omaha",
+    "status": "accepted",
+    "patterns": [
+      "MUTUAL\\\\s+OF\\\\s+OMAHA"
+    ]
+  },
+  {
+    "name": "NALC",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bNALC\\\\b"
+    ]
+  },
+  {
+    "name": "No Insurance",
+    "status": "self_pay",
+    "patterns": [
+      "NO\\\\s+INSURANCE"
+    ]
+  },
+  {
+    "name": "One Health",
+    "status": "accepted",
+    "patterns": [
+      "ONE\\\\s+HEALTH"
+    ]
+  },
+  {
+    "name": "Operating Engineers",
+    "status": "accepted",
+    "patterns": [
+      "OPERATING\\\\s+ENGINEERS"
+    ]
+  },
+  {
+    "name": "OptumCare",
+    "status": "accepted",
+    "patterns": [
+      "OPTUMCARE"
+    ]
+  },
+  {
+    "name": "P3 Health Partners",
+    "status": "not_accepted",
+    "patterns": [
+      "P3\\s+HEALTH",
+      "P3\\s+HEALTH\\s+PARTNERS"
+    ]
+  },
+  {
+    "name": "PEBP",
+    "status": "accepted",
+    "patterns": [
+      "PEBP",
+      "PUBLIC\\\\s+EMPLOYEES\\\\s+BENEFITS\\\\s+PROGRAM"
+    ]
+  },
+  {
+    "name": "Principal Life",
+    "status": "accepted",
+    "patterns": [
+      "PRINCIPAL\\\\s+LIFE"
+    ]
+  },
+  {
+    "name": "Prominence",
+    "status": "not_accepted",
+    "patterns": [
+      "\\bPROMINENCE\\b"
+    ]
+  },
+  {
+    "name": "Scan Health Plan",
+    "status": "not_accepted",
+    "patterns": [
+      "SCAN\\s+HEALTH",
+      "\\bSCAN\\b"
+    ]
+  },
+  {
+    "name": "Select Health",
+    "status": "not_accepted",
+    "patterns": [
+      "SELECT\\s*HEALTH"
+    ]
+  },
+  {
+    "name": "Sheet Metal Workers",
+    "status": "accepted",
+    "patterns": [
+      "SHEET\\\\s+METAL\\\\s+WORKERS"
+    ]
+  },
+  {
+    "name": "Sierra Health & Life",
+    "status": "accepted",
+    "patterns": [
+      "SIERRA\\s+HEALTH\\s*&\\s*LIFE"
+    ]
+  },
+  {
+    "name": "Sierra Healthcare Options",
+    "status": "accepted",
+    "patterns": [
+      "SIERRA\\s+HEALTHCARE\\s+OPTIONS"
+    ]
+  },
+  {
+    "name": "Silver Summit Health Plan",
+    "status": "unknown",
+    "patterns": [
+      "SILVER\\s+SUMMIT"
+    ]
+  },
+  {
+    "name": "Southwest Carpenters",
+    "status": "accepted",
+    "patterns": [
+      "SOUTHWEST\\\\s+CARPENTERS"
+    ]
+  },
+  {
+    "name": "Teachers Health Trust",
+    "status": "accepted",
+    "patterns": [
+      "TEACHERS\\\\s+HEALTH\\\\s+TRUST"
+    ]
+  },
+  {
+    "name": "Teamsters",
+    "status": "accepted",
+    "patterns": [
+      "TEAMSTERS"
+    ]
+  },
+  {
+    "name": "The Health Plan",
+    "status": "accepted",
+    "patterns": [
+      "THE\\\\s+HEALTH\\\\s+PLAN"
+    ]
+  },
+  {
+    "name": "TriWest",
+    "status": "accepted",
+    "patterns": [
+      "TRIWEST"
+    ]
+  },
+  {
+    "name": "Tricare",
+    "status": "accepted",
+    "patterns": [
+      "\\bTRI\\s*CARE\\b",
+      "\\bTRICARE\\b"
+    ]
+  },
+  {
+    "name": "Trustmark",
+    "status": "accepted",
+    "patterns": [
+      "TRUSTMARK"
+    ]
+  },
+  {
+    "name": "UFCW Local 711",
+    "status": "accepted",
+    "patterns": [
+      "UFCW\\\\s+LOCAL\\\\s+711"
+    ]
+  },
+  {
+    "name": "UMR",
+    "status": "accepted",
+    "patterns": [
+      "\\bUMR\\b"
+    ]
+  },
+  {
+    "name": "US Health Group",
+    "status": "accepted",
+    "patterns": [
+      "US\\\\s+HEALTH\\\\s+GROUP"
+    ]
+  },
+  {
+    "name": "UniCare",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bUNICARE\\\\b"
+    ]
+  },
+  {
+    "name": "Uninsured",
+    "status": "self_pay",
+    "patterns": [
+      "UNINSURED"
+    ]
+  },
+  {
+    "name": "United AARP Medicare",
+    "status": "accepted",
+    "patterns": [
+      "UNITED\\\\s+AARP\\\\s+MEDICARE"
+    ]
+  },
+  {
+    "name": "United Healthcare",
+    "status": "accepted",
+    "patterns": [
+      "UNITED\\s*HEALTH\\s*CARE",
+      "UNITEDHEALTHCARE",
+      "\\bUHC\\b",
+      "PRIMARY\\s+PAYER\\s*-\\s*MEDICAL"
+    ]
+  },
+  {
+    "name": "United Healthcare Medicare",
+    "status": "accepted",
+    "patterns": [
+      "UNITED\\\\s+HEALTHCARE\\\\s+MEDICARE"
+    ]
+  },
+  {
+    "name": "United Healthcare Medicare Advantage",
+    "status": "accepted",
+    "patterns": [
+      "UNITED\\\\s+HEALTHCARE\\\\s+MEDICARE\\\\s+ADVANTAGE"
+    ]
+  },
+  {
+    "name": "United Medicare Focus",
+    "status": "accepted",
+    "patterns": [
+      "UNITED\\s+MEDICARE\\s+FOCUS"
+    ]
+  },
+  {
+    "name": "VA Choice",
+    "status": "accepted",
+    "patterns": [
+      "VA\\\\s+CHOICE"
+    ]
+  },
+  {
+    "name": "Venetian",
+    "status": "accepted",
+    "patterns": [
+      "VENETIAN"
+    ]
+  },
+  {
+    "name": "WellCare",
+    "status": "not_accepted",
+    "patterns": [
+      "WELL\\s*CARE",
+      "WELLCARE"
+    ]
+  }
 ]

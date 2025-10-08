@@ -34,11 +34,14 @@ kill_if_running() {
 }
 
 kill_if_running ocr
+for port in 8000 8001 8002 8003; do
+  kill_if_running "ocr-$port"
+done
 kill_if_running backend
 kill_if_running frontend
 
 if [ $KILL_PORTS -eq 1 ]; then
-  for port in 8000 4387 5173 5174; do
+  for port in 8000 8001 8002 8003 4387 5173 5174; do
     pids=$(lsof -ti tcp:"$port" || true)
     for p in $pids; do
       echo "[ports] Killing process $p on port $port"

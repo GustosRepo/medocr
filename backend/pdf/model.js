@@ -29,7 +29,16 @@ export function buildPdfModel(result){
     procedure: { cpt: s(proc.cpt)||null, description: s(proc.description)||null, providerNotes: arr(proc.providerNotes).map(s).filter(Boolean), cptCandidates: arr(proc.cptCandidates).map(s).filter(Boolean) },
     provider: { name: s(prov.name)||null, npi: s(prov.npi)||null, practice: s(prov.practice)||null, supervising: s(prov.supervising)||null, phone: s(prov.phone)||null, fax: s(prov.fax)||null },
     clinical: { primaryDiagnosis: clinical.primaryDiagnosis?{ code: s(clinical.primaryDiagnosis.code)||null, description: s(clinical.primaryDiagnosis.description)||null }: null, symptoms: arr(clinical.symptoms).map(s).filter(Boolean), vitals: { bmi: s(vitals.bmi)||null, bp: s(vitals.bp)||null, weightLbs: vitals.weightLbs||null, height: s(vitals.height)||null } },
-    infoAlerts: { ppeRequired: info.ppeRequired===true?true:info.ppeRequired===false?false:null, safety: arr(info.safety).map(s).filter(Boolean), communication: arr(info.communication).map(s).filter(Boolean), accommodations: arr(info.accommodations).map(s).filter(Boolean) },
+    infoAlerts: {
+      ppeRequired: info.ppeRequired===true?true:info.ppeRequired===false?false:null,
+      safety: arr(info.safety).map(s).filter(Boolean),
+      communication: arr(info.communication).map(s).filter(Boolean),
+      accommodations: arr(info.accommodations).map(s).filter(Boolean),
+      history: arr(info.history).map(s).filter(Boolean),
+      resolution: arr(info.resolution).map(s).filter(Boolean),
+      medications: arr(info.medications).map(s).filter(Boolean),
+      testResults: arr(info.testResults).map(s).filter(Boolean)
+    },
     problemFlags: { reasons: arr(reasons).map(s).filter(Boolean), actions: arr(actions).map(s).filter(Boolean) },
     authorization: { notes: arr(authNotes), derivedFromActions: !authNotes.length && actions.length>0 },
     dataQuality: { confidence: r.confidenceLevel||r.confidence||null, qc: { nameConsistency: qc.nameConsistency||null, dateValidity: qc.dateValidity||null, phoneValidity: qc.phoneValidity||null, cptValid: qc.cptValid||null }, cptAmbiguity },

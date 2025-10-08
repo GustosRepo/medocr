@@ -25,7 +25,8 @@ function buildCatalog(list) {
       if (!regexes.length) {
         try { regexes.push(new RegExp(`\\b${code}\\b`, 'i')); } catch {}
       }
-      if (regexes.length) compiled.push({ code, why, patterns: regexes });
+      const description = typeof item?.description === 'string' ? item.description : null;
+      if (regexes.length) compiled.push({ code, why, patterns: regexes, description });
     }
   }
   if (!compiled.length) {
@@ -50,6 +51,12 @@ function hasTitrationEvidence(U) { return TITRATION_EVIDENCE.some(k => U.include
 
 export function detectCpt(fullText) {
   const catalog = getCptCatalog();
+  const descMap = new Map();
+  for (const item of catalog) {
+    if (item?.code) {
+      descMap.set(item.code, typeof item.description === 'string' ? item.description : null);
+    }
+  }
   const U = (fullText || '').toUpperCase();
   const candidates = [];
   const reasons = [];
@@ -150,7 +157,12 @@ export function detectCpt(fullText) {
     }
   }
 
-  const details = candidates.map(code => ({ code, why: reasonMap[code] || 'pattern_match', intent: intents[code] || 'mentioned' }));
+  let details = candidates.map(code => ({
+    code,
+    why: reasonMap[code] || 'pattern_match',
+    intent: intents[code] || 'mentioned',
+    description: descMap.get(code) || null
+  }));
   // Intent-based pruning: if 95810 is ordered and home study codes only 'mentioned', drop them to reduce noise
   if (primary === '95810') {
     const filteredDetails = [];
@@ -168,7 +180,8 @@ export function detectCpt(fullText) {
       if (prunedCodes.length === 1) {
         newAmb = newAmb.filter(a => a !== 'cpt_multiple_detected');
       }
-      return { hit: true, why: 'cpt_multi_detect', primary, candidates: prunedCodes, reasons, ambiguity: newAmb, details: filteredDetails };
+      details = filteredDetails;
+      return { hit: true, why: 'cpt_multi_detect', primary, candidates: prunedCodes, reasons, ambiguity: newAmb, details };
     }
   }
 

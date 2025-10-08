@@ -612,16 +612,16 @@ export default function ReferralPage() {
               >
                 PDF
               </Button>
-              <Button
-                size="xs"
-                variant="light"
-                component="a"
-                href={`/api/documents/${docId}/packet.zip`}
-                target="_blank"
-                disabled={!doc}
-              >
-                Packet
-              </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  component="a"
+                  href={`/api/documents/${docId}/packet.pdf`}
+                  target="_blank"
+                  disabled={!doc}
+                >
+                  Packet
+                </Button>
             </Group>
           }
         >

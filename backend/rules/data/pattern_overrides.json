@@ -1,0 +1,81 @@
+{
+  "businessEmails": [
+    "athomesleepstudies@ymail.com",
+    "athomesleepstudies@gmail.com",
+    "test@test.com"
+  ],
+  "providerNamePatterns": [
+    "(referring\\s*(provider|physician))",
+    "(ordering\\s*(provider|physician))",
+    "referred\\s+by",
+    "attending\\s*(provider|physician)",
+    "\bDr\\.?\\s+[A-Z]"
+  ],
+  "providerCredentialPatterns": [
+    {
+      "pattern": "MD",
+      "token": "MD"
+    },
+    {
+      "pattern": "DO",
+      "token": "DO"
+    },
+    {
+      "pattern": "NP",
+      "token": "NP"
+    },
+    {
+      "pattern": "FNP",
+      "token": "FNP"
+    },
+    {
+      "pattern": "PA-?C",
+      "token": "PA-C"
+    },
+    {
+      "pattern": "APRN",
+      "token": "APRN"
+    },
+    {
+      "pattern": "ANP",
+      "token": "ANP"
+    },
+    {
+      "pattern": "DC",
+      "token": "DC"
+    },
+    {
+      "pattern": "RN",
+      "token": "RN"
+    },
+    {
+      "pattern": "PhD",
+      "token": "PhD"
+    }
+  ],
+  "phoneGlyphMap": {
+    "O": "0",
+    "o": "0",
+    "D": "0",
+    "Q": "0",
+    "Ø": "0",
+    "I": "1",
+    "l": "1",
+    "|": "1",
+    "Z": "2",
+    "z": "2",
+    "S": "5",
+    "s": "5",
+    "B": "8",
+    "b": "6",
+    "G": "6",
+    "≤": "7",
+    "∑": "7",
+    "§": "5",
+    "—": "",
+    "–": "",
+    "_": "",
+    "‒": "",
+    "◦": "0"
+  }
+}
