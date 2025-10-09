@@ -189,6 +189,14 @@
     ]
   },
   {
+    "name": "Dignity Health Ambulatory",
+    "status": "accepted",
+    "patterns": [
+      "DIGNITY\\\\s+HEALTH\\\\s+AMBULATORY",
+      "DIGNITY\\\\s+HEALTH\\\\s+AMB\\\\.?\\s*(CENTER|CLINIC)?"
+    ]
+  },
+  {
     "name": "EBMS",
     "status": "accepted",
     "patterns": [
@@ -473,6 +481,14 @@
     "status": "accepted",
     "patterns": [
       "SHEET\\\\s+METAL\\\\s+WORKERS"
+    ]
+  },
+  {
+    "name": "SGIC",
+    "status": "accepted",
+    "patterns": [
+      "\\\\bSGIC\\\\b",
+      "SGIC\\\\s+(HEALTH|PLAN)"
     ]
   },
   {

@@ -1,0 +1,17 @@
+# Backend API Dockerfile (multi-stage)
+FROM node:20-alpine AS base
+WORKDIR /app
+ENV NODE_ENV=production
+# Install production deps first (package*.json for root)
+COPY package*.json ./
+RUN npm install --omit=dev && npm cache clean --force
+# Copy backend source only (avoid copying large data dir)
+COPY backend ./backend
+COPY docs ./docs
+COPY examples ./examples
+# (Optional) README copy removed to avoid build issues in some contexts
+# Expose port
+EXPOSE 4387
+# Healthcheck via /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:4387/health || exit 1
+CMD ["node", "backend/server.js"]
