@@ -1,0 +1,15 @@
+# Frontend build context exclusions
+node_modules
+*.log
+npm-debug.log*
+coverage/
+__tests__/
+tests/
+.storybook/
+*.stories.*
+*.spec.*
+*.test.*
+*.map
+*.tsbuildinfo
+.env
+.env.*

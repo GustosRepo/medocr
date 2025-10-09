@@ -1,0 +1,12 @@
+node_modules
+frontend/node_modules
+npm-debug.log
+data/uploads/*
+data/logs/*
+.git
+.gitignore
+Dockerfile*
+*.md
+frontend/storybook-static
+coverage
+.env

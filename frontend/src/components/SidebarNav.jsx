@@ -30,38 +30,30 @@ export default function SidebarNav({ collapsed, onToggle }) {
     color: 'var(--text-muted)'
   };
   return (
-    <>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'flex-start'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: collapsed ? 12 : 16 }}>
-          <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              onClick={onToggle}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed ? <IconLayoutSidebarLeftExpand size={18} /> : <IconLayoutSidebarLeftCollapse size={18} />}
-            </ActionIcon>
-          </Tooltip>
-        </div>
-        <ScrollArea style={{ flex: 1, width: '100%' }} offsetScrollbars>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+      {/* Top (toggle) */}
+      <div style={{ padding: collapsed ? '10px 0 4px' : '12px 0 8px', display: 'flex', justifyContent: 'center' }}>
+        <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            onClick={onToggle}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <IconLayoutSidebarLeftExpand size={18} /> : <IconLayoutSidebarLeftCollapse size={18} />}
+          </ActionIcon>
+        </Tooltip>
+      </div>
+      {/* Scrollable nav */}
+      <div style={{ flex: 1, minHeight: 0 }}> {/* minHeight:0 so ScrollArea can shrink inside flex */}
+        <ScrollArea style={{ height: '100%', width: '100%' }} offsetScrollbars>
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: collapsed ? 'center' : 'stretch',
-              justifyContent: 'center',
               gap: 6,
-              minHeight: '100%',
-              padding: collapsed ? '4px 6px' : '8px 10px'
+              padding: collapsed ? '4px 6px 8px' : '8px 10px 12px'
             }}
           >
             {navLinks.map(l => {
@@ -76,7 +68,7 @@ export default function SidebarNav({ collapsed, onToggle }) {
                       variant="subtle"
                       aria-label={l.label}
                       style={{
-                        marginBottom: 4,
+                        marginBottom: 2,
                         borderRadius: 8,
                         transition: 'background .15s ease, outline .15s ease, color .15s ease',
                         ...(active ? activeStyles : inactiveStyles)
@@ -107,9 +99,7 @@ export default function SidebarNav({ collapsed, onToggle }) {
                     <Icon size={16} />
                     <Text size="sm" style={{ textAlign: 'center', color: 'inherit' }}>{l.label}</Text>
                     {l.to === '/legacy' && import.meta.env.MODE === 'development' && (
-                      <Badge size="xs" color="yellow" variant="light">
-                        DEV
-                      </Badge>
+                      <Badge size="xs" color="yellow" variant="light">DEV</Badge>
                     )}
                   </Group>
                 </Link>
@@ -135,11 +125,10 @@ export default function SidebarNav({ collapsed, onToggle }) {
           </div>
         </ScrollArea>
       </div>
+      {/* Footer pinned */}
       {!collapsed && (
-        <div style={{ textAlign: 'center', width: '100%', marginTop: '0.75rem' }}>
-          <Text size="xs" style={{ color: 'var(--text-muted)' }}>
-            Local build • {new Date().getFullYear()}
-          </Text>
+        <div style={{ textAlign: 'center', width: '100%', padding: '10px 0 14px' }}>
+          <Text size="xs" style={{ color: 'var(--text-muted)' }}>Local build • {new Date().getFullYear()}</Text>
           <a
             href="https://github.com"
             target="_blank"
@@ -150,6 +139,6 @@ export default function SidebarNav({ collapsed, onToggle }) {
           </a>
         </div>
       )}
-    </>
+    </div>
   );
 }
