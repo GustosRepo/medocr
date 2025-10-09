@@ -38,9 +38,11 @@ function escapeRegex(str) {
 
 const DEFAULT_PROVIDER_NAME_PATTERNS = [
   '(referring\\s*(provider|physician))',
+  'refer\\s+from\\s*(provider|physician)',
   '(ordering\\s*(provider|physician))',
   'referred\\s+by',
   'attending\\s*(provider|physician)',
+  '\\b[A-Z][a-zA-Z\'\\-]+(?:\\s+[A-Z][a-zA-Z\'\\-]+){1,2},\\s*(MD|DO|NP|PA\\-?C|APRN|FNP|ANP|DC|PhD)\\b',
   '\\bDr\\.?\\s+[A-Z]',
   'provider\\s*name'
 ];
@@ -284,12 +286,24 @@ export function runExtraction(ocrPages) {
   const car = detectCarrier(fullText, lines);
   if (car.hit) {
     const insObj = { carrier: car.value.carrier, status: car.value.status };
-  // Member / Group IDs
-  // Member / Group IDs (tightened: enforce word boundaries & separators to avoid concatenation 'ID: ABCGroup: DEF')
-  const memberMatch = (fullText || '').match(/\b(?:member|subscriber|policy|insured)\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/i);
-  if (memberMatch) insObj.memberId = memberMatch[1];
-  const groupMatch = (fullText || '').match(/\bgroup\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{2,})\b/i);
-  if (groupMatch) insObj.groupId = groupMatch[1];
+    // Member / Group IDs (prefer explicit member labels and IDs containing digits)
+    const rawText = fullText || '';
+    const MEMBER_PRIMARY_RE = /\bmember\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const MEMBER_FALLBACK_RE = /\b(?:subscriber|policy|insured)\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const GROUP_RE = /\bgroup\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{2,})\b/ig;
+    const pickBestId = matches => {
+      for (const match of matches) {
+        if (match && /\d/.test(match[1])) return match[1];
+      }
+      return matches.length ? matches[0][1] : null;
+    };
+    const memberCandidates = [...rawText.matchAll(MEMBER_PRIMARY_RE)];
+    const fallbackMemberCandidates = [...rawText.matchAll(MEMBER_FALLBACK_RE)];
+    const resolvedMemberId = pickBestId(memberCandidates) || pickBestId(fallbackMemberCandidates);
+    if (resolvedMemberId) insObj.memberId = resolvedMemberId;
+    const groupCandidates = [...rawText.matchAll(GROUP_RE)];
+    const resolvedGroupId = pickBestId(groupCandidates);
+    if (resolvedGroupId) insObj.groupId = resolvedGroupId;
     if (car.meta?.sunsetDate) insObj.sunsetDate = car.meta.sunsetDate;
     if (typeof car.meta?.sunsetDays === 'number') insObj.sunsetDays = car.meta.sunsetDays;
     if (Array.isArray(car.notes) && car.notes.length) insObj.notes = car.notes;
@@ -651,34 +665,92 @@ export function runExtraction(ocrPages) {
   // Provider detection (basic)
   {
     const providerLines = (fullText || '').split(/\n/);
-    const provLineIndex = providerLines.findIndex(line => PROVIDER_NAME_REGEXES.some(rx => rx.test(line || '')));
-    const provLine = provLineIndex >= 0 ? providerLines[provLineIndex] : null;
-    if (provLine) {
-      const nameMatch = provLine.match(/(Dr\.?\s*)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+)+)/);
-      if (nameMatch) {
-        let provName = nameMatch[2];
-        provName = provName.replace(/NP[l1]\b/g, 'NP');
-        trace.push({ rule: 'provider_name_detect', value: provName });
-        const credSources = [provLine];
-        if (provLineIndex > 0) credSources.push(providerLines[provLineIndex - 1]);
-        if (provLineIndex >= 0 && provLineIndex + 1 < providerLines.length) credSources.push(providerLines[provLineIndex + 1]);
-        const credTokens = [];
-        for (const sourceLine of credSources) {
-          for (const entry of PROVIDER_CREDENTIAL_REGEXES) {
-            const m = sourceLine && sourceLine.match(entry.regex);
-            if (m && entry.token) {
-              const token = entry.token;
-              if (!credTokens.includes(token)) credTokens.push(token);
-            }
+
+    const assignProviderFromLine = (lineIndex) => {
+      const line = providerLines[lineIndex] || '';
+      if (!line) return false;
+
+      const candidateSegments = [];
+      const colonIdx = line.indexOf(':');
+      if (colonIdx >= 0) {
+        const afterColon = line.slice(colonIdx + 1).trim();
+        if (afterColon) candidateSegments.push(afterColon);
+      }
+      candidateSegments.push(line);
+
+      const normalizeDetectedName = raw => {
+        if (!raw) return '';
+        let cleaned = raw.replace(/^Dr\.?\s*/i, '').trim();
+        if (/,/.test(cleaned)) {
+          const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            const last = parts[0];
+            const rest = parts.slice(1).join(' ');
+            cleaned = `${rest} ${last}`.replace(/\s+/g, ' ').trim();
           }
         }
-        if (credTokens.length) {
-          provName = `${provName}, ${credTokens.join('/')}`;
-          trace.push({ rule: 'provider_credential_append', value: credTokens.join('/') });
+        return cleaned.replace(/\s+/g, ' ').trim();
+      };
+
+      const startsWithNoise = nameStr => {
+        const token = (nameStr || '').split(/\s+/)[0] || '';
+        return /^(refer|from|provider|referral|attention|attn)$/i.test(token);
+      };
+
+      let provName = null;
+      for (const segment of candidateSegments) {
+        if (!segment) continue;
+        let match =
+          segment.match(/([A-Z][a-zA-Z'’\-]+,\s*[A-Z][a-zA-Z'’\-]+(?:\s+[A-Z][a-zA-Z'’\-]+)*)/) ||
+          segment.match(/Dr\.?\s*([A-Z][a-zA-Z'’\-]+(?:\s+[A-Z][a-zA-Z'’\-]+)+)/) ||
+          segment.match(/([A-Z][a-zA-Z'’\-]+(?:\s+[A-Z][a-zA-Z'’\-]+)+)/);
+        const detected = match ? match[1] || match[0] : '';
+        const normalized = normalizeDetectedName(detected);
+        if (normalized && !startsWithNoise(normalized)) {
+          provName = normalized;
+          break;
         }
-        result.provider.name = provName;
+      }
+
+      if (!provName) return false;
+
+      provName = provName.replace(/NP[l1]\b/g, 'NP');
+      trace.push({ rule: 'provider_name_detect', value: provName });
+
+      const credSources = [line];
+      if (lineIndex > 0) credSources.push(providerLines[lineIndex - 1]);
+      if (lineIndex >= 0 && lineIndex + 1 < providerLines.length) credSources.push(providerLines[lineIndex + 1]);
+      const credTokens = [];
+      for (const sourceLine of credSources) {
+        for (const entry of PROVIDER_CREDENTIAL_REGEXES) {
+          const m = sourceLine && sourceLine.match(entry.regex);
+          if (m && entry.token) {
+            const token = entry.token;
+            if (!credTokens.includes(token)) credTokens.push(token);
+          }
+        }
+      }
+      if (credTokens.length) {
+        provName = `${provName}, ${credTokens.join('/')}`;
+        trace.push({ rule: 'provider_credential_append', value: credTokens.join('/') });
+      }
+      result.provider.name = provName;
+      return true;
+    };
+
+    let providerDetected = false;
+    const referLineIndex = providerLines.findIndex(line => /refer\s+from\s*(provider|physician)/i.test(line || ''));
+    if (referLineIndex >= 0) {
+      providerDetected = assignProviderFromLine(referLineIndex);
+    }
+
+    if (!providerDetected) {
+      const provLineIndex = providerLines.findIndex(line => PROVIDER_NAME_REGEXES.some(rx => rx.test(line || '')));
+      if (provLineIndex >= 0) {
+        providerDetected = assignProviderFromLine(provLineIndex);
       }
     }
+
     const normalizeName = str => String(str || '').replace(/[^A-Za-z\s'’\-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     const patientNameVariants = new Set();
     if (result.patient?.first && result.patient?.last) {

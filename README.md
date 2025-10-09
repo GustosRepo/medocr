@@ -138,7 +138,7 @@ PDFs (pdfkit) include headers, optional logo (`BATCH_LOGO_PATH`), pagination, an
 | `OCR_TIMEOUT_MS` | `420000` | Abort OCR request after this many ms (tune for large PDFs) |
 | `OCR_MAX_CONCURRENCY` | `4` | Max simultaneous OCR calls allowed by API queue |
 | `DOC_MAX_CONCURRENCY` | `2` | Max documents processed concurrently (uploads queued beyond this) |
-| `MEDOCR_RENDER_DPI` | `160` | Base DPI used by OCR service when rasterizing pages |
+| `MEDOCR_RENDER_DPI` | `300` | Base DPI used by OCR service when rasterizing pages |
 | `MEDOCR_DOWNSAMPLE_PAGES` | `6` | Downsample pages when a PDF has ≥ this many pages |
 | `MEDOCR_DOWNSAMPLE_PAGES_HIGH` | `10` | Apply stronger downsampling when page count ≥ this threshold |
 | `MEDOCR_DOWNSAMPLE_SCALE` | `0.6` | Scaling factor for moderate downsampling |

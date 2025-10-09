@@ -93,6 +93,17 @@ def preprocess_image(image: Image.Image) -> Image.Image:
 def health():
     return {"status": "ok"}
 
+@app.on_event("startup")
+def _load_engine():  # warm engine once
+    global _rapid_engine
+    if _rapid_available:
+        try:
+            _rapid_engine = RapidOCR()
+        except Exception:
+            _rapid_engine = None
+    else:
+        _rapid_engine = None
+
 @app.post("/ocr")
 async def ocr(file: UploadFile = File(...)):
     """
@@ -110,7 +121,7 @@ async def ocr(file: UploadFile = File(...)):
     data = await file.read()
     try:
         # Render pages to images (PNG) for OCR
-        base_dpi = int(os.getenv('MEDOCR_RENDER_DPI', '160'))
+        base_dpi = int(os.getenv('MEDOCR_RENDER_DPI', '300'))
         images: List = convert_from_bytes(data, dpi=base_dpi, fmt='png')
         page_count = len(images)
 
@@ -137,7 +148,7 @@ async def ocr(file: UploadFile = File(...)):
             "error": {"code": "pdf_render_failed", "message": str(e)}
         })
 
-    engine = RapidOCR()
+    engine = globals().get('_rapid_engine') or (RapidOCR() if _rapid_available else None)
     pages = []
 
     def quad_to_bbox(quad: List[Tuple[float, float]]):
