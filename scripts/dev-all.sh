@@ -26,6 +26,10 @@ for arg in "$@"; do
   esac
 done
 
+# Always clear stale PID files and free the expected ports before starting so
+# repeated dev cycles don't leave zombie uvicorn/node processes behind.
+bash "$ROOT_DIR/scripts/stop-all.sh" --ports >/dev/null 2>&1 || true
+
 echo "==> MEDOCR: starting OCR service, API, and Frontend"
 
 # Ensure node modules are installed before we spawn any watchers
