@@ -998,10 +998,10 @@ app.post('/api/admin/backfill-pdf-models', (req, res) => {
   res.json({ ok: true, built });
 });
 
-// Bulk export (zip) of multiple referral PDFs
+// Bulk export (zip) of multiple referral PDFs (original JSON-only)
 app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), async (req, res) => {
   try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 200) : [];
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 200) : [];
     if (!ids.length) return res.status(400).json({ error: { code: 'bad_request', message: 'ids required' } });
 
     const items = [];
@@ -1038,12 +1038,14 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
       archive.append(item.packetBuffer, { name: `${item.stem}_packet.pdf` });
     }
 
-    archive.finalize();
+  archive.finalize();
   } catch (e) {
     log('error', 'bulk_export_failed', { err: String(e?.message || e) });
     return res.status(500).json({ error: { code: 'bulk_export_failed', message: String(e?.message || e) } });
   }
 });
+
+// (reverted) retry-failed endpoint removed
 
 if (!IS_TEST) {
   app.listen(port, () => console.log(`MEDOCR API listening on http://127.0.0.1:${port}`));
