@@ -296,14 +296,27 @@ export default function ReferralPage() {
           // Surface specific backend error (e.g., OCR timeout) to UI + console. js may carry errorCode
           const reason = js.error || 'pipeline-error';
           console.error('[pollStatus] document failed', id, reason, js.errorCode);
-            if (js.errorCode) {
-              notifications.show({
-                title: `Processing failed (${js.errorCode})`,
-                message: reason,
-                color: 'red',
-                autoClose: 4000
-              });
-            }
+          setResultsMap(prev => {
+            const current = prev[id] || {};
+            const next = {
+              ...current,
+              status: 'error',
+              error: reason,
+              errorCode: js.errorCode || null,
+              _placeholder: false,
+              _uploading: false
+            };
+            const copy = { ...prev, [id]: next };
+            return copy;
+          });
+          if (js.errorCode) {
+            notifications.show({
+              title: `Processing failed (${js.errorCode})`,
+              message: reason,
+              color: 'red',
+              autoClose: 4000
+            });
+          }
           onError?.(reason, js.errorCode, js.suggestions);
           return 'error';
         }
@@ -829,14 +842,14 @@ export default function ReferralPage() {
                             title="Select subset"
                           >Select</button>
                       </div>
-                        <Tooltip label="Export all packets as ZIP" position="bottom">
+            <Tooltip label="Export all packets as ZIP" position="bottom">
                           <Button
                             size="compact-xs"
                             variant="default"
                             disabled={doneIds.length === 0}
                             onClick={() => exportZip(doneIds)}
                           >
-                            Export Packets
+              Export Packets
                           </Button>
                         </Tooltip>
                         <Tooltip label="Select specific docs to export">
