@@ -1,0 +1,141 @@
+name: Build release images
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Create manylinux wheelhouse
+        run: |
+          mkdir -p release/wheelhouse
+          python -m pip download -r ocr_service/requirements.txt -d release/wheelhouse
+
+      - name: Upload wheelhouse artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheelhouse
+          path: release/wheelhouse
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare output folders
+        run: |
+          mkdir -p out/ocr out/backend out/frontend
+
+      - name: Build OCR - amd64
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -f ocr_service/Dockerfile \
+            --build-arg WHEELHOUSE=release/wheelhouse \
+            --output type=tar,dest=out/ocr/medocr-ocr-amd64.tar \
+            .
+
+      - name: Build OCR - arm64
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -f ocr_service/Dockerfile \
+            --build-arg WHEELHOUSE=release/wheelhouse \
+            --output type=tar,dest=out/ocr/medocr-ocr-arm64.tar \
+            .
+
+      - name: Build Backend - amd64
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -f backend/Dockerfile \
+            --output type=tar,dest=out/backend/medocr-backend-amd64.tar \
+            .
+
+      - name: Build Backend - arm64
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -f backend/Dockerfile \
+            --output type=tar,dest=out/backend/medocr-backend-arm64.tar \
+            .
+
+      - name: Build Frontend - amd64
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -f frontend/Dockerfile \
+            --output type=tar,dest=out/frontend/medocr-frontend-amd64.tar \
+            ./frontend
+
+      - name: Build Frontend - arm64
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -f frontend/Dockerfile \
+            --output type=tar,dest=out/frontend/medocr-frontend-arm64.tar \
+            ./frontend
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: medocr-release-artifacts
+          path: out/**/medocr-*.tar
+
+      - name: Push multi-arch images to GHCR (optional)
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use GHCR_TOKEN if provided, otherwise fall back to the GITHUB_TOKEN
+          TOKEN=${GHCR_TOKEN:-${GITHUB_TOKEN}}
+          if [ -z "$TOKEN" ]; then
+            echo "No GHCR or GITHUB token available; skipping image push.";
+            exit 0;
+          fi
+          echo "Logging into ghcr.io"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          echo "Pushing medocr-ocr multi-arch image..."
+          docker buildx build --platform linux/amd64,linux/arm64 -f ocr_service/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-ocr:latest --push .
+          echo "Pushing medocr-backend multi-arch image..."
+          docker buildx build --platform linux/amd64,linux/arm64 -f backend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-backend:latest --push .
+          echo "Pushing medocr-frontend multi-arch image..."
+          docker buildx build --platform linux/amd64,linux/arm64 -f frontend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-frontend:latest --push ./frontend
+
+      - name: Create GitHub Release and attach built tars (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            Automated release produced by CI. Artifacts: wheelhouse and image tars.
+          draft: false
+          prerelease: false
+
+      - name: Upload release assets (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: out/**/medocr-*.tar

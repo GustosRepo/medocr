@@ -67,7 +67,14 @@ app.use((req, res, next) => {
 });
 const uploadDir = path.join(process.cwd(), 'data', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir });
+// Configure multer upload limits via UPLOAD_MAX_BYTES (optional). If not set, no explicit limit is applied.
+const uploadLimits = (() => {
+  const raw = process.env.UPLOAD_MAX_BYTES || '';
+  const n = parseInt(raw || '0', 10);
+  if (Number.isFinite(n) && n > 0) return { fileSize: n };
+  return undefined;
+})();
+const upload = uploadLimits ? multer({ dest: uploadDir, limits: uploadLimits }) : multer({ dest: uploadDir });
 const port = process.env.PORT || 4387;
 const ocrServiceUrls = (() => {
   const multi = (process.env.OCR_SERVICE_URLS || '')
@@ -262,6 +269,65 @@ function flushChecklistOverrides() {
   }, 500);
 }
 loadChecklistOverrides();
+
+// Persisted processed documents list (for export / client recovery)
+const PROCESSED_PATH = path.join(process.cwd(), 'data', 'processed.json');
+let processedRecords = [];
+async function loadProcessedRecords() {
+  try {
+    if (fs.existsSync(PROCESSED_PATH)) {
+      const raw = await fsPromises.readFile(PROCESSED_PATH, 'utf8');
+      processedRecords = JSON.parse(raw);
+      if (!Array.isArray(processedRecords)) processedRecords = [];
+    }
+  } catch (e) {
+    processedRecords = [];
+  }
+}
+
+async function saveProcessedRecords() {
+  try {
+    await fsPromises.mkdir(path.dirname(PROCESSED_PATH), { recursive: true });
+    const tmp = PROCESSED_PATH + '.tmp';
+    await fsPromises.writeFile(tmp, JSON.stringify(processedRecords, null, 2), 'utf8');
+    await fsPromises.rename(tmp, PROCESSED_PATH);
+  } catch (e) {
+    // best-effort; log and continue
+    log('warn', 'processed_write_failed', { err: String(e?.message || e) });
+  }
+}
+
+function makeProcessedSummary(id, entry) {
+  const r = entry?.result || {};
+  const patient = r.patient || {};
+  return {
+    id,
+    processedAt: new Date().toISOString(),
+    pages: r.documentMeta?.pages || (r.ocr ? r.ocr.length : 0) || 0,
+    intakeDate: r.documentMeta?.intakeDate || null,
+    suggestedFilename: r.documentMeta?.suggestedFilename || null,
+    fileHash: r.documentMeta?.fileHash || null,
+    patient: { first: patient.first || null, last: patient.last || null, dob: patient.dob || null },
+    confidence: r.confidenceLevel || r.confidence || null,
+    actionsCount: (r.alerts?.actions || []).length
+  };
+}
+
+async function addProcessedRecord(id, entry) {
+  try {
+    const rec = makeProcessedSummary(id, entry);
+    // remove any existing for id then push newest
+    processedRecords = processedRecords.filter(r => r.id !== id);
+    processedRecords.push(rec);
+    // keep newest-first ordering when exported (reverse on read if needed)
+    await saveProcessedRecords();
+  } catch (e) {
+    log('warn', 'processed_add_failed', { id, err: String(e?.message || e) });
+  }
+}
+
+// Load processed.json on startup
+loadProcessedRecords().catch(() => {});
 
 // List recent documents (simple in-memory enumeration) for checklist dashboard
 app.get('/api/documents', (req, res) => {
@@ -954,6 +1020,7 @@ async function processDocument(id) {
   incCounter('docsProcessed');
   recordLatency(performance.now() - t0);
   try { addSnapshot(id, result); } catch {}
+  try { addProcessedRecord(id, entry); } catch {}
   if (result?.confidenceDetail?.score != null) recordConfidence(Number(result.confidenceDetail.score));
   log('info','doc_processed',{ id, pages: result.documentMeta?.pages, actions: (result.alerts?.actions||[]).length });
   } catch (e) {
@@ -979,6 +1046,45 @@ async function processDocument(id) {
 // Metrics endpoint
 app.get('/api/metrics', (_req, res) => {
   res.json(metricsSnapshot());
+});
+
+// Export persisted processed records (newest first)
+app.get('/api/documents/export.json', async (req, res) => {
+  try {
+    // return newest-first
+    const out = Array.isArray(processedRecords) ? processedRecords.slice().reverse() : [];
+    res.json({ count: out.length, items: out });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'export_failed', message: String(e?.message || e) } });
+  }
+});
+
+// Purge processed records. Accepts { ids: [...], olderThan: '2025-01-01T00:00:00Z' }
+app.post('/api/documents/processed/purge', express.json({ limit: '64kb' }), async (req, res) => {
+  // Safety: only allow purge from localhost to avoid accidental remote deletion in dev
+  const ip = req.ip || (req.connection && req.connection.remoteAddress) || '';
+  if (!(ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1')) {
+    return res.status(403).json({ error: { code: 'forbidden', message: 'purge only allowed from localhost' } });
+  }
+  try {
+    const { ids, olderThan } = req.body || {};
+    let beforeTs = null;
+    if (typeof olderThan === 'string' && olderThan) {
+      const d = new Date(olderThan);
+      if (!isNaN(d)) beforeTs = d.getTime();
+    }
+    const keep = processedRecords.filter(r => {
+      if (Array.isArray(ids) && ids.includes(r.id)) return false;
+      if (beforeTs && new Date(r.processedAt).getTime() < beforeTs) return false;
+      return true;
+    });
+    const removed = processedRecords.length - keep.length;
+    processedRecords = keep;
+    await saveProcessedRecords();
+    res.json({ ok: true, removed });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'purge_failed', message: String(e?.message || e) } });
+  }
 });
 
 // Backfill pdfModel for legacy documents

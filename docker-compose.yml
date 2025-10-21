@@ -1,3 +1,40 @@
+version: '3.8'
+services:
+  api:
+    image: medocr-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "4387:4387"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - medocr-net
+
+  ocr:
+    image: medocr-ocr:local
+    build:
+      context: ./ocr_service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - medocr-net
+
+  frontend:
+    image: medocr-frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    networks:
+      - medocr-net
+
+networks:
+  medocr-net:
+    driver: bridge
 services:
 	api:
 		build:
