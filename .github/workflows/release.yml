@@ -27,14 +27,14 @@ jobs:
 
       - name: Create manylinux wheelhouse
         run: |
-          mkdir -p release/wheelhouse
-          python -m pip download -r ocr_service/requirements.txt -d release/wheelhouse
+          mkdir -p ocr_service/wheelhouse
+          python -m pip download -r ocr_service/requirements.txt -d ocr_service/wheelhouse
 
       - name: Upload wheelhouse artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheelhouse
-          path: release/wheelhouse
+          path: ocr_service/wheelhouse
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -51,18 +51,16 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             -f ocr_service/Dockerfile \
-            --build-arg WHEELHOUSE=release/wheelhouse \
             --output type=tar,dest=out/ocr/medocr-ocr-amd64.tar \
-            .
+            ./ocr_service
 
       - name: Build OCR - arm64
         run: |
           docker buildx build \
             --platform linux/arm64 \
             -f ocr_service/Dockerfile \
-            --build-arg WHEELHOUSE=release/wheelhouse \
             --output type=tar,dest=out/ocr/medocr-ocr-arm64.tar \
-            .
+            ./ocr_service
 
       - name: Build Backend - amd64
         run: |
