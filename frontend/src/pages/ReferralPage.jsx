@@ -145,6 +145,44 @@ export default function ReferralPage() {
     notifications.show({ title: 'Downloads started', message: `${ids.length} PDFs`, color: 'blue', autoClose: 1400 });
   }
 
+  async function purgeSelected() {
+    if (!selectedExportIds || !selectedExportIds.size) return;
+    const ok = window.confirm(`Purge ${selectedExportIds.size} selected processed records? This will remove them from the persisted processed list.`);
+    if (!ok) return;
+    try {
+      const res = await fetch(`${apiBase}/documents/processed/purge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedExportIds) })
+      });
+      const js = await res.json();
+      if (!res.ok) throw new Error(js?.error?.message || 'purge_failed');
+      notifications.show({ title: 'Purge complete', message: `Removed ${js.removed} records`, color: 'blue' });
+      // reload to refresh UI state (backend in-memory map may still show items until server reset)
+      setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+      notifications.show({ title: 'Purge failed', message: String(e.message || e), color: 'red' });
+    }
+  }
+
+  async function purgeAllProcessed() {
+    const ok = window.confirm('Purge ALL persisted processed records? This will remove the persisted list. Continue?');
+    if (!ok) return;
+    try {
+      const res = await fetch(`${apiBase}/documents/processed/purge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ olderThan: new Date().toISOString() })
+      });
+      const js = await res.json();
+      if (!res.ok) throw new Error(js?.error?.message || 'purge_failed');
+      notifications.show({ title: 'Purge complete', message: `Removed ${js.removed} records`, color: 'blue' });
+      setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+      notifications.show({ title: 'Purge failed', message: String(e.message || e), color: 'red' });
+    }
+  }
+
   const selectedDoc = selectedId ? resultsMap[selectedId] : null;
   const confidenceBadge = useMemo(() => {
     if (!selectedDoc?.confidence) return null;
@@ -842,25 +880,30 @@ export default function ReferralPage() {
                             title="Select subset"
                           >Select</button>
                       </div>
-            <Tooltip label="Export all packets as ZIP" position="bottom">
-                          <Button
-                            size="compact-xs"
-                            variant="default"
-                            disabled={doneIds.length === 0}
-                            onClick={() => exportZip(doneIds)}
-                          >
-              Export Packets
-                          </Button>
-                        </Tooltip>
-                        <Tooltip label="Select specific docs to export">
-                          <Button
-                            size="compact-xs"
-                            variant="light"
-                            onClick={() => { setSelectMode(true); clearSelection(); }}
-                          >
-                            Select
-                          </Button>
-                        </Tooltip>
+                        <div className="md:hidden">
+                          <Tooltip label="Export all packets as ZIP" position="bottom">
+                            <Button
+                              size="compact-xs"
+                              variant="default"
+                              disabled={doneIds.length === 0}
+                              onClick={() => exportZip(doneIds)}
+                            >
+                              Export Packets
+                            </Button>
+                          </Tooltip>
+                          <Tooltip label="Select specific docs to export">
+                            <Button
+                              size="compact-xs"
+                              variant="light"
+                              onClick={() => { setSelectMode(true); clearSelection(); }}
+                            >
+                              Select
+                            </Button>
+                          </Tooltip>
+                          <div className="hidden md:flex items-center gap-2">
+                            <Button size="compact-xs" variant="subtle" color="red" onClick={() => purgeAllProcessed()} disabled={doneIds.length===0}>Purge</Button>
+                          </div>
+                        </div>
                       </>
                     )}
                     {selectMode && (
@@ -869,6 +912,7 @@ export default function ReferralPage() {
                           {selectedExportIds.size}/{doneIds.length}
                         </Badge>
                         <Button size="compact-xs" variant="light" disabled={!selectedExportIds.size} onClick={() => exportZip(Array.from(selectedExportIds))}>Packets</Button>
+                        <Button size="compact-xs" variant="subtle" color="red" disabled={!selectedExportIds.size} onClick={() => purgeSelected()}>Purge selected</Button>
                         <Tooltip label="Download each PDF (no ZIP)">
                           <Button size="compact-xs" variant="subtle" disabled={!selectedExportIds.size} onClick={() => exportIndividual(Array.from(selectedExportIds))}>PDFs</Button>
                         </Tooltip>

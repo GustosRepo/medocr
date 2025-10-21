@@ -105,6 +105,8 @@ start_ocr() {
     (
       cd "$ocr_dir"
       source .venv/bin/activate
+      # Ensure Homebrew binaries (pdftoppm, etc.) are in PATH
+      export PATH="/opt/homebrew/bin:$PATH"
       exec uvicorn app:app --host "$host" --port "$port"
     ) >"$LOG_DIR/ocr-$port.log" 2>&1 &
     echo $! > "$PID_DIR/$name.pid"

@@ -34,3 +34,7 @@ data/pids/
 data/feedback.ndjson
 data/metrics.json
 data/snapshots.ndjson
+
+# Release artifacts and wheelhouse (large binaries)
+release/
+ocr_service/wheelhouse/
