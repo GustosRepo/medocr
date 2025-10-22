@@ -57,8 +57,10 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             -f ocr_service/Dockerfile \
-            --output type=tar,dest=out/medocr-ocr-amd64.tar \
+            -t medocr-ocr:amd64 \
+            --load \
             ./ocr_service
+          docker save -o out/medocr-ocr-amd64.tar medocr-ocr:amd64
           docker system prune -af
 
       - name: Build Backend - amd64
@@ -66,8 +68,10 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             -f backend/Dockerfile \
-            --output type=tar,dest=out/medocr-backend-amd64.tar \
+            -t medocr-backend:amd64 \
+            --load \
             .
+          docker save -o out/medocr-backend-amd64.tar medocr-backend:amd64
           docker system prune -af
 
       - name: Build Frontend - amd64
@@ -75,8 +79,10 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             -f frontend/Dockerfile \
-            --output type=tar,dest=out/medocr-frontend-amd64.tar \
+            -t medocr-frontend:amd64 \
+            --load \
             ./frontend
+          docker save -o out/medocr-frontend-amd64.tar medocr-frontend:amd64
 
       - name: Upload amd64 artifacts
         uses: actions/upload-artifact@v4
