@@ -7,7 +7,8 @@ on:
       - 'v*'
 
 jobs:
-  build-and-package:
+  # Only build amd64 images (for Windows tester) to avoid disk space issues
+  build-amd64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,107 +45,58 @@ jobs:
 
       - name: Free up disk space
         run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           docker system prune -af --volumes
           df -h
 
       - name: Prepare output folders
-        run: |
-          mkdir -p out/ocr out/backend out/frontend
+        run: mkdir -p out
 
       - name: Build OCR - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f ocr_service/Dockerfile \
-            --output type=tar,dest=out/ocr/medocr-ocr-amd64.tar \
+            --output type=tar,dest=out/medocr-ocr-amd64.tar \
             ./ocr_service
-
-      - name: Build OCR - arm64
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -f ocr_service/Dockerfile \
-            --output type=tar,dest=out/ocr/medocr-ocr-arm64.tar \
-            ./ocr_service
-
-      - name: Clean up after OCR builds
-        run: docker system prune -af
+          docker system prune -af
 
       - name: Build Backend - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f backend/Dockerfile \
-            --output type=tar,dest=out/backend/medocr-backend-amd64.tar \
+            --output type=tar,dest=out/medocr-backend-amd64.tar \
             .
-
-      - name: Build Backend - arm64
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -f backend/Dockerfile \
-            --output type=tar,dest=out/backend/medocr-backend-arm64.tar \
-            .
-
-      - name: Clean up after Backend builds
-        run: docker system prune -af
+          docker system prune -af
 
       - name: Build Frontend - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f frontend/Dockerfile \
-            --output type=tar,dest=out/frontend/medocr-frontend-amd64.tar \
+            --output type=tar,dest=out/medocr-frontend-amd64.tar \
             ./frontend
 
-      - name: Build Frontend - arm64
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -f frontend/Dockerfile \
-            --output type=tar,dest=out/frontend/medocr-frontend-arm64.tar \
-            ./frontend
-
-      - name: Upload all artifacts
+      - name: Upload amd64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: medocr-release-artifacts
-          path: out/**/medocr-*.tar
+          name: medocr-amd64-images
+          path: out/*.tar
 
-      - name: Push multi-arch images to GHCR (optional)
-        env:
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Use GHCR_TOKEN if provided, otherwise fall back to the GITHUB_TOKEN
-          TOKEN=${GHCR_TOKEN:-${GITHUB_TOKEN}}
-          if [ -z "$TOKEN" ]; then
-            echo "No GHCR or GITHUB token available; skipping image push.";
-            exit 0;
-          fi
-          echo "Logging into ghcr.io"
-          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          echo "Pushing medocr-ocr multi-arch image..."
-          docker buildx build --platform linux/amd64,linux/arm64 -f ocr_service/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-ocr:latest --push .
-          echo "Pushing medocr-backend multi-arch image..."
-          docker buildx build --platform linux/amd64,linux/arm64 -f backend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-backend:latest --push .
-          echo "Pushing medocr-frontend multi-arch image..."
-          docker buildx build --platform linux/amd64,linux/arm64 -f frontend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/medocr-frontend:latest --push ./frontend
-
-      - name: Create GitHub Release and attach built tars (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            Automated release produced by CI. Artifacts: wheelhouse and image tars.
-          draft: false
-          prerelease: false
-
-      - name: Upload release assets (on tag)
+      - name: Create GitHub Release and attach tars (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: out/**/medocr-*.tar
+          files: out/*.tar
+          body: |
+            ## MEDOCR Release ${{ github.ref_name }}
+            
+            amd64 Docker images for Windows/Linux x86_64.
+            
+            **Load images:**
+            ```bash
+            docker load -i medocr-ocr-amd64.tar
+            docker load -i medocr-backend-amd64.tar
+            docker load -i medocr-frontend-amd64.tar
+            ```
