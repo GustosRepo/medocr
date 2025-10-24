@@ -21,6 +21,8 @@ services:
       - MEDOCR_USE_BILATERAL=false
       - MEDOCR_BILATERAL_D=9
       - MEDOCR_BILATERAL_SIGMA=75
+      - MEDOCR_ENABLE_CONFIDENCE_RETRY=true
+      - MEDOCR_CONFIDENCE_THRESHOLD=0.65
     restart: unless-stopped
     networks:
       - medocr-net

@@ -106,6 +106,37 @@ def preprocess_image(image: Image.Image) -> Image.Image:
 
     return output
 
+def preprocess_variants(image: Image.Image) -> List[Tuple[Image.Image, str]]:
+    """
+    Generate preprocessing variants for low-confidence retry.
+    Returns list of (preprocessed_image, variant_name) tuples.
+    """
+    variants = []
+    
+    # Variant 1: Enhanced mode (default)
+    os.environ['MEDOCR_PREPROCESS_MODE'] = 'enhanced'
+    variants.append((preprocess_image(image), 'enhanced'))
+    
+    # Variant 2: No CLAHE (in case CLAHE over-processes)
+    original_clahe = os.getenv('MEDOCR_USE_CLAHE', 'true')
+    os.environ['MEDOCR_USE_CLAHE'] = 'false'
+    variants.append((preprocess_image(image), 'no_clahe'))
+    os.environ['MEDOCR_USE_CLAHE'] = original_clahe
+    
+    # Variant 3: Basic mode (minimal preprocessing)
+    os.environ['MEDOCR_PREPROCESS_MODE'] = 'basic'
+    variants.append((preprocess_image(image), 'basic'))
+    
+    # Variant 4: Off mode (no preprocessing, raw image)
+    os.environ['MEDOCR_PREPROCESS_MODE'] = 'off'
+    variants.append((preprocess_image(image), 'off'))
+    
+    # Reset to enhanced
+    os.environ['MEDOCR_PREPROCESS_MODE'] = 'enhanced'
+    
+    return variants
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -194,6 +225,10 @@ async def ocr(file: UploadFile = File(...)):
         y_min, y_max = min(ys), max(ys)
         return [float(x_min), float(y_min), float(x_max - x_min), float(y_max - y_min)]
 
+    # Confidence retry configuration
+    enable_retry = os.getenv("MEDOCR_ENABLE_CONFIDENCE_RETRY", "true").lower() in ("true", "1", "yes")
+    confidence_threshold = float(os.getenv("MEDOCR_CONFIDENCE_THRESHOLD", "0.65"))
+
     for i, img in enumerate(images):
         processed_img = preprocess_image(img)
         # RapidOCR returns: result, elapse = engine(img)
@@ -202,6 +237,52 @@ async def ocr(file: UploadFile = File(...)):
             result, _ = engine(processed_img)
         except Exception as e:
             result = []
+        
+        # Check average confidence - retry with variants if too low
+        if enable_retry and result:
+            scores = []
+            for item in result:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    first = item[0]
+                    if isinstance(first, (list, tuple)) and len(first) >= 4:
+                        # Box-first format: [box, text, score]
+                        scores.append(float(item[2]) if len(item) > 2 else 0.0)
+                    else:
+                        # Text-first format: [text, score, box]
+                        scores.append(float(item[1]) if len(item) > 1 else 0.0)
+            
+            avg_conf = sum(scores) / len(scores) if scores else 0.0
+            
+            # If confidence too low, try preprocessing variants
+            if avg_conf < confidence_threshold:
+                best_result = result
+                best_conf = avg_conf
+                
+                variants = preprocess_variants(img)
+                for variant_img, variant_name in variants:
+                    try:
+                        variant_result, _ = engine(variant_img)
+                        if variant_result:
+                            variant_scores = []
+                            for item in variant_result:
+                                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                                    first = item[0]
+                                    if isinstance(first, (list, tuple)) and len(first) >= 4:
+                                        variant_scores.append(float(item[2]) if len(item) > 2 else 0.0)
+                                    else:
+                                        variant_scores.append(float(item[1]) if len(item) > 1 else 0.0)
+                            
+                            variant_conf = sum(variant_scores) / len(variant_scores) if variant_scores else 0.0
+                            
+                            if variant_conf > best_conf:
+                                best_result = variant_result
+                                best_conf = variant_conf
+                                # Note: In production, you might want to log which variant won
+                    except Exception:
+                        continue
+                
+                result = best_result
+        
         lines = []
         boxes = []
         if result:
