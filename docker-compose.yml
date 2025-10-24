@@ -25,10 +25,10 @@ services:
       - MEDOCR_BILATERAL_SIGMA=75
       - MEDOCR_ENABLE_CONFIDENCE_RETRY=true
       - MEDOCR_CONFIDENCE_THRESHOLD=0.65
-      # PP-OCRv4 Server Models (uncomment after downloading models)
-      # - MEDOCR_DET_MODEL_PATH=/app/models/ch_PP-OCRv4_det_server_infer.onnx
-      # - MEDOCR_CLS_MODEL_PATH=/app/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
-      # - MEDOCR_REC_MODEL_PATH=/app/models/ch_PP-OCRv4_rec_server_infer.onnx
+      # PP-OCRv4 Server Models (ONNX converted, ready to use!)
+      - MEDOCR_DET_MODEL_PATH=/app/models/ch_PP-OCRv4_det_server_infer.onnx
+      - MEDOCR_CLS_MODEL_PATH=/app/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+      - MEDOCR_REC_MODEL_PATH=/app/models/ch_PP-OCRv4_rec_server_infer.onnx
     restart: unless-stopped
     networks:
       - medocr-net
