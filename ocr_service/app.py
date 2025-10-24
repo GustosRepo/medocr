@@ -115,8 +115,27 @@ def _load_engine():  # warm engine once
     global _rapid_engine
     if _rapid_available:
         try:
-            _rapid_engine = RapidOCR()
-        except Exception:
+            # Support custom model paths for PP-OCRv4 or other models
+            det_path = os.getenv("MEDOCR_DET_MODEL_PATH")
+            cls_path = os.getenv("MEDOCR_CLS_MODEL_PATH")
+            rec_path = os.getenv("MEDOCR_REC_MODEL_PATH")
+            
+            kwargs = {}
+            if det_path and os.path.exists(det_path):
+                kwargs['det_model_path'] = det_path
+            if cls_path and os.path.exists(cls_path):
+                kwargs['cls_model_path'] = cls_path
+            if rec_path and os.path.exists(rec_path):
+                kwargs['rec_model_path'] = rec_path
+            
+            if kwargs:
+                print(f"Loading RapidOCR with custom models: {list(kwargs.keys())}", flush=True)
+            else:
+                print("Loading RapidOCR with default bundled models (PP-OCRv3 lite)", flush=True)
+            
+            _rapid_engine = RapidOCR(**kwargs)
+        except Exception as e:
+            print(f"Failed to load RapidOCR: {e}", flush=True)
             _rapid_engine = None
     else:
         _rapid_engine = None
