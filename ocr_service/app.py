@@ -61,6 +61,23 @@ def preprocess_image(image: Image.Image) -> Image.Image:
         return enhanced.convert('RGB')
 
     np_img = np.array(gray)
+    
+    # Optional: CLAHE (Contrast Limited Adaptive Histogram Equalization) for low-quality scans
+    use_clahe = os.getenv("MEDOCR_USE_CLAHE", "true").lower() in ("true", "1", "yes")
+    if use_clahe:
+        clip_limit = float(os.getenv("MEDOCR_CLAHE_CLIP_LIMIT", "2.0"))
+        tile_size = int(os.getenv("MEDOCR_CLAHE_TILE_SIZE", "8"))
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
+        np_img = clahe.apply(np_img)
+    
+    # Optional: Bilateral filter for edge-preserving noise reduction
+    use_bilateral = os.getenv("MEDOCR_USE_BILATERAL", "false").lower() in ("true", "1", "yes")
+    if use_bilateral:
+        bilateral_d = int(os.getenv("MEDOCR_BILATERAL_D", "9"))
+        bilateral_sigma = float(os.getenv("MEDOCR_BILATERAL_SIGMA", "75"))
+        np_img = cv2.bilateralFilter(np_img, bilateral_d, bilateral_sigma, bilateral_sigma)
+    
+    # Gaussian blur (original)
     blurred = cv2.GaussianBlur(np_img, (5, 5), 0)
     deskewed = _deskew(blurred)
     # Adaptive threshold to enhance faded text / form boxes.
