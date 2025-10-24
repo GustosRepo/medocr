@@ -15,6 +15,12 @@ services:
       - MEDOCR_DOWNSAMPLE_SCALE=0.5
       - MEDOCR_DOWNSAMPLE_SCALE_HIGH=0.4
       - MEDOCR_PREPROCESS_MODE=enhanced
+      - MEDOCR_USE_CLAHE=true
+      - MEDOCR_CLAHE_CLIP_LIMIT=2.0
+      - MEDOCR_CLAHE_TILE_SIZE=8
+      - MEDOCR_USE_BILATERAL=false
+      - MEDOCR_BILATERAL_D=9
+      - MEDOCR_BILATERAL_SIGMA=75
     restart: unless-stopped
     networks:
       - medocr-net
