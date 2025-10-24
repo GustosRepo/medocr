@@ -1,0 +1,15 @@
+Medical Referral Form
+
+Patient Name: John Doe
+Date of Birth: 01/15/1980
+Phone: (555) 123-4567
+
+Insurance: Blue Cross Blue Shield
+Member ID: ABC123456789
+
+Referring Provider: Dr. Jane Smith, MD
+Provider Phone: (555) 987-6543
+
+Procedure: Home Sleep Study
+CPT Code: 95800
+ICD-10: G47.33
