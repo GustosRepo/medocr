@@ -38,3 +38,9 @@ data/snapshots.ndjson
 # Release artifacts and wheelhouse (large binaries)
 release/
 ocr_service/wheelhouse/
+
+# OCR Models (large ONNX files - download separately)
+ocr_service/models/
+*.onnx
+*.pdiparams
+*.pdmodel
