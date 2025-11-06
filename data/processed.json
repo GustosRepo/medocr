@@ -4153,5 +4153,20 @@
     },
     "confidence": "High",
     "actionsCount": 2
+  },
+  {
+    "id": "doc_1762414067383_9ny4ro",
+    "processedAt": "2025-11-06T07:33:22.496Z",
+    "pages": 11,
+    "intakeDate": "2025-11-06",
+    "suggestedFilename": "Edema_Localized_02_05_1947_2025_11_06.pdf",
+    "fileHash": "f531f0b4a04bef676096030abd0c345bf74bd2c5c98057339924ffdcd5ec2896",
+    "patient": {
+      "first": "Kathleen",
+      "last": "Bors",
+      "dob": "02/05/1947"
+    },
+    "confidence": "High",
+    "actionsCount": 4
   }
 ]

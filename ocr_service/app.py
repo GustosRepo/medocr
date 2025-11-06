@@ -786,12 +786,9 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                 # RapidOCR returns: result, elapse = engine(img)
                 # result is list of [text, score, boxPoints]
                 try:
-                    with time_limit(page_timeout_seconds):
-                        result, _ = engine(processed_img)
+                    # Note: signal.alarm timeout doesn't work reliably on macOS with FastAPI
+                    result, _ = engine(processed_img)
                     print(f"[ocr] {_timestamp()} page={i+1} standard_ocr took {time.time()-t3:.2f}s", flush=True)
-                except TimeoutError as te:
-                    print(f"[ocr] {_timestamp()} page={i+1} TIMEOUT after {page_timeout_seconds}s - skipping page", flush=True)
-                    result = []
                 except Exception as e:
                     print(f"[ocr] {_timestamp()} engine_error: {e}", flush=True)
                     result = []
@@ -990,11 +987,14 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                         print(f"[ocr] {_timestamp()} auto_dpi_error page={i+1}: {e}", flush=True)
             
             # Stage 4: Sort boxes in reading order (handles multi-column layouts)
+            print(f"[ocr] {_timestamp()} page={i+1} sorting_boxes (reading order)", flush=True)
             boxes = reading_order(boxes)
+            print(f"[ocr] {_timestamp()} page={i+1} reading_order complete", flush=True)
             
             # Stage 5: Detect tables if enabled
             tables = []
             if os.getenv("OCR_ENABLE_TABLES", "0") in ("1", "true", "yes"):
+                print(f"[ocr] {_timestamp()} page={i+1} table_detection START", flush=True)
                 try:
                     t_table = time.time()
                     # Convert PIL to OpenCV format for table detection
@@ -1007,18 +1007,35 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                         img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
                     
                     table_bboxes = _find_tables_cv(img_bgr)
+                    print(f"[ocr] {_timestamp()} page={i+1} found {len(table_bboxes)} table candidates", flush=True)
                     
-                    for tb_bbox in table_bboxes:
+                    for tb_idx, tb_bbox in enumerate(table_bboxes):
+                        print(f"[ocr] {_timestamp()} page={i+1} extracting table {tb_idx+1}/{len(table_bboxes)}", flush=True)
                         cells_info = _extract_cells_from_table(img_bgr, tb_bbox)
+                        
+                        # Limit max cells to process per table (avoid massive table hangs)
+                        max_cells_per_table = int(os.getenv("OCR_MAX_CELLS_PER_TABLE", "15"))
+                        if len(cells_info) > max_cells_per_table:
+                            print(f"[ocr] {_timestamp()} page={i+1} table {tb_idx+1} has {len(cells_info)} cells (limiting to {max_cells_per_table})", flush=True)
+                            cells_info = cells_info[:max_cells_per_table]
+                        
+                        print(f"[ocr] {_timestamp()} page={i+1} table {tb_idx+1} has {len(cells_info)} cells, starting OCR", flush=True)
                         
                         # OCR each cell
                         cells_with_text = []
-                        for cell in cells_info:
+                        cell_start_time = time.time()
+                        for cell_idx, cell in enumerate(cells_info):
+                            # Skip remaining cells if we've been processing this table too long
+                            if time.time() - cell_start_time > 60:  # 60s total for all cells in this table
+                                print(f"[ocr] {_timestamp()} page={i+1} table {tb_idx+1} cell processing timeout after {cell_idx} cells", flush=True)
+                                break
+                            
                             cx, cy, cw, ch = cell['bbox']
                             # Crop cell region from PIL image
                             cell_img = img.crop((cx, cy, cx + cw, cy + ch))
                             
                             try:
+                                # No signal timeout - doesn't work on macOS
                                 cell_result, _ = engine(cell_img)
                                 cell_text = ""
                                 cell_conf = 0.0
@@ -1089,6 +1106,8 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                         if should_exit:
                             print(f"[ocr] {_timestamp()} early_exit: page {i+1} took {page_duration:.1f}s (items={num_items}, conf={avg_page_conf:.3f}), skipping remaining {remaining_pages} pages", flush=True)
                             break
+        
+        print(f"[ocr] {_timestamp()} processing complete: {len(pages)} pages processed", flush=True)
     except Exception as e:
         import traceback
         print(f"[ocr] processing_unexpected: {e}\n{traceback.format_exc()}", flush=True)
