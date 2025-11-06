@@ -4,17 +4,17 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-  "validate:schema": "node scripts/validate-extraction-result.js",
-  "validate:all": "node scripts/validate-all.js",
-  "lint:json": "node scripts/lint-json.js",
-  "dev:api": "NODE_ENV=development node backend/server.js",
-  "dev:all": "bash scripts/dev-all.sh",
-  "stop:all": "bash scripts/stop-all.sh",
-  "inspect": "node scripts/inspect-upload.js",
-  "test": "NODE_ENV=test node --test",
-  "docker:build": "docker compose build",
-  "docker:up": "docker compose up -d",
-  "docker:logs": "docker compose logs -f --tail=100"
+    "validate:schema": "node scripts/validate-extraction-result.js",
+    "validate:all": "node scripts/validate-all.js",
+    "lint:json": "node scripts/lint-json.js",
+    "dev:api": "NODE_ENV=development node backend/server.js",
+    "dev:all": "bash scripts/dev-all.sh",
+    "stop:all": "bash scripts/stop-all.sh",
+    "inspect": "node scripts/inspect-upload.js",
+    "test": "NODE_ENV=test node --test",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:logs": "docker compose logs -f --tail=100"
   },
   "devDependencies": {
     "ajv": "^8.12.0",
@@ -23,10 +23,13 @@
   },
   "dependencies": {
     "archiver": "^5.3.2",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.15.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1"
+    "puppeteer": "^24.27.0",
+    "undici": "^5.28.4"
   }
 }

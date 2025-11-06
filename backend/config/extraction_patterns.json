@@ -1,0 +1,287 @@
+{
+  "patterns": {
+    "patient_name": {
+      "regex_last_first": "\\b([A-Za-z\\p{L}''\\-]+)\\s*,\\s*([A-Za-z\\p{L}''\\-]+)(?:\\s+([A-Za-z\\p{L}''\\-]+))?\\b",
+      "regex_first_last": "\\b([A-Za-z\\p{L}''\\-]+)\\s+([A-Za-z\\p{L}''\\-]+)(?:\\s+([A-Za-z\\p{L}''\\-]+))?\\b",
+      "labels": [
+        "patient\\s*(?:name)?",
+        "pt\\s*name",
+        "name"
+      ],
+      "exclusions": [
+        "from",
+        "to",
+        "subject",
+        "company",
+        "facility",
+        "provider",
+        "attention",
+        "attn",
+        "fax",
+        "cc",
+        "re:",
+        "regarding"
+      ],
+      "block_tokens": [
+        "patient",
+        "patients",
+        "provider",
+        "providers",
+        "clinic",
+        "clinics",
+        "hospital",
+        "sleep",
+        "study",
+        "studies",
+        "referral",
+        "referrals",
+        "forwarding",
+        "support",
+        "team",
+        "fax",
+        "cover",
+        "sheet",
+        "page",
+        "paperwork",
+        "documentation",
+        "notes",
+        "summary",
+        "request",
+        "requests",
+        "attention",
+        "veteran",
+        "veterans",
+        "home",
+        "homes",
+        "medical",
+        "company",
+        "specialty",
+        "order",
+        "orders",
+        "care",
+        "center",
+        "centers",
+        "primary",
+        "office",
+        "insurance",
+        "practice",
+        "unit",
+        "department",
+        "services",
+        "service",
+        "authorization",
+        "auth",
+        "intake",
+        "contact"
+      ]
+    },
+    "dob": {
+      "regex": "\\b(0?[1-9]|1[0-2])[\\/\\-\\.\\,_\\s\\u2010-\\u2015\\u2212]*(0?[1-9]|[12]\\d|3[01])[\\/\\-\\.\\,_\\s\\u2010-\\u2015\\u2212]*(?:((?:19|20)\\d{2}))\\b",
+      "labels": [
+        "dob(?:\\s*\\/\\s*age)?",
+        "d\\.\\s*o\\.\\s*b\\.",
+        "date\\s*of\\s*birth"
+      ],
+      "exclusions": [
+        "referral\\s*date",
+        "order\\s*date",
+        "date\\s*of\\s*service",
+        "dos\\b",
+        "service\\s*date",
+        "signed",
+        "signature",
+        "fax",
+        "scanned",
+        "printed",
+        "report\\s*date",
+        "visit\\s*date",
+        "appt",
+        "appointment",
+        "today",
+        "now"
+      ]
+    },
+    "phone": {
+      "regex": "\\b(?:\\+?1[\\s\\-\\.()]*)?(?:\\(?\\d{3}\\)?[\\s\\-\\.]*)\\d{3}[\\s\\-\\.]*\\d{4}\\b",
+      "labels": [
+        "\\b[hm]:\\s*\\(?\\d{3}\\)?",
+        "home\\s*phone",
+        "mobi[el]e?\\s*phone",
+        "homa\\s*phona",
+        "patient\\s*(?:information|phone|contact)"
+      ],
+      "exclusions": [
+        "provider",
+        "referring",
+        "physician",
+        "npi",
+        "ordering",
+        "office",
+        "clinic",
+        "facility",
+        "practice",
+        "fax",
+        "fx",
+        "facsimile"
+      ],
+      "glyph_corrections": {
+        "O": "0",
+        "o": "0",
+        "D": "0",
+        "Q": "0",
+        "Ø": "0",
+        "I": "1",
+        "l": "1",
+        "|": "1",
+        "t": "1",
+        "T": "1",
+        "i": "1",
+        "Z": "2",
+        "z": "2",
+        "S": "5",
+        "s": "5",
+        "§": "5",
+        "G": "6",
+        "g": "6",
+        "b": "6",
+        "≤": "7",
+        "∑": "7",
+        "B": "8",
+        "◦": "0"
+      },
+      "invalid_area_codes": [
+        "800",
+        "822",
+        "833",
+        "844",
+        "855",
+        "866",
+        "877",
+        "888",
+        "900"
+      ]
+    },
+    "cpt": {
+      "regex_labeled": "\\b(?:cpt|procedure\\s*code)\\s*[:#-]?\\s*(\\d{5}|[A-Z]\\d{4})\\b",
+      "regex_code": "\\b(95[0-9]{3}|[A-Z]\\d{4})\\b",
+      "sleep_study_codes": [
+        "95811",
+        "95810",
+        "95806",
+        "G0399",
+        "95782",
+        "95783",
+        "95805"
+      ],
+      "context_keywords": [
+        "procedure",
+        "order",
+        "authorization",
+        "study",
+        "polysomnography",
+        "sleep test"
+      ]
+    },
+    "icd10": {
+      "regex": "\\b([A-Z]\\d{2}(?:\\.\\d{1,2})?)\\b",
+      "regex_labeled": "\\b(?:icd[- ]?10?|diagnosis)\\s*[:#-]?\\s*([A-Z]\\d{2}(?:\\.\\d{1,2})?)",
+      "sleep_related": [
+        "G47.33",
+        "G47.30",
+        "G47.10",
+        "R06.83",
+        "R53.83"
+      ],
+      "context_keywords": [
+        "diagnosis",
+        "icd",
+        "condition",
+        "indication"
+      ]
+    },
+    "member_id": {
+      "regex_primary": "\\bmember\\s*(?:id|#|number)?\\s*[:#-]?\\s*([A-Z0-9]{3,})\\b",
+      "regex_fallback": "\\b(?:subscriber|policy|insured)\\s*(?:id|#|number)?\\s*[:#-]?\\s*([A-Z0-9]{3,})\\b",
+      "regex_generic": "\\b([A-Z]\\d{8,10})\\b",
+      "proximity_distance": 500,
+      "insurance_keywords": [
+        "insurance",
+        "insured",
+        "carrier",
+        "lnsurance",
+        "insurence",
+        "aetna",
+        "aetha",
+        "aethna",
+        "anthem",
+        "blue cross",
+        "cigna",
+        "humana",
+        "united",
+        "medicare",
+        "medicaid",
+        "primary",
+        "hcd primary",
+        "hed primary"
+      ]
+    },
+    "group_id": {
+      "regex": "\\bgroup\\s*(?:id|#|number)?\\s*[:#-]?\\s*([A-Z0-9]{2,})\\b"
+    },
+    "provider": {
+      "name_pattern": "\\b([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,3})\\b",
+      "credentials": [
+        "MD",
+        "DO",
+        "NP",
+        "PA",
+        "RN",
+        "ARNP",
+        "PhD",
+        "DPM",
+        "DMD",
+        "DDS"
+      ],
+      "labels": [
+        "ordering\\s*provider",
+        "referring\\s*provider",
+        "physician",
+        "doctor",
+        "provider"
+      ]
+    }
+  },
+  "ocr_corrections": {
+    "common_errors": {
+      "lnsurance": "Insurance",
+      "insurence": "Insurance",
+      "lnsurence": "Insurance",
+      "homa phona": "home phone",
+      "homa phone": "home phone",
+      "mobie": "mobile",
+      "moblie": "mobile",
+      "aetha": "aetna",
+      "aethna": "aetna",
+      "primery": "primary",
+      "secondery": "secondary",
+      "bule cross": "blue cross",
+      "athem": "anthem",
+      "cigha": "cigna",
+      "humaha": "humana",
+      "unitad": "united",
+      "medicere": "medicare",
+      "medicaid": "medicaid",
+      "providar": "provider",
+      "physicion": "physician",
+      "procedura": "procedure",
+      "diagnosos": "diagnosis",
+      "patiant": "patient"
+    },
+    "character_replacements": {
+      "I": "1",
+      "l": "1",
+      "O": "0",
+      "o": "0"
+    }
+  }
+}

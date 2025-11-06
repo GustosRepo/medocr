@@ -1,0 +1,45 @@
+{
+  "aetna": {
+    "memberId": [
+      "^[A-Z]\\d{8,10}$",
+      "^[A-Z]{2}\\d{7,9}$"
+    ]
+  },
+  "anthem": {
+    "memberId": [
+      "^[A-Z]{3}\\d{9}$",
+      "^[A-Z]{2,3}\\d{6,10}$"
+    ]
+  },
+  "blue cross": {
+    "memberId": [
+      "^[A-Z]{2,3}\\d{6,10}$"
+    ]
+  },
+  "cigna": {
+    "memberId": [
+      "^[A-Z]\\d{8,10}$",
+      "^[A-Z0-9]{9,12}$"
+    ]
+  },
+  "humana": {
+    "memberId": [
+      "^[A-Z0-9]{9,12}$"
+    ]
+  },
+  "united": {
+    "memberId": [
+      "^[A-Z0-9]{9,12}$"
+    ]
+  },
+  "medicare": {
+    "memberId": [
+      "^[A-Z0-9]{9,12}$"
+    ]
+  },
+  "medicaid": {
+    "memberId": [
+      "^[A-Z0-9]{9,12}$"
+    ]
+  }
+}

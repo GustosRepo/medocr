@@ -1,12 +1,13 @@
 import React from 'react';
 import { ScrollArea, Text, Group, Badge, Tooltip, ActionIcon } from '../ui/primitives.jsx';
 import { Link, useLocation } from 'react-router-dom';
-import { IconFileUpload, IconChartBar, IconTimelineEvent, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconChecklist, IconBug, IconAdjustments } from '@tabler/icons-react';
+import { IconFileUpload, IconChartBar, IconTimelineEvent, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconChecklist, IconBug, IconAdjustments, IconChartDots } from '@tabler/icons-react';
 
 const baseLinks = [
   { to: '/', label: 'Referral', icon: IconFileUpload },
   { to: '/checklist', label: 'Checklist', icon: IconChecklist },
   { to: '/analytics', label: 'Analytics', icon: IconChartBar },
+  { to: '/benchmark', label: 'Benchmark', icon: IconChartDots },
   { to: '/debug/ocr', label: 'OCR Debug', icon: IconBug },
   { to: '/admin/rules', label: 'Rules Editor', icon: IconAdjustments }
 ];

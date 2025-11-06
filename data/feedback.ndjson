@@ -1,3 +1,4 @@
-{"id":"fb_1759965890669_0","ts":"2025-10-08T23:24:50.669Z","docId":"d1","path":"procedure.cpt","previousValue":"95810","newValue":"95811","accepted":true,"type":"cpt"}
-{"id":"fb_1759965890695_1","ts":"2025-10-08T23:24:50.695Z","docId":"d2","path":"procedure.cpt","previousValue":"95810","newValue":"95811","accepted":true,"type":"cpt"}
-{"id":"fb_1759965890700_2","ts":"2025-10-08T23:24:50.700Z","docId":"d3","path":"patient.dob","previousValue":"01/01/1970","newValue":"01/02/1970","accepted":false,"type":"demographic"}
+{"id":"fb_1761806767327_1","ts":"2025-10-30T06:46:07.327Z","docId":"d2","path":"procedure.cpt","previousValue":"95810","newValue":"95811","accepted":true,"type":"cpt"}
+{"id":"fb_1761806767329_2","ts":"2025-10-30T06:46:07.329Z","docId":"d3","path":"patient.dob","previousValue":"01/01/1970","newValue":"01/02/1970","accepted":false,"type":"demographic"}
+{"id":"fb_1761806767339_0","ts":"2025-10-30T06:46:07.339Z","docId":"doc_fb1","path":"patient.dob","previousValue":"01/01/1970","newValue":"01/02/1970","reason":"Typo","user":"qa_user","accepted":null,"type":"demographic"}
+{"id":"fb_1761806767346_1","ts":"2025-10-30T06:46:07.346Z","docId":"doc_fb1","path":"procedure.cpt","previousValue":"95810","newValue":"95811","reason":"Titration evidence present","user":"qa_user","accepted":null,"type":"cpt"}

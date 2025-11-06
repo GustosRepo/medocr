@@ -4,16 +4,23 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
+import correctionsDB from './corrections_db.js';
+import npiService from './npi_service.js';
+import appConfig from './app_config.js';
 import { performance } from 'perf_hooks';
 import { PassThrough } from 'stream';
 import archiver from 'archiver';
 import { PDFDocument } from 'pdf-lib';
+import { annotatePdfWithOcrSpans, DEFAULT_ANNOTATION_SCOPE_COLORS } from './utils/pdfAnnotation.js';
+import { buildHighlightSpans } from './utils/highlightSpans.js';
 import { incCounter, recordLatency, snapshot as metricsSnapshot, recordConfidence, recordConcurrency, recordOcrQueueDepth } from './metrics/store.js';
 import crypto from 'crypto';
 import { addSnapshot, ambiguousCptRate, recentSnapshots } from './snapshot/store.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { runExtraction, runExtractionWithDates } from './rules/index.js';
+import { applyFieldCorrection } from './rules/utils/ocrCorrector.js';
+import { contextScore as guardContextScore } from './rules/context_guard.js';
 import { parseNameFromFilename } from './rules/patient.js';
 import { log, withReq, classifyError } from './logging/logger.js';
 import { toFhirBundle } from './fhir/export.js';
@@ -23,6 +30,22 @@ import { mapAction, mapActions } from './actionMap.js';
 import { addFeedback, listFeedback, stats as feedbackStats } from './feedback/store.js';
 import { buildCoverage } from './coverage.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
+
+// Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
+try {
+  // Lazy import to avoid hard failure if module missing in odd environments
+  const { setGlobalDispatcher, Agent } = await import('undici');
+  const FETCH_BODY_TIMEOUT_MS = parseInt(process.env.FETCH_BODY_TIMEOUT_MS || process.env.OCR_TIMEOUT_MS || '900000', 10); // default 15m
+  const FETCH_HEADERS_TIMEOUT_MS = parseInt(process.env.FETCH_HEADERS_TIMEOUT_MS || '900000', 10);
+  setGlobalDispatcher(new Agent({
+    // Time allowed to receive response headers
+    headersTimeout: FETCH_HEADERS_TIMEOUT_MS,
+    // Time allowed to receive the entire response body
+    bodyTimeout: FETCH_BODY_TIMEOUT_MS
+  }));
+} catch (e) {
+  // undici not available; continue with default fetch timeouts
+}
 
 const app = express();
 app.use(express.json({ limit: process.env.BODY_SIZE_LIMIT || '256kb' }));
@@ -37,6 +60,115 @@ app.get('/dashboard', (_req,res) => {
 app.get('/health', (_req,res) => {
   res.json({ status: 'ok', time: Date.now() });
 });
+
+// Apply post-process corrections using correctionsDB to a mapped result
+function applyCorrectionsPostprocess(mappedResult, trace = [], context = {}) {
+  try {
+    // Insurance carrier
+    if (mappedResult.insurance?.[0]?.carrier) {
+      const corrected = applyFieldCorrection('carrier', mappedResult.insurance[0].carrier, correctionsDB);
+      if (corrected !== mappedResult.insurance[0].carrier) {
+        trace.push({ rule: 'learned_correction_carrier_postprocess', from: mappedResult.insurance[0].carrier, to: corrected });
+        mappedResult.insurance[0].carrier = corrected;
+      }
+    }
+
+    // CPT code
+    if (mappedResult.procedure?.cpt) {
+      const corrected = applyFieldCorrection('cpt', mappedResult.procedure.cpt, correctionsDB);
+      if (corrected !== mappedResult.procedure.cpt) {
+        trace.push({ rule: 'learned_correction_cpt_postprocess', from: mappedResult.procedure.cpt, to: corrected });
+        mappedResult.procedure.cpt = corrected;
+      }
+    }
+
+    // Provider name (exact, fuzzy, from practice)
+    if (mappedResult.provider?.name) {
+      let provName = mappedResult.provider.name;
+      const exact = applyFieldCorrection('provider', provName, correctionsDB);
+      if (exact !== provName) {
+        trace.push({ rule: 'learned_correction_provider_postprocess', from: provName, to: exact });
+        provName = exact;
+      } else {
+        try {
+          const fuzzy = correctionsDB.fuzzyMatch('provider', provName, 0.84);
+          if (fuzzy && fuzzy.text && fuzzy.text !== provName) {
+            trace.push({ rule: 'learned_correction_provider_fuzzy_postprocess', from: provName, to: fuzzy.text, similarity: fuzzy.similarity });
+            provName = fuzzy.text;
+          }
+        } catch {}
+        if (mappedResult.provider?.practice) {
+          try {
+            const byPractice = correctionsDB.getCorrection('provider', mappedResult.provider.practice);
+            if (byPractice && byPractice.text && byPractice.text !== provName) {
+              trace.push({ rule: 'learned_correction_provider_from_practice_postprocess', from: provName, to: byPractice.text });
+              provName = byPractice.text;
+            } else {
+              const fuzzyByPractice = correctionsDB.fuzzyMatch('provider', mappedResult.provider.practice, 0.84);
+              if (fuzzyByPractice && fuzzyByPractice.text && fuzzyByPractice.text !== provName) {
+                trace.push({ rule: 'learned_correction_provider_from_practice_fuzzy_postprocess', from: provName, to: fuzzyByPractice.text, similarity: fuzzyByPractice.similarity });
+                provName = fuzzyByPractice.text;
+              }
+            }
+          } catch {}
+        }
+      }
+      mappedResult.provider.name = provName;
+    }
+
+    // Practice name
+    if (mappedResult.provider?.practice) {
+      const corrected = applyFieldCorrection('practiceName', mappedResult.provider.practice, correctionsDB);
+      if (corrected !== mappedResult.provider.practice) {
+        trace.push({ rule: 'learned_correction_practice_postprocess', from: mappedResult.provider.practice, to: corrected });
+        mappedResult.provider.practice = corrected;
+      }
+    }
+
+    // Provider phone
+    if (mappedResult.provider?.phone) {
+      const corrected = applyFieldCorrection('phone', mappedResult.provider.phone, correctionsDB);
+      if (corrected !== mappedResult.provider.phone) {
+        trace.push({ rule: 'learned_correction_provider_phone_postprocess', from: mappedResult.provider.phone, to: corrected });
+        mappedResult.provider.phone = corrected;
+      }
+    }
+
+    // Provider fax
+    if (mappedResult.provider?.fax) {
+      const corrected = applyFieldCorrection('fax', mappedResult.provider.fax, correctionsDB);
+      if (corrected !== mappedResult.provider.fax) {
+        trace.push({ rule: 'learned_correction_provider_fax_postprocess', from: mappedResult.provider.fax, to: corrected });
+        mappedResult.provider.fax = corrected;
+      }
+    }
+
+    // Fallback: learned phone by provider/practice if phone missing
+    if (!mappedResult.provider?.phone) {
+      const provName = mappedResult.provider?.name || null;
+      const practice = mappedResult.provider?.practice || null;
+      let learnedPhone = null;
+      if (provName) {
+        const corr = correctionsDB.getCorrection('referringPhone', provName);
+        if (corr && corr.text) {
+          learnedPhone = corr.text;
+          trace.push({ rule: 'learned_provider_phone_from_name_postprocess', to: corr.text, source: corr.source || 'corrections_db' });
+        }
+      }
+      if (!learnedPhone && practice) {
+        const corr2 = correctionsDB.getCorrection('referringPhone', practice);
+        if (corr2 && corr2.text) {
+          learnedPhone = corr2.text;
+          trace.push({ rule: 'learned_provider_phone_from_practice_postprocess', to: corr2.text, source: corr2.source || 'corrections_db' });
+        }
+      }
+      if (learnedPhone) mappedResult.provider.phone = learnedPhone;
+    }
+  } catch (err) {
+    log('warn','postprocess_corrections_failed',{ id: context.id, err: String(err?.message || err) });
+  }
+  return { result: mappedResult, trace };
+}
 
 // Metrics moved to persistent store (metrics/store.js)
 // Correlation ID middleware
@@ -191,7 +323,7 @@ function scheduleDocumentProcessing(id) {
 }
 
 // In-memory doc store for dev
-const docs = new Map(); // id -> { filePath, status, result, error }
+const docs = new Map(); // id -> { filePath, status, result, error, ocrParams? }
 
 function buildSummaryFileStem(result) {
   const r = result || {};
@@ -225,11 +357,37 @@ function renderSummaryPdfBuffer(result, logoPath) {
 
 async function buildPacketPdf(docId, entry, logoPath) {
   const summaryBuffer = await renderSummaryPdfBuffer(entry.result, logoPath);
+  // Try to generate the client-spec Patient Report; if writer/deps missing, skip gracefully
+  let patientReportBuffer = null;
+  try {
+    const { generatePatientPdf } = await import('./pdf/generatePatientPdf.js');
+    try {
+      const mod = await import('./pdf/pdfWriterPuppeteer.js');
+      const writer = mod.pdfWriter;
+      patientReportBuffer = await generatePatientPdf(entry.result, { pdfWriter: writer });
+    } catch (e) {
+      // Puppeteer writer not available; continue without Patient Report
+      patientReportBuffer = null;
+    }
+  } catch {
+    // generatePatientPdf not available; continue without Patient Report
+    patientReportBuffer = null;
+  }
   const filePath = entry.filePath;
   if (filePath && fs.existsSync(filePath)) {
     try {
       const originalBytes = await fsPromises.readFile(filePath);
       const summaryDoc = await PDFDocument.load(summaryBuffer);
+      // If Patient Report available, insert its pages after the one-page summary
+      if (patientReportBuffer) {
+        try {
+          const reportDoc = await PDFDocument.load(patientReportBuffer);
+          const reportPages = await summaryDoc.copyPages(reportDoc, reportDoc.getPageIndices());
+          reportPages.forEach(page => summaryDoc.addPage(page));
+        } catch (e) {
+          // If merge fails, continue with summary + original only
+        }
+      }
       const originalDoc = await PDFDocument.load(originalBytes);
       const copiedPages = await summaryDoc.copyPages(originalDoc, originalDoc.getPageIndices());
       copiedPages.forEach(page => summaryDoc.addPage(page));
@@ -240,6 +398,17 @@ async function buildPacketPdf(docId, entry, logoPath) {
     }
   } else {
     log('warn', 'packet_original_missing', { id: docId, filePath });
+  }
+  // Fallback: if we couldn't merge with original, but we have a patient report, prepend it to summary
+  if (patientReportBuffer) {
+    try {
+      const summaryDoc = await PDFDocument.load(summaryBuffer);
+      const reportDoc = await PDFDocument.load(patientReportBuffer);
+      const reportPages = await summaryDoc.copyPages(reportDoc, reportDoc.getPageIndices());
+      reportPages.forEach(page => summaryDoc.addPage(page));
+      const merged = await summaryDoc.save();
+      return Buffer.from(merged);
+    } catch {}
   }
   return summaryBuffer;
 }
@@ -538,7 +707,28 @@ app.get('/api/documents/:id/result', (req, res) => {
   if (entry.result) {
     const debug = req.query.debug === '1' || req.query.debug === 'true';
     if (debug) {
-      return res.json({ ...entry.result, debug: { trace: entry._trace || [] } });
+      if (!entry._highlight) {
+        try {
+          const spans = buildHighlightSpans(entry.result);
+          entry._highlight = { spans, scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+        } catch (e) {
+          req.logger?.warn('highlight_spans_debug_regen_failed', { id, err: String(e?.message || e) });
+          entry._highlight = { spans: [], scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+        }
+      }
+      const rawText = Array.isArray(entry.result?.ocr)
+        ? entry.result.ocr.map(page => page?.text || '').join('\n')
+        : '';
+      const highlight = entry._highlight || { spans: [], scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+      return res.json({
+        ...entry.result,
+        debug: {
+          trace: entry._trace || [],
+          rawText,
+          spans: Array.isArray(highlight.spans) ? highlight.spans : [],
+          scopeColors: highlight.scopeColors || DEFAULT_ANNOTATION_SCOPE_COLORS
+        }
+      });
     }
     return res.json(entry.result);
   }
@@ -556,6 +746,27 @@ app.get('/api/documents/:id/result', (req, res) => {
   req.logger?.error('result_internal_error', { id, err: String(err?.message || err) });
   res.status(500).json({ error: { code: 'internal_error', category: classifyError('internal_error'), message: String(err?.message || err) } });
   });
+});
+
+// Apply corrections to an already-processed document without re-OCR
+app.post('/api/documents/:id/apply-corrections', (req, res) => {
+  const { id } = req.params;
+  const entry = docs.get(id);
+  if (!entry) {
+    return res.status(404).json({ error: { code: 'not_found', message: 'document not found' } });
+  }
+  if (entry.status !== 'done' || !entry.result) {
+    return res.status(400).json({ error: { code: 'not_ready', message: 'document not processed yet' } });
+  }
+  try {
+    const trace = Array.isArray(entry._trace) ? entry._trace : [];
+    applyCorrectionsPostprocess(entry.result, trace, { id });
+    entry._trace = trace;
+    docs.set(id, entry);
+    return res.json({ ok: true, id, corrected: true, result: entry.result });
+  } catch (e) {
+    return res.status(500).json({ error: { code: 'apply_corrections_failed', message: String(e?.message || e) } });
+  }
 });
 
 // FHIR export endpoint (experimental)
@@ -589,6 +800,68 @@ app.get('/api/documents/:id/summary.pdf', (req, res) => {
   renderPatientPdf(res, entry.result, process.env.BATCH_LOGO_PATH);
 });
 
+app.get('/api/documents/:id/original.pdf', (req, res) => {
+  const id = req.params.id;
+  const entry = docs.get(id);
+  if (!entry || !entry.filePath) {
+    return res.status(404).json({ error: { code: 'not_found', category: classifyError('not_found'), message: 'original file not available' } });
+  }
+  if (!fs.existsSync(entry.filePath)) {
+    return res.status(404).json({ error: { code: 'not_found', category: classifyError('not_found'), message: 'original file missing on disk' } });
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  const basename = path.basename(entry.originalName || entry.filePath);
+  res.setHeader('Content-Disposition', `inline; filename="${basename}"; filename*=UTF-8''${encodeURIComponent(basename)}`);
+  const stream = fs.createReadStream(entry.filePath);
+  stream.on('error', (err) => {
+    req.logger?.error('original_pdf_stream_error', { id, err: String(err?.message || err) });
+    if (!res.headersSent) {
+      res.status(500).json({ error: { code: 'stream_error', category: classifyError('internal_error'), message: 'unable to stream original PDF' } });
+    } else {
+      res.destroy(err);
+    }
+  });
+  stream.pipe(res);
+});
+
+app.get('/api/documents/:id/annotated.pdf', async (req, res) => {
+  const id = req.params.id;
+  const entry = docs.get(id);
+  if (!entry || entry.status !== 'done' || !entry.result) {
+    return res.status(404).json({ error: { code: 'not_ready', category: classifyError('not_ready'), message: 'document not found or not processed' } });
+  }
+  if (!entry.filePath || !fs.existsSync(entry.filePath)) {
+    return res.status(404).json({ error: { code: 'not_found', category: classifyError('not_found'), message: 'original file not available' } });
+  }
+
+  if (!entry._highlight) {
+    try {
+      const spans = buildHighlightSpans(entry.result);
+      entry._highlight = { spans, scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+    } catch (e) {
+      req.logger?.warn('highlight_spans_regen_failed', { id, err: String(e?.message || e) });
+      entry._highlight = { spans: [], scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+    }
+  }
+
+  try {
+    const sourceBytes = await fsPromises.readFile(entry.filePath);
+    const spans = Array.isArray(entry._highlight?.spans) ? entry._highlight.spans : [];
+    let outputBytes = sourceBytes;
+    if (spans.length) {
+      outputBytes = await annotatePdfWithOcrSpans(sourceBytes, spans, { scopeColors: entry._highlight.scopeColors || DEFAULT_ANNOTATION_SCOPE_COLORS });
+    }
+    const stem = buildSummaryFileStem(entry.result);
+    const filename = `${stem}_annotated.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(Buffer.isBuffer(outputBytes) ? outputBytes : Buffer.from(outputBytes));
+  } catch (err) {
+    req.logger?.error('annotated_pdf_failed', { id, err: String(err?.message || err) });
+    res.status(500).json({ error: { code: 'annotated_pdf_failed', category: classifyError('internal_error'), message: 'unable to build annotated PDF' } });
+  }
+});
+
 app.get('/api/documents/:id/packet.pdf', async (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
@@ -607,6 +880,51 @@ app.get('/api/documents/:id/packet.pdf', async (req, res) => {
   } catch (err) {
     req.logger?.error('packet_build_failed', { id, err: String(err?.message || err) });
     res.status(500).json({ error: { code: 'packet_build_failed', message: 'unable to build packet' } });
+  }
+});
+
+// Patient report PDF (client-spec layout via EJS -> HTML -> PDF)
+app.get('/api/documents/:id/patient-report.pdf', async (req, res) => {
+  const id = req.params.id;
+  const entry = docs.get(id);
+  if (!entry || entry.status !== 'done' || !entry.result) {
+    return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
+  }
+  try {
+    // Lazy import to keep startup lean and to provide clear guidance if deps are missing
+    const { generatePatientPdf } = await import('./pdf/generatePatientPdf.js');
+    let writer;
+    try {
+      const mod = await import('./pdf/pdfWriterPuppeteer.js');
+      writer = mod.pdfWriter;
+    } catch (e) {
+      return res.status(501).json({ error: { code: 'pdf_writer_missing', message: 'Puppeteer pdfWriter not available. Install dependencies: npm i ejs puppeteer', detail: String(e?.message || e) } });
+    }
+    const buffer = await generatePatientPdf(entry.result, { pdfWriter: writer });
+    const stem = buildSummaryFileStem(entry.result);
+    const filename = `${stem}_Patient_Report.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buffer);
+  } catch (err) {
+    req.logger?.error('patient_report_pdf_failed', { id, err: String(err?.message || err) });
+    const msg = String(err?.message || err);
+    if (/Cannot find module 'ejs'|Cannot find package 'ejs'/.test(msg)) {
+      return res.status(501).json({ error: { code: 'ejs_missing', message: 'EJS not installed. Run: npm i ejs', detail: msg } });
+    }
+    if (/Cannot find module 'puppeteer'|Cannot find package 'puppeteer'/.test(msg)) {
+      return res.status(501).json({ error: { code: 'puppeteer_missing', message: 'Puppeteer not installed. Run: npm i puppeteer', detail: msg } });
+    }
+    if (/puppeteer_launch_failed|Failed to launch the browser|Executable doesn't exist/.test(msg)) {
+      return res.status(501).json({
+        error: {
+          code: 'puppeteer_launch_failed',
+          message: 'Failed to launch headless Chrome. Set PUPPETEER_EXECUTABLE_PATH to your system Chrome or allow Chromium download.',
+          detail: msg
+        }
+      });
+    }
+    res.status(500).json({ error: { code: 'patient_report_failed', message: 'unable to generate patient report PDF' } });
   }
 });
 
@@ -717,6 +1035,26 @@ app.get('/api/batch', (req, res) => {
   res.json({ dates: listBatchDates(docs) });
 });
 
+// Live logs endpoint: read recent OCR service logs
+app.get('/api/logs/ocr', (req, res) => {
+  try {
+    const lines = parseInt(req.query.lines) || 100;
+    const logPath = path.join(process.cwd(), 'data/logs/ocr-8000.log');
+    
+    if (!fs.existsSync(logPath)) {
+      return res.json({ logs: [] });
+    }
+    
+    const content = fs.readFileSync(logPath, 'utf8');
+    const allLines = content.split('\n').filter(l => l.trim());
+    const recentLines = allLines.slice(-lines);
+    
+    res.json({ logs: recentLines });
+  } catch (err) {
+    res.status(500).json({ error: { code: 'log_read_error', message: String(err.message || err) } });
+  }
+});
+
 // Serve fixtures directly for UI testing
 app.get('/api/fixtures/:name', (req, res) => {
   const name = req.params.name.replace(/[^a-zA-Z0-9_\-]/g, '');
@@ -745,6 +1083,115 @@ app.get('/api/feedback', (req, res) => {
 // GET /api/feedback/stats
 app.get('/api/feedback/stats', (_req, res) => {
   res.json(feedbackStats());
+});
+
+// POST /api/corrections - Record a user correction for learning
+app.post('/api/corrections', express.json({ limit: '64kb' }), (req, res) => {
+  try {
+    const body = req.body || {};
+    // Backward-compat: accept either { corrections: [...] } or a single correction object
+    let corrections = Array.isArray(body.corrections) ? body.corrections : null;
+    if (!corrections) {
+      const maybeSingle = body && typeof body === 'object' ? body : null;
+      if (maybeSingle && maybeSingle.type && maybeSingle.ocrText && maybeSingle.correctedText) {
+        corrections = [maybeSingle];
+      }
+    }
+
+    if (!Array.isArray(corrections) || corrections.length === 0) {
+      return res.status(400).json({ 
+        error: { code: 'bad_request', message: 'corrections array required' } 
+      });
+    }
+
+    let recordedCount = 0;
+    const allowedTypes = [
+      'provider', 'npi', 'phone', 'fax', 'carrier', 'cpt', 'icd', 'facility',
+      // Tier 1: High-value fields
+      'procedureDescription', 'practiceName', 'referringProvider', 'referringNpi', 
+      'referringPhone', 'referringFax', 'diagnosisDescription',
+      // Tier 2: Quality-of-life
+      'providerNotes', 'safetyCategory', 'accommodationType',
+      // Tier 3: Nice-to-have
+      'supervisingProvider', 'supervisingNpi', 'planType', 'studyType'
+    ];
+
+    for (const correction of corrections) {
+      const { type, ocrText, correctedText } = correction;
+      
+      if (!type || !ocrText || !correctedText) {
+        continue; // Skip invalid corrections
+      }
+
+      if (!allowedTypes.includes(type)) {
+        continue; // Skip unknown types
+      }
+
+      correctionsDB.recordCorrection(type, ocrText, correctedText, { 
+        documentId: correction.documentId,
+        confidence: correction.confidence 
+      });
+      recordedCount++;
+    }
+    
+    res.status(201).json({ 
+      ok: true, 
+      message: `${recordedCount} corrections recorded`,
+      recorded: recordedCount,
+      stats: correctionsDB.getStats()
+    });
+  } catch (err) {
+    log('error', 'corrections_record_failed', { err: String(err?.message || err) });
+    res.status(500).json({ error: { code: 'server_error', message: 'Failed to record corrections' } });
+  }
+});
+
+// GET /api/corrections/stats - Get corrections database statistics
+app.get('/api/corrections/stats', (_req, res) => {
+  try {
+    res.json({
+      corrections: correctionsDB.getStats(),
+      npiCache: npiService.getStats()
+    });
+  } catch (err) {
+    log('error', 'corrections_stats_failed', { err: String(err?.message || err) });
+    res.status(500).json({ error: { code: 'server_error', message: 'Failed to get stats' } });
+  }
+});
+
+// POST /api/corrections/reload - Reload corrections.json from disk (dev helper)
+app.post('/api/corrections/reload', (_req, res) => {
+  try {
+    const ok = typeof correctionsDB.reload === 'function' ? correctionsDB.reload() : false;
+    if (!ok) return res.status(500).json({ error: { code: 'reload_failed', message: 'Failed to reload corrections' } });
+    res.json({ ok: true, stats: correctionsDB.getStats() });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'reload_failed', message: String(e?.message || e) } });
+  }
+});
+
+// GET /api/npi/search?name=...&state=... - Search NPI registry
+app.get('/api/npi/search', async (req, res) => {
+  try {
+    const { name, state } = req.query;
+    
+    if (!name) {
+      return res.status(400).json({ 
+        error: { code: 'bad_request', message: 'name query parameter required' } 
+      });
+    }
+
+    const results = await npiService.searchByName(name, state || null);
+    
+    res.json({ 
+      query: { name, state: state || null },
+      results,
+      count: results.length
+    });
+  } catch (err) {
+    log('error', 'npi_search_failed', { err: String(err?.message || err) });
+    res.status(500).json({ error: { code: 'server_error', message: 'NPI search failed' } });
+  }
 });
 
 app.get('/api/admin/rules/files', (_req, res) => {
@@ -870,10 +1317,51 @@ app.post('/api/admin/rules/reload', (req, res) => {
   res.json({ ok: true, scope: 'all' });
 });
 
+// App config endpoints
+app.get('/api/config', (_req, res) => {
+  res.json(appConfig.getAll());
+});
+
+app.post('/api/config/npi', (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: { code: 'invalid_input', message: 'enabled must be boolean' } });
+  }
+  const success = appConfig.setNpiEnabled(enabled);
+  if (!success) {
+    return res.status(500).json({ error: { code: 'save_failed', message: 'Failed to save config' } });
+  }
+  log('info', 'config_npi_updated', { enabled });
+  res.json({ ok: true, npiEnabled: appConfig.isNpiEnabled() });
+});
+
 app.post('/api/admin/documents/reset', (_req, res) => {
   docs.clear();
   log('info', 'admin_docs_reset');
   res.json({ ok: true });
+});
+
+// Reprocess a document with optional OCR preprocessing overrides (debug/tuning)
+app.post('/api/documents/:id/reprocess', express.json(), (req, res) => {
+  const id = req.params.id;
+  const entry = docs.get(id);
+  if (!entry) {
+    return res.status(404).json({ error: { code: 'not_found', category: classifyError('not_found'), message: 'document not found' } });
+  }
+  const allowed = ['dpi','mode','use_clahe','clahe_clip','clahe_tile','use_bilateral','bilateral_d','bilateral_sigma','retry_threshold','enable_retry'];
+  const raw = req.body || {};
+  const ocrParams = {};
+  for (const k of allowed) {
+    if (raw[k] !== undefined && raw[k] !== null && String(raw[k]) !== '') {
+      ocrParams[k] = String(raw[k]);
+    }
+  }
+  entry.ocrParams = ocrParams;
+  entry.status = 'queued'; entry.result = null; entry.error = null;
+  docs.set(id, entry);
+  log('info','doc_reprocess_requested',{ id, ocrParams });
+  scheduleDocumentProcessing(id).catch(()=>{});
+  res.json({ ok: true, id, queued: true, ocrParams });
 });
 
 // Analytics aggregation endpoint
@@ -899,6 +1387,7 @@ async function processDocument(id) {
   if (!entry) return;
   const t0 = performance.now();
   const ocrTimeoutMsConfig = parseInt(process.env.OCR_TIMEOUT_MS || '60000', 10);
+  log('debug','ocr_timeout_config',{ id, timeoutMs: ocrTimeoutMsConfig });
   let lastQueueWaitMs = 0;
   if (!entry.filePath || !fs.existsSync(entry.filePath)) {
   // No file available -> mark error (do not fallback to sample)
@@ -937,7 +1426,14 @@ async function processDocument(id) {
         const bucket = queueWait < 1000 ? 'lt1s' : queueWait < 5000 ? 'lt5s' : queueWait < 15000 ? 'lt15s' : 'ge15s';
         incCounter(`ocrQueueWait_${bucket}`);
       } catch {}
-      return fetch(`${serviceUrl.replace(/\/$/, '')}/ocr`, { method: 'POST', body: form, signal: controller.signal })
+      const qs = (() => {
+        const p = entry.ocrParams || {};
+        const keys = Object.keys(p);
+        if (!keys.length) return '';
+        const usp = new URLSearchParams(p);
+        return `?${usp.toString()}`;
+      })();
+      return fetch(`${serviceUrl.replace(/\/$/, '')}/ocr${qs}`, { method: 'POST', body: form, signal: controller.signal })
         .finally(() => clearTimeout(timeoutHandle));
     });
     if (!resp.ok) throw new Error(`OCR service error: ${resp.status}`);
@@ -946,7 +1442,10 @@ async function processDocument(id) {
   const maxPages = parseInt(process.env.MAX_PDF_PAGES || '150',10);
   if (ocrPages.length > maxPages) throw new Error(`PDF exceeds max pages (${maxPages})`);
   // Map from OCR using rules engine (no template seed)
-  const { result: mappedResult, trace } = runExtractionWithDates(ocrPages);
+  const { result: mappedResult, trace } = await runExtractionWithDates(ocrPages);
+
+  // Defensive post-process: re-apply learned corrections
+  applyCorrectionsPostprocess(mappedResult, trace, { id });
   // Build suggested filename per client requirement: LastName_FirstName_DOB_ReferralDate.pdf
     const first = mappedResult?.patient?.first || '';
     const last = mappedResult?.patient?.last || '';
@@ -987,6 +1486,13 @@ async function processDocument(id) {
       recordPdfModelStats(result.pdfModel);
     }
   } catch (e) { log('warn','pdf_model_build_failed',{ id, err: String(e.message||e) }); }
+  try {
+    const spans = buildHighlightSpans(result);
+    entry._highlight = { spans, scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+  } catch (e) {
+    log('warn','highlight_spans_failed',{ id, err: String(e?.message || e) });
+    entry._highlight = { spans: [], scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+  }
   // Enrichment: confidence level alias & provider heuristics & emergency contact suppression
   try {
     if (result?.confidenceDetail?.score != null && !result.confidenceLevel) {
@@ -1043,6 +1549,129 @@ async function processDocument(id) {
   }
 }
 
+// Benchmark endpoint - test OCR accuracy against ground truth
+app.post('/api/benchmark', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: { code: 'no_file', message: 'No file uploaded' } });
+  }
+  
+  const groundTruth = req.body.groundTruth || '';
+  if (!groundTruth) {
+    return res.status(400).json({ error: { code: 'no_ground_truth', message: 'Ground truth text is required' } });
+  }
+  
+  try {
+    // Build form data for OCR service
+    const form = new FormData();
+    const fileBuffer = await fs.promises.readFile(req.file.path);
+    const blob = new Blob([fileBuffer], { type: req.file.mimetype || 'application/octet-stream' });
+    form.append('file', blob, req.file.originalname);
+    
+    // Call OCR service
+    const serviceUrl = nextOcrServiceUrl();
+    const ocrResp = await fetch(`${serviceUrl.replace(/\/$/, '')}/ocr`, {
+      method: 'POST',
+      body: form
+    });
+    
+    if (!ocrResp.ok) {
+      throw new Error(`OCR service error: ${ocrResp.status}`);
+    }
+    
+    const ocrJson = await ocrResp.json();
+    const ocrPages = Array.isArray(ocrJson.ocr) ? ocrJson.ocr : [];
+    
+    // Extract full OCR text
+    const ocrText = ocrPages.map(p => p.text || '').join('\n');
+    
+    // Compute Levenshtein distance for CER
+    const computeLevenshtein = (a, b) => {
+      const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+      for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+      for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+      for (let j = 1; j <= b.length; j++) {
+        for (let i = 1; i <= a.length; i++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[j][i] = Math.min(
+            matrix[j][i - 1] + 1,
+            matrix[j - 1][i] + 1,
+            matrix[j - 1][i - 1] + cost
+          );
+        }
+      }
+      return matrix[b.length][a.length];
+    };
+    
+    // Compute metrics
+    const gtNorm = groundTruth.trim();
+    const ocrNorm = ocrText.trim();
+    
+    const charDistance = computeLevenshtein(ocrNorm, gtNorm);
+    const cer = gtNorm.length > 0 ? charDistance / gtNorm.length : 0;
+    
+    const gtWords = gtNorm.split(/\s+/).filter(Boolean);
+    const ocrWords = ocrNorm.split(/\s+/).filter(Boolean);
+    const wordDistance = computeLevenshtein(ocrWords.join(' '), gtWords.join(' '));
+    const wer = gtWords.length > 0 ? wordDistance / gtWords.join(' ').length : 0;
+    
+    // Extract confidence data
+    const allLines = ocrPages.flatMap(p => p.lines || []);
+    const confidences = allLines.map(l => l.confidence).filter(c => c != null);
+    const avgConfidence = confidences.length > 0 
+      ? confidences.reduce((a, b) => a + b, 0) / confidences.length 
+      : 0;
+    const minConfidence = confidences.length > 0 ? Math.min(...confidences) : 0;
+    const lowConfLines = allLines.filter(l => l.confidence != null && l.confidence < 0.65).length;
+    const lowConfRate = allLines.length > 0 ? lowConfLines / allLines.length : 0;
+    
+    // Clean up uploaded file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    
+    res.json({
+      metrics: {
+        cer,
+        wer,
+        characterAccuracy: 1 - cer,
+        wordAccuracy: 1 - wer,
+        avgConfidence,
+        minConfidence,
+        lowConfidenceRate: lowConfRate,
+        totalChars: gtNorm.length,
+        totalWords: gtWords.length,
+        totalLines: allLines.length
+      },
+      ocr: {
+        text: ocrText,
+        pages: ocrPages.length,
+        lines: allLines.length
+      },
+      groundTruth: groundTruth,
+      filename: req.file.originalname
+    });
+    
+  } catch (err) {
+    req.logger?.error('benchmark_failed', { err: String(err?.message || err) });
+    
+    // Clean up uploaded file on error
+    try {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    
+    res.status(500).json({ 
+      error: { 
+        code: 'benchmark_failed', 
+        message: String(err?.message || err) 
+      } 
+    });
+  }
+});
+
 // Metrics endpoint
 app.get('/api/metrics', (_req, res) => {
   res.json(metricsSnapshot());
@@ -1056,6 +1685,29 @@ app.get('/api/documents/export.json', async (req, res) => {
     res.json({ count: out.length, items: out });
   } catch (e) {
     res.status(500).json({ error: { code: 'export_failed', message: String(e?.message || e) } });
+  }
+});
+
+// --- Debug: Context Guard API ---
+// POST /api/debug/context-guard { text }
+app.post('/api/debug/context-guard', express.json({ limit: '256kb' }), (req, res) => {
+  try {
+    const text = String(req.body?.text || '');
+    const lines = text.split(/\r?\n/);
+    const out = [];
+    let counts = { header: 0, provider: 0, fax: 0, patient: 0, nonPatient: 0 };
+    lines.forEach((line, i) => {
+      const cs = guardContextScore(line || '');
+      out.push({ i, line, ...cs });
+      counts.header += cs.header ? 1 : 0;
+      counts.provider += cs.provider ? 1 : 0;
+      counts.fax += cs.fax ? 1 : 0;
+      counts.patient += cs.patient ? 1 : 0;
+      counts.nonPatient += cs.nonPatient ? 1 : 0;
+    });
+    res.json({ lines: out, summary: counts });
+  } catch (e) {
+    res.status(500).json({ error: { code: 'guard_failed', message: String(e?.message || e) } });
   }
 });
 

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Patient Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 24px; }
+    h1, h2, h3 { margin: 0 0 6px 0; padding: 0; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 14px; margin-top: 16px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    .header { font-weight: bold; margin-bottom: 10px; }
+    .kv { margin: 6px 0; }
+    .bullet { margin: 2px 0 2px 16px; }
+    .label { font-weight: bold; }
+    .muted { color: #555; }
+    .sep { margin: 4px 0; height: 1px; background: #e5e5e5; }
+    .row { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <!-- HEADER -->
+  <div class="header">
+    PATIENT: <%= report.header.patient %> | DOB: <%= report.header.dob %> | REFERRAL DATE: <%= report.header.referralDate %>
+  </div>
+
+  <!-- DEMOGRAPHICS -->
+  <h2>DEMOGRAPHICS:</h2>
+  <div class="row">• Phone: <%= report.demographics.phone %></div>
+  <div class="row">• Email: <%= report.demographics.email %></div>
+  <% if (report.demographics.emergencyContact) { %>
+    <div class="row">• Emergency Contact: <%= report.demographics.emergencyContact.name %>
+      <% if (report.demographics.emergencyContact.relationship && report.demographics.emergencyContact.relationship !== '—') { %>
+        / <%= report.demographics.emergencyContact.relationship %>
+      <% } %>
+      <% if (report.demographics.emergencyContact.phone && report.demographics.emergencyContact.phone !== '—') { %>
+        / <%= report.demographics.emergencyContact.phone %>
+      <% } %>
+    </div>
+  <% } %>
+
+  <!-- INSURANCE -->
+  <h2>INSURANCE:</h2>
+  <div class="row">• Primary: <%= report.insurance.primary.carrier %> | ID: <%= report.insurance.primary.memberId %> | Group: <%= report.insurance.primary.groupId %></div>
+  <% if (report.insurance.secondary) { %>
+    <div class="row">• Secondary: <%= report.insurance.secondary.carrier %>
+      <% if (report.insurance.secondary.memberId && report.insurance.secondary.memberId !== '—') { %>
+        | ID: <%= report.insurance.secondary.memberId %>
+      <% } %>
+      <% if (report.insurance.secondary.groupId && report.insurance.secondary.groupId !== '—') { %>
+        | Group: <%= report.insurance.secondary.groupId %>
+      <% } %>
+    </div>
+  <% } %>
+
+  <!-- PROCEDURE ORDERED -->
+  <h2>PROCEDURE ORDERED:</h2>
+  <div class="row">• CPT Code: <%= report.procedure.cpt %></div>
+  <div class="row">• Description: <%= report.procedure.description %></div>
+  <div class="row">• Provider Notes:
+    <% if (Array.isArray(report.procedure.providerNotes) && report.procedure.providerNotes.length) { %>
+      <span><%= report.procedure.providerNotes.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+
+  <!-- REFERRING PHYSICIAN -->
+  <h2>REFERRING PHYSICIAN:</h2>
+  <div class="row">• Name: <%= report.referringProvider.name %></div>
+  <div class="row">• NPI: <%= report.referringProvider.npi %></div>
+  <div class="row">• Practice: <%= report.referringProvider.practice %></div>
+  <div class="row">• Phone/Fax: <%= report.referringProvider.contact.phone %> / <%= report.referringProvider.contact.fax %></div>
+  <div class="row">• Supervising Physician if Listed: <%= report.referringProvider.supervising %></div>
+
+  <!-- CLINICAL INFORMATION -->
+  <h2>CLINICAL INFORMATION:</h2>
+  <div class="row">• Primary Diagnosis: 
+    <%= report.clinical.primaryDiagnosis.code %>
+    <% if (report.clinical.primaryDiagnosis.description && report.clinical.primaryDiagnosis.description !== '—') { %>
+      &nbsp;—&nbsp;<span class="muted"><%= report.clinical.primaryDiagnosis.description %></span>
+    <% } %>
+  </div>
+  <div class="row">• Symptoms Present:
+    <% if (Array.isArray(report.clinical.symptoms) && report.clinical.symptoms.length) { %>
+      <span><%= report.clinical.symptoms.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+  <div class="row">• <%= report.clinical.vitals %></div>
+
+  <!-- INFORMATION ALERTS -->
+  <h2>INFORMATION ALERTS:</h2>
+  <div class="row">• PPE Requirements: <%= report.infoAlerts.ppeRequired %></div>
+  <div class="row">• Safety Precautions:
+    <% if (Array.isArray(report.infoAlerts.safety) && report.infoAlerts.safety.length) { %>
+      <span><%= report.infoAlerts.safety.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+  <div class="row">• Communication Needs:
+    <% if (Array.isArray(report.infoAlerts.communication) && report.infoAlerts.communication.length) { %>
+      <span><%= report.infoAlerts.communication.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+  <div class="row">• Special Accommodations:
+    <% if (Array.isArray(report.infoAlerts.accommodations) && report.infoAlerts.accommodations.length) { %>
+      <span><%= report.infoAlerts.accommodations.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+
+  <!-- PROBLEM FLAGS -->
+  <h2>PROBLEM FLAGS:</h2>
+  <div class="row">
+    <% if (Array.isArray(report.problemFlags) && report.problemFlags.length) { %>
+      <span><%= report.problemFlags.join(', ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+
+  <!-- AUTHORIZATION NOTES -->
+  <h2>AUTHORIZATION NOTES:</h2>
+  <div class="row">
+    <% if (Array.isArray(report.authorizationNotes) && report.authorizationNotes.length) { %>
+      <span><%= report.authorizationNotes.join(' • ') %></span>
+    <% } else { %>
+      <span>—</span>
+    <% } %>
+  </div>
+
+  <!-- CONFIDENCE LEVEL -->
+  <h2>CONFIDENCE LEVEL:</h2>
+  <div class="row"><%= report.confidence %></div>
+</body>
+</html>

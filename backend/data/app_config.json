@@ -1,0 +1,10 @@
+{
+  "npi": {
+    "enabled": true,
+    "description": "Enable external NPI registry lookups for provider name validation"
+  },
+  "metadata": {
+    "lastModified": "2025-10-27T17:14:18.552Z",
+    "version": "1.0.0"
+  }
+}

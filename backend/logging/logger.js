@@ -1,4 +1,6 @@
 // Simple structured logger with level gating and correlation id support.
+import { sanitizeLogData } from '../utils/phiSanitizer.js';
+
 const LEVELS = ['error','warn','info','debug','trace'];
 const envLevel = (process.env.LOG_LEVEL || 'info').toLowerCase();
 const threshold = LEVELS.includes(envLevel) ? LEVELS.indexOf(envLevel) : 2;
@@ -9,7 +11,20 @@ export function log(level, msg, meta = {}) {
   const idx = LEVELS.indexOf(level);
   if (idx === -1 || idx > threshold) return;
   const base = { t: ts(), level, msg };
-  const out = { ...base, ...meta };
+  
+  // Sanitize meta to remove PHI before logging (Step 4)
+  const sanitizedMeta = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (typeof value === 'string') {
+      sanitizedMeta[key] = sanitizeLogData(value);
+    } else if (typeof value === 'object' && value !== null) {
+      sanitizedMeta[key] = JSON.parse(sanitizeLogData(JSON.stringify(value)));
+    } else {
+      sanitizedMeta[key] = value;
+    }
+  }
+  
+  const out = { ...base, ...sanitizedMeta };
   try {
     process.stdout.write(JSON.stringify(out) + '\n');
   } catch (_) {}

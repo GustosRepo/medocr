@@ -1,0 +1,61 @@
+{
+  "95805": {
+    "description": "Multiple sleep latency or maintenance of wakefulness testing, recording, analysis, and interpretation of physiological measurements of sleep during multiple trials to assess sleepiness",
+    "category": "Sleep Studies",
+    "type": "diagnostic"
+  },
+  "95806": {
+    "description": "Sleep study, unattended, simultaneous recording of heart rate, oxygen saturation, respiratory airflow, and respiratory effort (e.g., thoracoabdominal movement)",
+    "category": "Home Sleep Test",
+    "type": "diagnostic",
+    "notes": "Type III portable monitor"
+  },
+  "95810": {
+    "description": "Polysomnography; age 6 years or older, sleep staging with 4 or more additional parameters of sleep, attended by a technologist",
+    "category": "In-Lab PSG",
+    "type": "diagnostic",
+    "ageRestriction": "6+"
+  },
+  "95811": {
+    "description": "Polysomnography; age 6 years or older, sleep staging with 4 or more additional parameters of sleep, with initiation of continuous positive airway pressure therapy or bilevel ventilation, attended by a technologist",
+    "category": "In-Lab Titration",
+    "type": "therapeutic",
+    "ageRestriction": "6+",
+    "notes": "CPAP/BiPAP titration study"
+  },
+  "95782": {
+    "description": "Polysomnography; younger than 6 years, sleep staging with 4 or more additional parameters of sleep, attended by a technologist",
+    "category": "Pediatric PSG",
+    "type": "diagnostic",
+    "ageRestriction": "<6"
+  },
+  "95783": {
+    "description": "Polysomnography; younger than 6 years, sleep staging with 4 or more additional parameters of sleep, with initiation of continuous positive airway pressure therapy or bilevel ventilation, attended by a technologist",
+    "category": "Pediatric Titration",
+    "type": "therapeutic",
+    "ageRestriction": "<6",
+    "notes": "Pediatric CPAP/BiPAP titration"
+  },
+  "G0399": {
+    "description": "Home sleep study test (HST) with type II portable monitor, unattended; minimum of 7 channels: EEG, EOG, EMG, ECG/heart rate, airflow, respiratory effort and oxygen saturation",
+    "category": "Home Sleep Test",
+    "type": "diagnostic",
+    "notes": "Type II portable monitor, more comprehensive than 95806"
+  },
+  "G0400": {
+    "description": "Home sleep test (HST) with type III portable monitor, unattended; minimum of 4 channels: 2 respiratory movement/airflow, 1 ECG/heart rate and 1 oxygen saturation",
+    "category": "Home Sleep Test",
+    "type": "diagnostic",
+    "notes": "Type III portable monitor, similar to 95806"
+  },
+  "94660": {
+    "description": "Continuous positive airway pressure ventilation (CPAP), initiation and management",
+    "category": "PAP Management",
+    "type": "therapeutic"
+  },
+  "94762": {
+    "description": "Noninvasive ear or pulse oximetry for oxygen saturation; by continuous overnight monitoring (separate procedure)",
+    "category": "Oximetry",
+    "type": "diagnostic"
+  }
+}

@@ -7,6 +7,10 @@ import { detectDates } from './date.js';
 import { detectDME } from './dme.js';
 import { PATTERNS } from './patterns.js';
 import { loadJsonConfig } from './utils/configLoader.js';
+import correctionsDB from '../corrections_db.js';
+import npiService from '../npi_service.js';
+import { applyOcrCorrections, applyFieldCorrection } from './utils/ocrCorrector.js';
+import { isFaxLike, isLikelyProviderLine, isHeaderLine } from './context_guard.js';
 
 const BUSINESS_EMAIL_DEFAULTS = [
   'athomesleepstudies@ymail.com',
@@ -19,6 +23,10 @@ const BUSINESS_EMAIL_DEFAULTS = [
 
 function getPatternOverrides() {
   return loadJsonConfig('pattern_overrides.json', { defaultFactory: () => ({}) }) || {};
+}
+
+function getCarrierIdPatterns() {
+  return loadJsonConfig('carrier_id_patterns.json', { defaultFactory: () => ({}) }) || {};
 }
 
 function buildBusinessEmailBlock(overrides) {
@@ -91,8 +99,28 @@ function buildProviderCredentialRegexes(overrides) {
     .filter(Boolean);
 }
 
-export function runExtraction(ocrPages) {
-  const { fullText, lines } = normalizePages(ocrPages);
+const DEV = process.env.NODE_ENV !== 'production';
+
+export async function runExtraction(ocrPages) {
+  const { fullText: rawFullText, lines: rawLines, tableCells } = normalizePages(ocrPages);
+  
+  // Apply OCR corrections before extraction (Step 2)
+  const fullText = applyOcrCorrections(rawFullText, correctionsDB);
+  const lines = rawLines;
+  
+  // Helper: extract from table cells (label in one column, value in adjacent column)
+  function fromTables(labelRe) {
+    if (!Array.isArray(tableCells)) return null;
+    for (const cell of tableCells) {
+      if (labelRe.test(cell.text || '')) {
+        // Look for value in next column (same row)
+        const right = tableCells.find(c => c.r === cell.r && c.c === cell.c + 1);
+        if (right?.text) return right.text.trim();
+      }
+    }
+    return null;
+  }
+  
   const patternOverrides = getPatternOverrides();
   const BUSINESS_EMAIL_BLOCK = buildBusinessEmailBlock(patternOverrides);
   const PROVIDER_NAME_REGEXES = buildProviderNameRegexes(patternOverrides);
@@ -111,6 +139,15 @@ export function runExtraction(ocrPages) {
     SYMPTOM_TEST_RESULT_RE
   } = PATTERNS;
   const trace = [];
+  function logRerankToTrace(field, payload) {
+    if (!DEV) return;
+    try {
+      const explain = payload && payload.rerankExplain ? payload.rerankExplain : null;
+      if (explain) {
+        trace.push({ rule: 'rerank_explain', field, explain });
+      }
+    } catch {}
+  }
   const result = {
     documentMeta: {},
     patient: {},
@@ -150,8 +187,20 @@ export function runExtraction(ocrPages) {
   } else if (disablePatientNameOcr) {
     trace.push({ rule: 'patient_name_detection_skipped' });
   }
-  const dob = detectDob(fullText); if (dob.hit) { result.patient = { ...result.patient, dob: dob.value }; trace.push({ rule: dob.why, value: dob.value }); }
-  const phones = detectPhones(fullText); if (phones.hit) { result.patient.phones = phones.value.map(p => p.formatted); trace.push({ rule: phones.why, count: phones.value.length }); }
+  logRerankToTrace('patient_name', name);
+  const dob = detectDob(fullText, lines); if (dob.hit) { result.patient = { ...result.patient, dob: dob.value }; trace.push({ rule: dob.why, value: dob.value }); }
+  logRerankToTrace('dob', dob);
+  const phones = detectPhones(fullText, lines);
+  if (phones.hit) {
+    result.patient.phones = phones.value.map(p => p.formatted);
+    trace.push({ rule: phones.why, count: phones.value.length });
+  } else if (phones && phones.why) {
+    trace.push({ rule: phones.why });
+  }
+  if (Array.isArray(phones?.trace) && phones.trace.length) {
+    for (const ev of phones.trace) trace.push(ev);
+  }
+  logRerankToTrace('patient_phone', phones);
   // Email (contextual & filtered)
   {
     const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -288,19 +337,367 @@ export function runExtraction(ocrPages) {
     const insObj = { carrier: car.value.carrier, status: car.value.status };
     // Member / Group IDs (prefer explicit member labels and IDs containing digits)
     const rawText = fullText || '';
+    const carrierIdMap = getCarrierIdPatterns();
+    const carrierKey = String(car.value.carrier || '').toLowerCase();
+    // Resolve best-matching carrier key, allowing synonyms like "Anthem BCBS" -> "anthem" or "blue cross blue shield" -> "blue cross"
+    const resolveCarrierKey = (key, map) => {
+      if (map[key]) return key;
+      const keys = Object.keys(map || {});
+      let best = null;
+      for (const k of keys) {
+        const kk = String(k || '').toLowerCase();
+        if (!kk) continue;
+        if (key.includes(kk) || kk.includes(key)) { best = k; break; }
+        if (/anthem/.test(key) && /anthem/.test(kk)) { best = k; break; }
+        if ((/bcbs/.test(key) || /blue\s*cross/.test(key)) && (/blue\s*cross/.test(kk) || /bcbs/.test(kk))) { best = k; break; }
+      }
+      return best;
+    };
+    const carrierMapKey = resolveCarrierKey(carrierKey, carrierIdMap);
+    const carrierPatterns = Array.isArray(carrierIdMap[carrierMapKey]?.memberId) ? carrierIdMap[carrierMapKey].memberId : [];
+    const carrierRegexes = carrierPatterns.map(p => {
+      try { return new RegExp(p, 'im'); } catch { return null; }
+    }).filter(Boolean);
+    const linesLower = (lines || []).map(l => String(l || '').toLowerCase());
+
+    const memberIdCandidates = new Map();
+    const memberIdTraceEvents = [];
+    const registerMemberCandidate = (rawValue, weight, ruleName, meta = {}) => {
+      const value = String(rawValue || '').trim();
+      if (!value) return null;
+      const normalized = value.replace(/[^A-Za-z0-9]/g, '');
+      const upper = normalized.toUpperCase();
+      if (upper.length < 4 || !/\d/.test(upper)) return null;
+      const entry = memberIdCandidates.get(upper) || { value: upper, score: 0, count: 0, sources: [] };
+      entry.score += weight;
+      entry.count += 1;
+      entry.sources.push({ rule: ruleName, weight, ...meta });
+      memberIdCandidates.set(upper, entry);
+      memberIdTraceEvents.push({ rule: ruleName, value: upper, weight, ...meta });
+      return upper;
+    };
+
+    let primaryBlockUpper = null;
+    try {
+      let anchorIdx = linesLower.findIndex(l => /primary\s+insurance|insurance\s*\(ppo\)|insurance\b/.test(l));
+      if (anchorIdx === -1) anchorIdx = linesLower.findIndex(l => /aetna\b|anthem\b|cigna\b|humana\b|united\b|medicare\b|medicaid\b/.test(l));
+      if (anchorIdx !== -1) {
+        const windowStart = Math.max(0, anchorIdx);
+        const windowEnd = Math.min(lines.length, anchorIdx + 8);
+        const windowText = lines.slice(windowStart, windowEnd).join('\n');
+        if (carrierRegexes.length) {
+          for (const rx of carrierRegexes) {
+            const m = windowText.match(rx);
+            if (m) {
+              const registered = registerMemberCandidate(m[1] || m[0], 6, 'insurance_id_carrier_pattern', { scope: 'primary_block', pattern: String(rx) });
+              if (registered && !primaryBlockUpper) primaryBlockUpper = registered;
+              break;
+            }
+          }
+        }
+        const mAlnum = windowText.match(/\b([A-Z]\d{8,10})\b/i);
+        const mLbl = windowText.match(/\b(?:ins(?:urance)?|id)\s*(?:no\.?|#|id|number)?\s*[:#-]?\s*([A-Z0-9]{6,})\b/i);
+        const pick = (mAlnum && mAlnum[1]) || (mLbl && mLbl[1]) || null;
+        if (pick) {
+          const registered = registerMemberCandidate(pick, 5, 'insurance_id_primary_window', {});
+          if (registered && !primaryBlockUpper) primaryBlockUpper = registered;
+        }
+      }
+    } catch {}
+
     const MEMBER_PRIMARY_RE = /\bmember\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
-    const MEMBER_FALLBACK_RE = /\b(?:subscriber|policy|insured)\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const MEMBER_FALLBACK_RE = /\b(?:subscriber|insured|policy(?!\s*holder))\s*(?:id|#|number)\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const INSURANCE_ID_LABEL_RE = /\bins(?:urance)?\s*(?:no\.?|#|id|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
     const GROUP_RE = /\bgroup\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{2,})\b/ig;
     const pickBestId = matches => {
       for (const match of matches) {
         if (match && /\d/.test(match[1])) return match[1];
       }
-      return matches.length ? matches[0][1] : null;
+      return null;
     };
-    const memberCandidates = [...rawText.matchAll(MEMBER_PRIMARY_RE)];
-    const fallbackMemberCandidates = [...rawText.matchAll(MEMBER_FALLBACK_RE)];
-    const resolvedMemberId = pickBestId(memberCandidates) || pickBestId(fallbackMemberCandidates);
-    if (resolvedMemberId) insObj.memberId = resolvedMemberId;
+
+    for (const match of rawText.matchAll(MEMBER_PRIMARY_RE)) {
+      registerMemberCandidate(match[1], 4.5, 'insurance_member_labeled_primary', { index: match.index });
+    }
+    for (const match of rawText.matchAll(MEMBER_FALLBACK_RE)) {
+      registerMemberCandidate(match[1], 3.5, 'insurance_member_labeled_fallback', { index: match.index });
+    }
+
+    let labeledPickUpper = null;
+    const labeledIdCandidates = [...rawText.matchAll(INSURANCE_ID_LABEL_RE)];
+    if (labeledIdCandidates.length) {
+      for (const match of labeledIdCandidates) {
+        const registered = registerMemberCandidate(match[1], 4, 'insurance_member_labeled_id', { index: match.index });
+        if (!labeledPickUpper && registered) labeledPickUpper = registered;
+      }
+    }
+
+    {
+      const INSURANCE_ID_PATTERN = /\b([A-Z]\d{8,10})\b/g;
+      const genericIdCandidates = [...rawText.matchAll(INSURANCE_ID_PATTERN)];
+      if (genericIdCandidates.length) {
+        const insuranceKeywords = [
+          'insurance', 'insured', 'carrier', 'lnsurance', 'insurence',
+          'aetna', 'aetha', 'aethna',
+          'anthem', 'blue cross', 'cigna', 'humana', 'united', 'medicare', 'medicaid',
+          'primary', 'hcd primary', 'hed primary'
+        ];
+        const lowerText = rawText.toLowerCase();
+        const keywordPositions = [];
+        for (const kw of insuranceKeywords) {
+          let idx = lowerText.indexOf(kw);
+          while (idx !== -1) {
+            keywordPositions.push(idx);
+            idx = lowerText.indexOf(kw, idx + 1);
+          }
+        }
+        for (const match of genericIdCandidates) {
+          const idIdx = match.index ?? 0;
+          let minDistance = Infinity;
+          for (const kwPos of keywordPositions) {
+            const distance = Math.abs(idIdx - kwPos);
+            if (distance < minDistance) minDistance = distance;
+          }
+          const clamped = Math.min(minDistance, 800);
+          const weight = minDistance === Infinity ? 1 : Math.max(1, 6 - Math.floor(clamped / 120));
+          registerMemberCandidate(match[1], weight, 'insurance_id_proximity_fallback', { proximityScore: minDistance });
+        }
+      }
+    }
+
+    if (carrierRegexes.length) {
+      for (const rx of carrierRegexes) {
+        const m = rawText.match(rx);
+        if (m) {
+          registerMemberCandidate(m[1] || m[0], 4.5, 'insurance_id_carrier_pattern', { scope: 'global', pattern: String(rx) });
+          break;
+        }
+      }
+    }
+
+    memberIdTraceEvents.forEach(ev => trace.push(ev));
+
+    const areSimilarMemberIds = (a, b) => {
+      if (!a || !b) return false;
+      if (a === b) return true;
+      const lenDiff = Math.abs(a.length - b.length);
+      if (lenDiff > 1) return false;
+      const longer = a.length >= b.length ? a : b;
+      const shorter = longer === a ? b : a;
+      if (longer.length === shorter.length) {
+        let diff = 0;
+        for (let i = 0; i < longer.length; i++) {
+          if (longer[i] !== shorter[i]) diff++;
+          if (diff > 2) return false;
+        }
+        return diff <= 2;
+      }
+      // length difference === 1 -> try to insert gap in shorter to best-align with longer
+      let minDiff = Infinity;
+      const arr = shorter.split('');
+      for (let gap = 0; gap <= arr.length; gap++) {
+        const test = [...arr];
+        test.splice(gap, 0, '-');
+        let diff = 0;
+        for (let i = 0; i < longer.length; i++) {
+          if (test[i] === '-') continue;
+          if (longer[i] !== test[i]) diff++;
+          if (diff > 2) break;
+        }
+        if (diff < minDiff) minDiff = diff;
+      }
+      return minDiff <= 2;
+    };
+
+    const mergeMemberIdCandidates = (candidateMap) => {
+      const entries = Array.from(candidateMap.values());
+      if (entries.length <= 1) return { merged: entries, mergeEvents: [] };
+      entries.sort((a, b) => b.score - a.score);
+      const seen = new Set();
+      const mergedEntries = [];
+      const mergeEvents = [];
+
+      for (let i = 0; i < entries.length; i++) {
+        const anchor = entries[i];
+        if (seen.has(anchor.value)) continue;
+        const group = [anchor];
+        seen.add(anchor.value);
+        for (let j = i + 1; j < entries.length; j++) {
+          const candidate = entries[j];
+          if (seen.has(candidate.value)) continue;
+          if (!areSimilarMemberIds(anchor.value, candidate.value)) continue;
+          group.push(candidate);
+          seen.add(candidate.value);
+        }
+
+        if (group.length === 1) {
+          mergedEntries.push(anchor);
+          continue;
+        }
+
+        const anchorCandidate = group.reduce((best, entry) => {
+          if (!best) return entry;
+          if (entry.value.length > best.value.length) return entry;
+          if (entry.value.length === best.value.length && entry.score > best.score) return entry;
+          return best;
+        }, null);
+
+        const anchorValue = anchorCandidate?.value || anchor.value;
+        const targetLength = anchorValue.length;
+        const voteBuckets = Array.from({ length: targetLength }, () => new Map());
+        const mergedValues = [];
+
+        const alignToAnchor = (value) => {
+          if (value.length === targetLength) return value;
+          if (value.length === targetLength - 1) {
+            const chars = value.split('');
+            let bestAligned = null;
+            let bestDiff = Infinity;
+            for (let gap = 0; gap <= chars.length; gap++) {
+              const copy = [...chars];
+              copy.splice(gap, 0, '-');
+              let diff = 0;
+              for (let idx = 0; idx < targetLength; idx++) {
+                if (copy[idx] === '-') continue;
+                if (anchorValue[idx] !== copy[idx]) diff++;
+                if (diff > 3) break;
+              }
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                bestAligned = copy.join('');
+              }
+            }
+            return bestAligned;
+          }
+          return null;
+        };
+
+        for (const entry of group) {
+          mergedValues.push(entry.value);
+          const weight = entry.score;
+          let aligned = entry.value;
+          if (entry.value.length !== targetLength) {
+            aligned = alignToAnchor(entry.value) || entry.value;
+          }
+          for (let idx = 0; idx < Math.min(aligned.length, targetLength); idx++) {
+            const ch = aligned[idx];
+            if (!ch || ch === '-') continue;
+            const map = voteBuckets[idx];
+            map.set(ch, (map.get(ch) || 0) + weight);
+          }
+        }
+
+        const optionSets = voteBuckets.map((votes, idx) => {
+          const set = new Set();
+          const fallback = anchorValue[idx];
+          if (fallback) set.add(fallback);
+          for (const key of votes.keys()) set.add(key);
+          return set;
+        });
+
+        const levenshteinDistance = (s1, s2) => {
+          const a = s1 || '';
+          const b = s2 || '';
+          const dp = Array.from({ length: b.length + 1 }, () => new Array(a.length + 1).fill(0));
+          for (let i = 0; i <= a.length; i++) dp[0][i] = i;
+          for (let j = 0; j <= b.length; j++) dp[j][0] = j;
+          for (let j = 1; j <= b.length; j++) {
+            for (let i = 1; i <= a.length; i++) {
+              const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+              dp[j][i] = Math.min(
+                dp[j][i - 1] + 1,
+                dp[j - 1][i] + 1,
+                dp[j - 1][i - 1] + cost
+              );
+            }
+          }
+          return dp[b.length][a.length];
+        };
+
+        const variableIndices = optionSets
+          .map((set, idx) => (set.size > 1 ? idx : -1))
+          .filter(idx => idx >= 0);
+        const workingChars = anchorValue.split('');
+
+        let bestConsensus = anchorValue.replace(/[^A-Z0-9]/g, '');
+        let bestMetrics = { maxDistance: Infinity, weightedSum: Infinity };
+
+        const evaluateCandidate = () => {
+          const raw = workingChars.join('');
+          const cleaned = raw.replace(/[^A-Z0-9]/g, '');
+          if (!cleaned) return;
+          let maxDistance = 0;
+          let weightedSum = 0;
+          for (const entry of group) {
+            const dist = levenshteinDistance(cleaned, entry.value);
+            if (dist > maxDistance) maxDistance = dist;
+            weightedSum += dist * (entry.score + 1);
+          }
+          if (
+            maxDistance < bestMetrics.maxDistance ||
+            (maxDistance === bestMetrics.maxDistance && weightedSum < bestMetrics.weightedSum) ||
+            (maxDistance === bestMetrics.maxDistance && weightedSum === bestMetrics.weightedSum && cleaned.localeCompare(bestConsensus) < 0)
+          ) {
+            bestMetrics = { maxDistance, weightedSum };
+            bestConsensus = cleaned;
+          }
+        };
+
+        const exploreVariants = (idx) => {
+          if (idx >= variableIndices.length) {
+            evaluateCandidate();
+            return;
+          }
+          const position = variableIndices[idx];
+          const original = workingChars[position];
+          const options = Array.from(optionSets[position]);
+          for (const option of options) {
+            workingChars[position] = option;
+            exploreVariants(idx + 1);
+          }
+          workingChars[position] = original;
+        };
+
+        evaluateCandidate();
+        if (variableIndices.length) exploreVariants(0);
+
+        const consensus = bestConsensus;
+        const combinedScore = group.reduce((sum, entry) => sum + entry.score, 0);
+        const combinedCount = group.reduce((sum, entry) => sum + entry.count, 0);
+        const combinedSources = group.flatMap(entry => entry.sources);
+        mergedEntries.push({ value: consensus, score: combinedScore, count: combinedCount, sources: combinedSources });
+        mergeEvents.push({ rule: 'insurance_id_merge_consensus', merged: mergedValues, consensus, score: Number(combinedScore.toFixed(2)) });
+      }
+
+      return { merged: mergedEntries, mergeEvents };
+    };
+
+    const { merged: mergedCandidates, mergeEvents } = mergeMemberIdCandidates(memberIdCandidates);
+    memberIdCandidates.clear();
+    for (const entry of mergedCandidates) {
+      memberIdCandidates.set(entry.value, entry);
+    }
+    mergeEvents.forEach(ev => trace.push(ev));
+
+    const rankedMemberCandidates = Array.from(memberIdCandidates.values()).map(candidate => {
+      const alnumBoost = /[A-Z]/.test(candidate.value) ? 0.7 : 0;
+      const lengthBoost = candidate.value.length >= 8 ? 0.3 : 0;
+      return { ...candidate, compositeScore: candidate.score + alnumBoost + lengthBoost };
+    }).sort((a, b) => {
+      if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
+      if (b.count !== a.count) return b.count - a.count;
+      if (b.value.length !== a.value.length) return b.value.length - a.value.length;
+      return a.value.localeCompare(b.value);
+    });
+
+    const bestMemberCandidate = rankedMemberCandidates[0];
+    if (bestMemberCandidate) {
+      insObj.memberId = bestMemberCandidate.value;
+      trace.push({ rule: 'insurance_id_select_best', value: bestMemberCandidate.value, score: Number(bestMemberCandidate.compositeScore.toFixed(2)), sources: bestMemberCandidate.sources.map(s => s.rule) });
+      if (primaryBlockUpper && bestMemberCandidate.value === primaryBlockUpper) {
+        trace.push({ rule: 'insurance_id_primary_block', value: bestMemberCandidate.value });
+      }
+    }
     const groupCandidates = [...rawText.matchAll(GROUP_RE)];
     const resolvedGroupId = pickBestId(groupCandidates);
     if (resolvedGroupId) insObj.groupId = resolvedGroupId;
@@ -662,12 +1059,84 @@ export function runExtraction(ocrPages) {
     }
   }
 
+  // Helper function to improve provider name using corrections DB and NPI lookup
+  const improveProviderName = async (ocrName, trace) => {
+    if (!ocrName) return null;
+
+    // Step 1: Check corrections database for exact match
+    const correction = correctionsDB.getCorrection('provider', ocrName);
+    if (correction && correction.confidence >= 0.7) {
+      trace.push({ 
+        rule: 'provider_name_corrected', 
+        value: correction.text,
+        source: 'corrections_db',
+        confidence: correction.confidence 
+      });
+      return correction.text;
+    }
+
+    // Step 2: Try fuzzy match in corrections DB
+    const fuzzyCorrection = correctionsDB.fuzzyMatch('provider', ocrName, 0.85);
+    if (fuzzyCorrection && fuzzyCorrection.confidence >= 0.7) {
+      trace.push({ 
+        rule: 'provider_name_fuzzy_corrected', 
+        value: fuzzyCorrection.text,
+        source: 'corrections_db_fuzzy',
+        similarity: fuzzyCorrection.similarity 
+      });
+      return fuzzyCorrection.text;
+    }
+
+    // Step 3: Try NPI registry lookup (async)
+    try {
+      const npiMatch = await npiService.fuzzyMatchProvider(ocrName);
+      if (npiMatch && npiMatch.similarity >= 0.75) {
+        const fullName = npiMatch.credential ? 
+          `${npiMatch.name}, ${npiMatch.credential}` : npiMatch.name;
+        
+        trace.push({ 
+          rule: 'provider_name_npi_matched', 
+          value: fullName,
+          npi: npiMatch.npi,
+          source: 'npi_registry',
+          similarity: npiMatch.similarity 
+        });
+        
+        // Cache this correction for future use
+        correctionsDB.recordCorrection('provider', ocrName, npiMatch.name, {
+          npi: npiMatch.npi,
+          source: 'npi_auto'
+        });
+        
+        return fullName;
+      }
+    } catch (err) {
+      console.error('NPI lookup failed:', err.message);
+    }
+
+    // No improvement found, return original
+    return null;
+  };
+
   // Provider detection (basic)
   {
     const providerLines = (fullText || '').split(/\n/);
+    const isOrderingProviderLine = (line) => {
+      const lower = String(line || '').toLowerCase();
+      if (!lower) return false;
+      const normalized = lower.replace(/[1l]/g, 'l').replace(/0/g, 'o');
+      if (/(ordering\s*(provider|physician))/i.test(normalized)) return true;
+      const collapsed = normalized.replace(/[^a-z]/g, '');
+      const orderingTokens = ['ordering', 'orderring', 'ordening', 'orderlng', 'ordcring', 'ordaring', 'ordoring'];
+      const providerTokens = ['provider', 'provicer', 'proviser', 'provdcr', 'provdor', 'physician'];
+      const hasOrdering = orderingTokens.some(tok => collapsed.includes(tok));
+      const hasProvider = providerTokens.some(tok => collapsed.includes(tok));
+      return hasOrdering && hasProvider;
+    };
 
-    const assignProviderFromLine = (lineIndex) => {
+    const assignProviderFromLine = async (lineIndex) => {
       const line = providerLines[lineIndex] || '';
+      if (!line) return false;
       if (!line) return false;
 
       const candidateSegments = [];
@@ -681,6 +1150,14 @@ export function runExtraction(ocrPages) {
       const normalizeDetectedName = raw => {
         if (!raw) return '';
         let cleaned = raw.replace(/^Dr\.?\s*/i, '').trim();
+        
+        // Pattern-based OCR corrections (general rules that apply to all text)
+        // Fix trailing 'L' that should be 'I' in all-caps names (KERMANL → KERMANI)
+        cleaned = cleaned.replace(/\b([A-Z]{3,})L\b/g, '$1I');
+        
+        // Strip trailing credentials from name itself (they'll be added back later)
+        cleaned = cleaned.replace(/,?\s+(MD|DO|NP|PA|RN|DPM|PharmD|PhD)$/i, '');
+        
         if (/,/.test(cleaned)) {
           const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
           if (parts.length >= 2) {
@@ -715,6 +1192,13 @@ export function runExtraction(ocrPages) {
       if (!provName) return false;
 
       provName = provName.replace(/NP[l1]\b/g, 'NP');
+      
+      // Try to improve provider name using corrections DB and NPI lookup
+      const improvedName = await improveProviderName(provName, trace);
+      if (improvedName) {
+        provName = improvedName;
+      }
+      
       trace.push({ rule: 'provider_name_detect', value: provName });
 
       const credSources = [line];
@@ -739,18 +1223,38 @@ export function runExtraction(ocrPages) {
     };
 
     let providerDetected = false;
-    const referLineIndex = providerLines.findIndex(line => /refer\s+from\s*(provider|physician)/i.test(line || ''));
-    if (referLineIndex >= 0) {
-      providerDetected = assignProviderFromLine(referLineIndex);
-    }
-
-    if (!providerDetected) {
-      const provLineIndex = providerLines.findIndex(line => PROVIDER_NAME_REGEXES.some(rx => rx.test(line || '')));
-      if (provLineIndex >= 0) {
-        providerDetected = assignProviderFromLine(provLineIndex);
+    
+    // Use async provider detection
+    await (async () => {
+      // Priority 1: "Ordering Provider:" - highest priority for medical referrals
+      // Flexible pattern to handle OCR errors: "FroVder", "Orderlng" (i→l), etc.
+      let orderingLineIndex = providerLines.findIndex(line => 
+        /order[il1]ng\s*[fp]ro[vw]?[ild]*[de]+r\s*:/i.test(line || '')
+      );
+      if (orderingLineIndex === -1) {
+        orderingLineIndex = providerLines.findIndex(line => isOrderingProviderLine(line));
       }
-    }
+      
+      if (orderingLineIndex >= 0) {
+        providerDetected = await assignProviderFromLine(orderingLineIndex);
+      }
+      
+      // Priority 2: "Refer from Provider/Physician"
+      if (!providerDetected) {
+        const referLineIndex = providerLines.findIndex(line => /refer\s+from\s*(provider|physician)/i.test(line || ''));
+        if (referLineIndex >= 0) {
+          providerDetected = await assignProviderFromLine(referLineIndex);
+        }
+      }
 
+      // Priority 3: Generic provider name patterns
+      if (!providerDetected) {
+        const provLineIndex = providerLines.findIndex(line => PROVIDER_NAME_REGEXES.some(rx => rx.test(line || '')));
+        if (provLineIndex >= 0) {
+          providerDetected = await assignProviderFromLine(provLineIndex);
+        }
+      }
+    })();
     const normalizeName = str => String(str || '').replace(/[^A-Za-z\s'’\-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     const patientNameVariants = new Set();
     if (result.patient?.first && result.patient?.last) {
@@ -791,9 +1295,55 @@ export function runExtraction(ocrPages) {
       }
     }
     if (!result.provider.practice) {
+      // Check for "From Provider" section - facility name is typically the first meaningful line after
+      const fromProviderRe = /(?:^|\b)f?rom\s+prov(?:ider|der)\b/i;
       for (let i = 0; i < providerLines.length; i++) {
         const line = providerLines[i] || '';
-        if (/from\s+company|from\s+facility/i.test(line)) {
+        if (!fromProviderRe.test(line)) continue;
+        // Look for facility value in the next few lines; handle label/value split like "Place of Surgery" on one line, value on next
+        for (let j = i + 1; j < Math.min(i + 5, providerLines.length); j++) {
+          const rawCand = (providerLines[j] || '').trim();
+          console.log('[DEBUG] Checking line', j, ':', JSON.stringify(rawCand));
+          if (!rawCand) { console.log('[DEBUG] Empty line, skipping'); continue; }
+          // Skip address/phones/zip and obvious non-facility boilerplate
+          if (/^\d+\s+/.test(rawCand)) { console.log('[DEBUG] Starts with number, skipping'); continue; } // address line starting with number
+          if (/phone|fax|ordering/i.test(rawCand)) { console.log('[DEBUG] Contains phone/fax/ordering, skipping'); continue; }
+          if (/\b\d{5}(?:-\d{4})?\b/.test(rawCand)) { console.log('[DEBUG] Contains zip code, skipping'); continue; } // zip code
+          if (/(confidential|disclaimer|do\s*not\s*write|cover\s*sheet|please\s*fax|do\s*not\s*fax|information\s*contained|intended\s*recipient)/i.test(rawCand)) { console.log('[DEBUG] Contains boilerplate, skipping'); continue; }
+          if (isHeaderLine(rawCand)) { console.log('[DEBUG] Is header line, skipping'); continue; }
+
+          // Skip label-only lines like "Place of Surgery" or "Place ot Surgery" (OCR typo) - value is on next line
+          if (/^place\s+o[ft]\s+surgery\b/i.test(rawCand)) {
+            console.log('[DEBUG] Skipping label line:', rawCand);
+            continue;
+          }
+
+          // Handle lines starting with colon (value from previous label line)
+          let candidate = rawCand.replace(/^\s*:\s*/, '').trim();
+          console.log('[DEBUG] Processing candidate:', JSON.stringify(candidate));
+          
+          if (!candidate) continue;
+
+          // Exclude phone-looking entries and check length
+          if (candidate.length <= 2) continue;
+          if (/\d{3}.*\d{3}.*\d{4}/.test(candidate)) continue;
+          
+          // Valid candidate found - assign it directly (don't use stripAddressTail for practice names!)
+          result.provider.practice = candidate;
+          console.log('[DEBUG] Assigned practice:', JSON.stringify(candidate));
+          trace.push({ rule: 'provider_practice_from_section', value: result.provider.practice });
+          break;
+        }
+        if (result.provider.practice) break;
+      }
+    }
+    
+    if (!result.provider.practice) {
+      const fromCompanyRe = /(?:^|\b)f?rom\s+company/i;
+      const fromFacilityRe = /(?:^|\b)f?rom\s+facility/i;
+      for (let i = 0; i < providerLines.length; i++) {
+        const line = providerLines[i] || '';
+        if (fromCompanyRe.test(line) || fromFacilityRe.test(line)) {
           const candidate = (providerLines[i + 1] || '').trim();
           if (candidate && !/sleep\s+stud/i.test(candidate.toLowerCase())) {
             result.provider.practice = candidate;
@@ -826,6 +1376,14 @@ export function runExtraction(ocrPages) {
       }
     }
     const phonePattern = /(fax|fx|facsimile|f)?[^\n\r]{0,40}?((?:\(\d{3}\)\s*\d{3}-\d{4})|(?:\b\d{3}[-\. ]\d{3}[-\. ]\d{4}\b)|(?:\b\d{10}\b))/gi;
+    // Build provider-context anchor indices to require proximity when classifying provider phones
+    const providerContextIdx = [];
+    for (let i = 0; i < linesArr.length; i++) {
+      const L = linesArr[i] || '';
+      if (/order[il1]ng\s*[fp]ro[vw]?[ild]*[de]+r\s*:|refer\s+from\s*(provider|physician)|f?rom\s+prov(?:ider|der)|provider\s*name|\bdr\.?\b|\bnpi\b/i.test(L) || isOrderingProviderLine(L) || isLikelyProviderLine(L)) {
+        providerContextIdx.push(i);
+      }
+    }
     let m;
     while ((m = phonePattern.exec(fullText || '')) !== null) {
       const labelPart = m[1] || '';
@@ -846,18 +1404,25 @@ export function runExtraction(ocrPages) {
   const isFax = /(fax|fx|facsimile)/i.test(labelPart)
     || (/\bfax\b|\bfx\b|facsimile/.test(beforeLabel) && !/no\s*fax/.test(beforeLabel))
     || labelLower.trim() === 'f'
-    || /\bf[:\s]/.test(beforeLabel);
+    || /\bf[:\s]/.test(beforeLabel)
+    || isFaxLike(linesArr[lineIdx]);
   const lineLower = (linesArr[lineIdx] || '').toLowerCase();
-  const isTel = ((/tel|telephone|phone|ph\b/.test(beforeLabel + ctx) || labelLower.trim() === 't' || /\bt[:\s]/.test(beforeLabel) || /^\s*t\b/.test(lineLower)) && !isFax);
+  const isTel = ((/tel|telephone|phone|ph\b/.test(beforeLabel + ctx) || labelLower.trim() === 't' || /\bt[:\s]/.test(beforeLabel) || /^\s*t\b/.test(lineLower) || isLikelyProviderLine(linesArr[lineIdx])) && !isFax);
+  // Proximity and negative context guards
+  const nearProviderContext = providerContextIdx.some(pi => Math.abs(pi - lineIdx) <= 4);
+  const patientWindow = (fullText || '').slice(Math.max(0, m.index - 80), m.index + rawNum.length + 80).toLowerCase();
+  const looksPatientContext = /(patient\s*(phone|contact|information)|emergency\s*contact|home\s*phone|mobile\s*phone|cell\b|h:\s*\(?\d{3}|m:\s*\(?\d{3})/i.test(patientWindow);
+  const facilityHint = /\bplace\s+of\s+surgery\b/.test(ctx) || /\bhome\s+sleep\s+stud/.test(ctx);
       if (isFax) {
         if (!result.provider.fax) {
           result.provider.fax = formatted;
           trace.push({ rule: 'provider_fax_detect', value: formatted, mode: 'scan' });
         }
-      } else if (isTel) {
-        providerPhones.add(formatted);
-      } else if (/provider|office|clinic|suite|ste\b/.test(ctx)) {
-        providerPhones.add(formatted);
+      } else if (isTel || /provider|office|clinic|suite|ste\b/.test(ctx)) {
+        // Only accept as provider phone if near provider context and not clearly a patient contact
+        if (nearProviderContext && !looksPatientContext && !facilityHint) {
+          providerPhones.add(formatted);
+        }
       }
     }
     if (providerPhones.size && !result.provider.phone) {
@@ -865,6 +1430,9 @@ export function runExtraction(ocrPages) {
       const textLower = (fullText || '').toLowerCase();
       const patientLabelRe = /(contact\s+phone|patient\s+phone|patient\s+contact)/i;
       const orderedAll = Array.from(providerPhones).filter(p => p !== result.provider.fax).sort();
+      // If provider fax present, prefer same-area-code phones to reduce cross-leakage
+      const faxDigits = (result.provider.fax || '').replace(/\D/g, '');
+      const faxArea = faxDigits.length === 10 ? faxDigits.slice(0,3) : null;
       let chosen = null;
       for (const cand of orderedAll) {
         const esc = cand.replace(/[-()\s]/g,'');
@@ -874,6 +1442,7 @@ export function runExtraction(ocrPages) {
           const window = textLower.slice(Math.max(0, idx-40), idx+40);
           if (patientLabelRe.test(window)) continue; // skip patient-labeled numbers
         }
+        if (faxArea && cand.replace(/\D/g,'').startsWith(faxArea)) { chosen = cand; break; }
         chosen = cand; break;
       }
       if (!chosen && orderedAll.length) chosen = orderedAll[0];
@@ -976,11 +1545,28 @@ export function runExtraction(ocrPages) {
     const vitals = {};
     const bmi = (fullText || '').match(/BMI\s*[:]?\s*(\d{2}(?:\.\d)?)/i);
     if (bmi) vitals.bmi = bmi[1];
-    const bp = (fullText || '').match(/\b(\d{2,3})\/(\d{2,3})\b\s*(?:mmhg|blood\s*pressure|bp)?/i);
-    if (bp) {
-      const sys = parseInt(bp[1],10), dia = parseInt(bp[2],10);
-      if (sys >= 80 && sys <= 220 && dia >= 40 && dia <= 140) vitals.bp = `${bp[1]}/${bp[2]}`; // plausible range
+    // Try table-based BP extraction first
+    let bpValue = fromTables(/\b(bp|blood\s*pressure)\b/i);
+    if (bpValue) {
+      const bpMatch = bpValue.match(/(\d{2,3})\/(\d{2,3})/);
+      if (bpMatch) {
+        const sys = parseInt(bpMatch[1], 10), dia = parseInt(bpMatch[2], 10);
+        if (sys >= 80 && sys <= 220 && dia >= 40 && dia <= 140) {
+          vitals.bp = `${bpMatch[1]}/${bpMatch[2]}`;
+          trace.push({ rule: 'vitals_bp_from_tables', value: vitals.bp });
+        }
+      }
     }
+    
+    // Fallback to text regex if not found in tables
+    if (!vitals.bp) {
+      const bp = (fullText || '').match(/\b(\d{2,3})\/(\d{2,3})\b\s*(?:mmhg|blood\s*pressure|bp)?/i);
+      if (bp) {
+        const sys = parseInt(bp[1],10), dia = parseInt(bp[2],10);
+        if (sys >= 80 && sys <= 220 && dia >= 40 && dia <= 140) vitals.bp = `${bp[1]}/${bp[2]}`; // plausible range
+      }
+    }
+    
     const wt = (fullText || '').match(/(?:weight|wt)\s*[:]?\s*(\d{2,3})\s*(?:lbs?|pounds?)/i);
     if (wt) vitals.weightLbs = wt[1];
     const ht = (fullText || '').match(/(?:height|ht)\s*[:]?\s*(\d['’]\s*\d{1,2}"?)/i);
@@ -1030,11 +1616,38 @@ export function runExtraction(ocrPages) {
     trace.push({ rule: 'problem_insurance_issue_terms' });
   }
   // Special Considerations
-  if (/(pediatric|child|minor)/i.test(fullText || '') || ['95782','95783'].includes(cptCode)) {
-    result.flags.verifyManually = true;
-    result.flags.reasons.push('special_considerations_pediatric');
-    result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'special_considerations']));
-    trace.push({ rule: 'problem_pediatric_requirements' });
+  {
+    const pedCpt = ['95782','95783'].includes(cptCode);
+    // Try to compute age from DOB
+    let ageYears = null;
+    try {
+      if (result.patient?.dob) {
+        const parts = String(result.patient.dob).split('/');
+        if (parts.length === 3) {
+          const yr = parseInt(parts[2], 10);
+          if (!isNaN(yr)) ageYears = (new Date()).getFullYear() - yr;
+        }
+      }
+    } catch {}
+    // Only treat textual mentions as pediatric if they're in a strong patient/procedure context and not a generic header/disclaimer
+    let strongPedMention = false;
+    try {
+      const linesLocal = (fullText || '').split(/\n/);
+      for (let i = 0; i < linesLocal.length; i++) {
+        const L = linesLocal[i] || '';
+        if (!/(pediatric|child|minor)/i.test(L)) continue;
+        if (isHeaderLine(L)) continue; // skip header-like lines (e.g., cover sheet options)
+        const window = linesLocal.slice(Math.max(0, i-1), Math.min(linesLocal.length, i+2)).join(' ').toLowerCase();
+        if (/adult/.test(L.toLowerCase())) continue; // skip option lists like "(adult) (pediatric)"
+        if (/(patient|study|procedure|cpt|referral|order)/i.test(window)) { strongPedMention = true; break; }
+      }
+    } catch {}
+    if ((ageYears != null && ageYears < 18) || pedCpt || strongPedMention) {
+      result.flags.verifyManually = true;
+      result.flags.reasons.push('special_considerations_pediatric');
+      result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'special_considerations']));
+      trace.push({ rule: 'problem_pediatric_requirements', mode: (ageYears != null && ageYears < 18) ? 'age' : pedCpt ? 'cpt' : 'context' });
+    }
   }
   if (typeof dme?.hit === 'boolean' && dme.hit) {
     result.flags.verifyManually = true;
@@ -1349,6 +1962,113 @@ export function runExtraction(ocrPages) {
     trace.push({ rule: 'risk_score_compute', score, tier, factors: result.risk.factors.length });
   }
 
+  // Apply learned corrections from corrections database (Step 3)
+  try {
+    // Insurance carrier
+    if (result.insurance[0]?.carrier) {
+      const corrected = applyFieldCorrection('carrier', result.insurance[0].carrier, correctionsDB);
+      if (corrected !== result.insurance[0].carrier) {
+        trace.push({ 
+          rule: 'learned_correction_carrier', 
+          from: result.insurance[0].carrier, 
+          to: corrected 
+        });
+        result.insurance[0].carrier = corrected;
+      }
+    }
+    
+    // CPT code
+    if (result.procedure?.cpt) {
+      const corrected = applyFieldCorrection('cpt', result.procedure.cpt, correctionsDB);
+      if (corrected !== result.procedure.cpt) {
+        trace.push({ 
+          rule: 'learned_correction_cpt', 
+          from: result.procedure.cpt, 
+          to: corrected 
+        });
+        result.procedure.cpt = corrected;
+      }
+    }
+    
+    // Provider name
+    if (result.provider?.name) {
+      const corrected = applyFieldCorrection('provider', result.provider.name, correctionsDB);
+      if (corrected !== result.provider.name) {
+        trace.push({ 
+          rule: 'learned_correction_provider', 
+          from: result.provider.name, 
+          to: corrected 
+        });
+        result.provider.name = corrected;
+      }
+    }
+    
+    // Practice name
+    if (result.provider?.practice) {
+      const corrected = applyFieldCorrection('practiceName', result.provider.practice, correctionsDB);
+      if (corrected !== result.provider.practice) {
+        trace.push({ 
+          rule: 'learned_correction_practice', 
+          from: result.provider.practice, 
+          to: corrected 
+        });
+        result.provider.practice = corrected;
+      }
+    }
+    
+    // Provider phone
+    if (result.provider?.phone) {
+      const corrected = applyFieldCorrection('phone', result.provider.phone, correctionsDB);
+      if (corrected !== result.provider.phone) {
+        trace.push({
+          rule: 'learned_correction_provider_phone',
+          from: result.provider.phone,
+          to: corrected
+        });
+        result.provider.phone = corrected;
+      }
+    }
+
+    // Provider fax
+    if (result.provider?.fax) {
+      const corrected = applyFieldCorrection('fax', result.provider.fax, correctionsDB);
+      if (corrected !== result.provider.fax) {
+        trace.push({
+          rule: 'learned_correction_provider_fax',
+          from: result.provider.fax,
+          to: corrected
+        });
+        result.provider.fax = corrected;
+      }
+    }
+
+    // Fallback: If provider phone was not detected from OCR, try learned phone by provider/practice
+    if (!result.provider?.phone) {
+      const provName = result.provider?.name || null;
+      const practice = result.provider?.practice || null;
+      let learnedPhone = null;
+      if (provName) {
+        const corr = correctionsDB.getCorrection('referringPhone', provName);
+        if (corr && corr.text) {
+          learnedPhone = corr.text;
+          trace.push({ rule: 'learned_provider_phone_from_name', to: corr.text, source: corr.source || 'corrections_db' });
+        }
+      }
+      if (!learnedPhone && practice) {
+        const corr2 = correctionsDB.getCorrection('referringPhone', practice);
+        if (corr2 && corr2.text) {
+          learnedPhone = corr2.text;
+          trace.push({ rule: 'learned_provider_phone_from_practice', to: corr2.text, source: corr2.source || 'corrections_db' });
+        }
+      }
+      if (learnedPhone) {
+        result.provider.phone = learnedPhone;
+      }
+    }
+  } catch (err) {
+    console.warn('[runExtraction] Failed to apply learned corrections:', err.message);
+  }
+
   return { result, trace };
 }
 
@@ -1360,8 +2080,8 @@ function getPreauthRules() {
 }
 
 // After extraction, enrich with normalized dates
-export function runExtractionWithDates(ocrPages) {
-  const { result, trace } = runExtraction(ocrPages);
+export async function runExtractionWithDates(ocrPages) {
+  const { result, trace } = await runExtraction(ocrPages);
   try {
     const fullText = (ocrPages || []).map(p => p.text || '').join('\n');
     const dates = detectDates(fullText);
