@@ -1,0 +1,138 @@
+{
+  "G47.33": {
+    "description": "Obstructive sleep apnea, adult",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "varies",
+    "relatedCpt": ["95806", "95810", "95811", "G0399"]
+  },
+  "G47.30": {
+    "description": "Sleep apnea, unspecified",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "unspecified",
+    "relatedCpt": ["95806", "95810", "95811", "G0399"]
+  },
+  "G47.31": {
+    "description": "Primary central sleep apnea",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "moderate",
+    "relatedCpt": ["95810", "95811"]
+  },
+  "G47.10": {
+    "description": "Hypersomnia, unspecified",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "mild",
+    "relatedCpt": ["95805", "95810"]
+  },
+  "G47.11": {
+    "description": "Idiopathic hypersomnia with long sleep time",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "moderate"
+  },
+  "G47.12": {
+    "description": "Idiopathic hypersomnia without long sleep time",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "moderate"
+  },
+  "G47.20": {
+    "description": "Circadian rhythm sleep disorder, unspecified type",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "mild"
+  },
+  "G47.00": {
+    "description": "Insomnia, unspecified",
+    "category": "Sleep Disorders",
+    "chronic": false,
+    "severity": "mild"
+  },
+  "R06.83": {
+    "description": "Snoring",
+    "category": "Signs and Symptoms",
+    "chronic": false,
+    "severity": "mild",
+    "relatedCpt": ["95806", "95810", "G0399"],
+    "notes": "Common symptom of sleep apnea"
+  },
+  "R53.83": {
+    "description": "Other fatigue",
+    "category": "Signs and Symptoms",
+    "chronic": false,
+    "severity": "mild",
+    "notes": "May indicate sleep disorder"
+  },
+  "E66.9": {
+    "description": "Obesity, unspecified",
+    "category": "Metabolic Disorders",
+    "chronic": true,
+    "severity": "moderate",
+    "notes": "Risk factor for sleep apnea"
+  },
+  "E66.01": {
+    "description": "Morbid (severe) obesity due to excess calories",
+    "category": "Metabolic Disorders",
+    "chronic": true,
+    "severity": "severe",
+    "notes": "Significant risk factor for OSA"
+  },
+  "I10": {
+    "description": "Essential (primary) hypertension",
+    "category": "Circulatory System",
+    "chronic": true,
+    "severity": "moderate",
+    "notes": "Often comorbid with sleep apnea"
+  },
+  "E11.9": {
+    "description": "Type 2 diabetes mellitus without complications",
+    "category": "Metabolic Disorders",
+    "chronic": true,
+    "severity": "moderate",
+    "notes": "Common comorbidity with sleep disorders"
+  },
+  "J44.9": {
+    "description": "Chronic obstructive pulmonary disease, unspecified",
+    "category": "Respiratory System",
+    "chronic": true,
+    "severity": "moderate",
+    "notes": "May contraindicate HST (95806)"
+  },
+  "I50.9": {
+    "description": "Heart failure, unspecified",
+    "category": "Circulatory System",
+    "chronic": true,
+    "severity": "severe",
+    "notes": "May contraindicate HST (95806)"
+  },
+  "G47.419": {
+    "description": "Narcolepsy without cataplexy",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "moderate",
+    "relatedCpt": ["95805", "95810"]
+  },
+  "G47.411": {
+    "description": "Narcolepsy with cataplexy",
+    "category": "Sleep Disorders",
+    "chronic": true,
+    "severity": "severe",
+    "relatedCpt": ["95805", "95810"]
+  },
+  "G25.81": {
+    "description": "Restless legs syndrome",
+    "category": "Movement Disorders",
+    "chronic": true,
+    "severity": "mild"
+  },
+  "Z86.16": {
+    "description": "Personal history of COVID-19",
+    "category": "History Codes",
+    "chronic": false,
+    "severity": "unspecified",
+    "notes": "May affect sleep patterns"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "summary": {
+    "total_files": 1,
+    "total_pages": 1,
+    "total_time_s": 0.43519666700000004,
+    "avg_throughput_pages_per_s": 2.297811715547904,
+    "avg_confidence": 0.9783767329321967,
+    "avg_chars_per_page": 247,
+    "avg_lines_per_page": 9,
+    "low_confidence_rate": 0.0,
+    "avg_cer": 0.11827956989247312,
+    "avg_wer": 0.11827956989247312,
+    "avg_char_accuracy": 0.8817204301075269,
+    "model_info": {
+      "engine": "RapidOCR",
+      "version": "1.3.24",
+      "backend": "onnxruntime",
+      "preprocessing": "enhanced"
+    }
+  },
+  "results": [
+    {
+      "filename": "smoke_test.png",
+      "pages": 1,
+      "total_time_ms": 435.19666700000005,
+      "per_page_time_ms": 435.19666700000005,
+      "preprocessing_time_ms": 6.336832999999986,
+      "inference_time_ms": 426.47141700000003,
+      "total_chars": 247,
+      "total_lines": 9,
+      "avg_confidence": 0.9783767329321967,
+      "min_confidence": 0.9492633938789368,
+      "max_confidence": 0.9962508082389832,
+      "low_conf_lines": 0,
+      "character_accuracy": 0.8817204301075269,
+      "word_accuracy": 0.8817204301075269,
+      "cer": 0.11827956989247312,
+      "wer": 0.11827956989247312,
+      "ground_truth_chars": 283
+    }
+  ]
+}

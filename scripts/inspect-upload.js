@@ -58,15 +58,15 @@ async function main() {
   await fsp.writeFile(outPath, JSON.stringify(data, null, 2));
   console.log('Saved result:', outPath);
 
-  // Print a tiny summary
+  // Print a tiny summary (PHI redacted for HIPAA compliance)
   const p = data.patient || {};
   const ins = (data.insurance || [])[0] || {};
   const dx = (data.diagnoses || []).map(d => d.code).join(', ');
   const dme = data.dme || {};
   const traceCount = (data.debug?.trace || []).length;
   console.log('\nSummary:');
-  console.log('-', 'Name:', [p.last, p.first].filter(Boolean).join(', '));
-  console.log('-', 'DOB:', p.dob || '');
+  console.log('-', 'Name: [REDACTED]'); // HIPAA: Patient name not logged
+  console.log('-', 'DOB: [REDACTED]');  // HIPAA: Date of birth not logged
   console.log('-', 'CPT:', data.procedure?.cpt || '');
   console.log('-', 'ICDs:', dx || '');
   console.log('-', 'Insurance:', [ins.carrier, ins.status].filter(Boolean).join(' / ') || '');

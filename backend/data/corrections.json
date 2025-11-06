@@ -1,0 +1,515 @@
+{
+  "providerNames": {
+    "drsmith": {
+      "ocrText": "Dr. Smith",
+      "corrections": [
+        {
+          "text": "Dr. John Smith",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:25:51.149Z",
+          "lastSeen": "2025-10-27T17:25:51.149Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "drjones": {
+      "ocrText": "Dr. Jones",
+      "corrections": [
+        {
+          "text": "Dr. Jane Jones",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:26:12.193Z",
+          "lastSeen": "2025-10-27T17:26:12.193Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "ingridleveille": {
+      "ocrText": "Ingrid Leveille",
+      "corrections": [
+        {
+          "text": "INGRID LEVEILLE",
+          "count": 1,
+          "firstSeen": "2025-10-28T17:43:15.104Z",
+          "lastSeen": "2025-10-28T17:43:15.104Z",
+          "metadata": {
+            "npi": "1831482777",
+            "source": "npi_auto"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "southernhighlends": {
+      "ocrText": "Southern Highlends",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-29T04:07:13.269Z",
+          "lastSeen": "2025-10-29T04:07:13.269Z",
+          "metadata": {
+            "documentId": "doc_1761710434033_sch6bm"
+          }
+        },
+        {
+          "text": "BEHZAD KERMANI, MD",
+          "count": 6,
+          "firstSeen": "2025-10-29T05:20:49.846Z",
+          "lastSeen": "2025-10-29T05:45:40.384Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 0.8571428571428571,
+      "count": 7
+    },
+    "kermantmd": {
+      "ocrText": "KeRMANt, MD",
+      "corrections": [
+        {
+          "text": "BEHZAD KERMANI, MD",
+          "count": 1,
+          "firstSeen": "2025-10-30T15:01:25.764Z",
+          "lastSeen": "2025-10-30T15:01:25.764Z",
+          "metadata": {
+            "documentId": "doc_1761836218211_g1zhvh"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "lasvegas": {
+      "ocrText": "LAS VEGAS",
+      "corrections": [
+        {
+          "text": "BEHZAD KERMANI, MD",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:07:13.871Z",
+          "lastSeen": "2025-10-30T23:07:13.871Z",
+          "metadata": {
+            "documentId": "doc_1761865363078_g9nsp3"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "facilities": {},
+  "metadata": {
+    "totalCorrections": 37,
+    "lastUpdated": "2025-10-30T23:39:25.871Z",
+    "hipaaCompliant": true,
+    "note": "Patient PHI (names, DOB, Member IDs) is NEVER stored per HIPAA compliance"
+  },
+  "cpt": {
+    "95810": {
+      "ocrText": "95810",
+      "corrections": [
+        {
+          "text": "95811",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:25:51.149Z",
+          "lastSeen": "2025-10-27T17:25:51.149Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "carrier": {
+    "bluecross": {
+      "ocrText": "Blue Cross",
+      "corrections": [
+        {
+          "text": "Blue Cross Blue Shield",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:25:51.149Z",
+          "lastSeen": "2025-10-27T17:25:51.149Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "phone": {
+    "5551234": {
+      "ocrText": "555-1234",
+      "corrections": [
+        {
+          "text": "555-123-4567",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:25:51.149Z",
+          "lastSeen": "2025-10-27T17:25:51.149Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "7024363530": {
+      "ocrText": "(702) 436-3530",
+      "corrections": [
+        {
+          "text": "(702) 435-1995",
+          "count": 2,
+          "firstSeen": "2025-10-29T07:39:27.875Z",
+          "lastSeen": "2025-10-29T07:43:09.250Z",
+          "metadata": {
+            "documentId": "doc_1761723092932_j23t0a"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 2
+    }
+  },
+  "procedureDescription": {
+    "inlabpsg": {
+      "ocrText": "In-lab PSG",
+      "corrections": [
+        {
+          "text": "In-Lab Polysomnography",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.577Z",
+          "lastSeen": "2025-10-27T17:39:10.577Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "diagnosisDescription": {
+    "osa": {
+      "ocrText": "OSA",
+      "corrections": [
+        {
+          "text": "Obstructive Sleep Apnea",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "practiceName": {
+    "sleepcenter": {
+      "ocrText": "Sleep Center",
+      "corrections": [
+        {
+          "text": "Comprehensive Sleep Disorders Center",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "placeotsurgery": {
+      "ocrText": "Place ot Surgery",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:44:29.845Z",
+          "lastSeen": "2025-10-30T23:44:29.845Z",
+          "metadata": {
+            "documentId": "doc_1761867628161_c9qaaz"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "placeofsurgery": {
+      "ocrText": "Place of Surgery",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:44:29.845Z",
+          "lastSeen": "2025-10-30T23:44:29.845Z",
+          "metadata": {
+            "documentId": "doc_1761867628161_c9qaaz"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "piac": {
+      "ocrText": "Piac",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-29T07:35:48.345Z",
+          "lastSeen": "2025-10-29T07:35:48.345Z",
+          "metadata": {
+            "documentId": "doc_1761723092932_j23t0a"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "ot": {
+      "ocrText": "ot",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-29T07:39:27.876Z",
+          "lastSeen": "2025-10-29T07:39:27.876Z",
+          "metadata": {
+            "documentId": "doc_1761723092932_j23t0a"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "thisfaxmaycontainsersitiveandconfdentialpersoralhealth": {
+      "ocrText": "This fax may contain sersitive and confdential persoral health",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 2,
+          "firstSeen": "2025-10-30T23:07:13.874Z",
+          "lastSeen": "2025-10-30T23:35:39.065Z",
+          "metadata": {
+            "documentId": "doc_1761865363078_g9nsp3"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 2
+    },
+    "pic": {
+      "ocrText": "Pi血C电",
+      "corrections": [
+        {
+          "text": "Southern Highlands",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:39:25.871Z",
+          "lastSeen": "2025-10-30T23:39:25.871Z",
+          "metadata": {
+            "documentId": "doc_1761867072030_q1dvs1"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "referringProvider": {
+    "drsmith": {
+      "ocrText": "Dr. Smith",
+      "corrections": [
+        {
+          "text": "Dr. John Smith",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "providerNotes": {
+    "evaltreat": {
+      "ocrText": "eval treat",
+      "corrections": [
+        {
+          "text": "Eval & Treat",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "safetyCategory": {
+    "seizure": {
+      "ocrText": "seizure",
+      "corrections": [
+        {
+          "text": "Seizure Disorder",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "accommodationType": {
+    "wheelchair": {
+      "ocrText": "wheelchair",
+      "corrections": [
+        {
+          "text": "Wheelchair Access Required",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "supervisingProvider": {
+    "drjones": {
+      "ocrText": "Dr. Jones",
+      "corrections": [
+        {
+          "text": "Dr. Sarah Jones, MD",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "planType": {
+    "ppo": {
+      "ocrText": "PPO",
+      "corrections": [
+        {
+          "text": "Preferred Provider Organization",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.578Z",
+          "lastSeen": "2025-10-27T17:39:10.578Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "studyType": {
+    "hsat": {
+      "ocrText": "HSAT",
+      "corrections": [
+        {
+          "text": "Home Sleep Apnea Test",
+          "count": 1,
+          "firstSeen": "2025-10-27T17:39:10.579Z",
+          "lastSeen": "2025-10-27T17:39:10.579Z",
+          "metadata": {}
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "fax": {
+    "7022600595": {
+      "ocrText": "(702) 260-0595",
+      "corrections": [
+        {
+          "text": "(702) 436-3530",
+          "count": 1,
+          "firstSeen": "2025-10-30T01:52:20.464Z",
+          "lastSeen": "2025-10-30T01:52:20.464Z",
+          "metadata": {
+            "documentId": "doc_1761788303193_34b9xn"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "referringPhone": {
+    "behzadkermanimd": {
+      "ocrText": "BEHZAD KERMANI, MD",
+      "corrections": [
+        {
+          "text": "(702) 435-1995",
+          "count": 1,
+          "firstSeen": "2025-10-30T04:13:57.460Z",
+          "lastSeen": "2025-10-30T04:13:57.460Z",
+          "metadata": {
+            "documentId": "doc_1761797149465_qxu7ic"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "southernhighlands": {
+      "ocrText": "Southern Highlands",
+      "corrections": [
+        {
+          "text": "(702) 435-1995",
+          "count": 1,
+          "firstSeen": "2025-10-30T04:13:57.461Z",
+          "lastSeen": "2025-10-30T04:13:57.461Z",
+          "metadata": {
+            "documentId": "doc_1761797149465_qxu7ic"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "lasvegas": {
+      "ocrText": "LAS VEGAS",
+      "corrections": [
+        {
+          "text": "(702) 435-1995",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:07:13.873Z",
+          "lastSeen": "2025-10-30T23:07:13.873Z",
+          "metadata": {
+            "documentId": "doc_1761865363078_g9nsp3"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    },
+    "thisfaxmaycontainsersitiveandconfdentialpersoralhealth": {
+      "ocrText": "This fax may contain sersitive and confdential persoral health",
+      "corrections": [
+        {
+          "text": "(702) 435-1995",
+          "count": 1,
+          "firstSeen": "2025-10-30T23:07:13.873Z",
+          "lastSeen": "2025-10-30T23:07:13.874Z",
+          "metadata": {
+            "documentId": "doc_1761865363078_g9nsp3"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  }
+}

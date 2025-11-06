@@ -1,7 +1,7 @@
 // Confidence calibration harness: compute distribution statistics over sample texts
 import { runExtraction } from '../rules/index.js';
 
-export function calibrateConfidence(sampleTexts = []) {
+export async function calibrateConfidence(sampleTexts = []) {
   const stats = {
     samples: sampleTexts.length,
     tiers: { High: 0, Medium: 0, Low: 0, 'Manual Review': 0 },
@@ -13,7 +13,7 @@ export function calibrateConfidence(sampleTexts = []) {
   if (!sampleTexts.length) return stats;
   let scoreSum = 0; let triggersSum = 0;
   for (const text of sampleTexts) {
-    const { result } = runExtraction([{ text }]);
+    const { result } = await runExtraction([{ text }]);
     const tier = result.confidence;
     if (stats.tiers[tier] == null) stats.tiers[tier] = 0;
     stats.tiers[tier]++;

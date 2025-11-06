@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Badge, Group, Stack, Text, Code, Paper, ScrollArea, Title, JsonInput, Tooltip, ActionIcon, Checkbox } from '../ui/primitives.jsx';
 import { notifications } from '../ui/primitives.jsx';
-import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize } from '@tabler/icons-react';
+import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize, IconEdit, IconDeviceFloppy, IconX } from '@tabler/icons-react';
 import { getStatusBadgeColor } from '../ui/utils.js';
 import Section from '../components/Section.jsx';
 import PlaceholderPanel from '../components/PlaceholderPanel.jsx';
@@ -48,6 +48,18 @@ export default function ReferralPage() {
   // Multi-export selection state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedExportIds, setSelectedExportIds] = useState(new Set());
+  
+  // Edit mode state
+  const [editingDocId, setEditingDocId] = useState(null);
+  const [editedFields, setEditedFields] = useState({});
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  
+  // Live logs state
+  const [logs, setLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const logsEndRef = React.useRef(null);
+  const logsScrollRef = React.useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   // Restore persisted selection (remember across reload) once on mount
   useEffect(() => {
@@ -82,6 +94,65 @@ export default function ReferralPage() {
       .then(j => setBatchDates(Array.isArray(j?.dates) ? j.dates : []))
       .catch(() => setBatchDates([]));
   }, []);
+  
+  // Auto-scroll logs to bottom only if user is near bottom
+  useEffect(() => {
+    if (showLogs && autoScroll && logsEndRef.current && logsScrollRef.current) {
+      // Use scrollIntoView on the viewport element
+      const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }
+  }, [logs, showLogs, autoScroll]);
+  
+  // Detect if user scrolled away from bottom
+  const handleLogsScroll = () => {
+    if (!logsScrollRef.current) return;
+    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    
+    const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 100;
+    if (isNearBottom !== autoScroll) {
+      setAutoScroll(isNearBottom);
+    }
+  };
+  
+  // Attach scroll listener
+  useEffect(() => {
+    if (!showLogs || !logsScrollRef.current) return;
+    
+    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    
+    viewport.addEventListener('scroll', handleLogsScroll);
+    return () => viewport.removeEventListener('scroll', handleLogsScroll);
+  }, [showLogs, logsScrollRef.current]);
+  
+  // Poll logs from backend
+  useEffect(() => {
+    if (!showLogs) return;
+    
+    let interval;
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch(`${apiBase}/logs/ocr?lines=100`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.logs)) {
+            setLogs(data.logs);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch logs:', err);
+      }
+    };
+    
+    fetchLogs(); // Initial fetch
+    interval = setInterval(fetchLogs, 2000); // Poll every 2 seconds
+    
+    return () => clearInterval(interval);
+  }, [showLogs]);
 
   function pushResult(id, data) {
     setResultsMap(m => ({ ...m, [id]: data }));
@@ -431,122 +502,584 @@ export default function ReferralPage() {
     setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
+  // Start editing a document
+  function startEdit(docId, doc) {
+    if (!doc) return;
+    setEditingDocId(docId);
+    
+    // Initialize all editable fields
+    setEditedFields({
+      // Patient (PHI - won't be saved)
+      patientLast: doc.patient?.last || '',
+      patientFirst: doc.patient?.first || '',
+      patientDob: doc.patient?.dob || '',
+      patientPhone: doc.patient?.phones?.[0] || '',
+      
+      // Insurance (Carrier learned, Member ID is PHI)
+      insuranceCarrier: doc.insurance?.[0]?.carrier || '',
+      insuranceMemberId: doc.insurance?.[0]?.memberId || '',
+      
+      // Procedure (Non-PHI - safe to learn)
+      procedureCpt: doc.procedure?.cpt || '',
+      procedureDescription: doc.procedure?.description || '',
+      
+      // Clinical (ICD codes - safe to learn)
+      diagnosisCode: doc.clinical?.primaryDiagnosis?.code || '',
+      diagnosisDescription: doc.clinical?.primaryDiagnosis?.description || '',
+      
+      // Provider (Public info - safe to learn)
+      providerName: doc.provider?.name || '',
+      providerNpi: doc.provider?.npi || '',
+      providerPhone: doc.provider?.phone || '',
+      providerFax: doc.provider?.fax || ''
+    });
+  }
+
+  function cancelEdit() {
+    setEditingDocId(null);
+    setEditedFields({});
+  }
+
+  // HIPAA-compliant save: only save non-PHI corrections
+  async function saveCorrections(docId, doc) {
+    if (!doc) return;
+    setSavingCorrection(true);
+
+    const corrections = [];
+    const original = {
+      patientLast: doc.patient?.last || '',
+      patientFirst: doc.patient?.first || '',
+      patientDob: doc.patient?.dob || '',
+      insuranceCarrier: doc.insurance?.[0]?.carrier || '',
+      insuranceMemberId: doc.insurance?.[0]?.memberId || '',
+      procedureCpt: doc.procedure?.cpt || '',
+      procedureDescription: doc.procedure?.description || '',
+      diagnosisCode: doc.clinical?.primaryDiagnosis?.code || '',
+      diagnosisDescription: doc.clinical?.primaryDiagnosis?.description || '',
+      providerName: doc.provider?.name || '',
+      providerNpi: doc.provider?.npi || '',
+      providerPhone: doc.provider?.phone || '',
+      providerFax: doc.provider?.fax || ''
+    };
+
+    // HIPAA: Provider corrections (public business info - safe to learn)
+    if (editedFields.providerName !== original.providerName) {
+      corrections.push({
+        type: 'provider',
+        ocrText: original.providerName,
+        correctedText: editedFields.providerName
+      });
+    }
+    
+    if (editedFields.providerNpi !== original.providerNpi) {
+      corrections.push({
+        type: 'npi',
+        ocrText: original.providerNpi,
+        correctedText: editedFields.providerNpi
+      });
+    }
+    
+    if (editedFields.providerPhone !== original.providerPhone) {
+      corrections.push({
+        type: 'phone',
+        ocrText: original.providerPhone,
+        correctedText: editedFields.providerPhone
+      });
+    }
+    
+    if (editedFields.providerFax !== original.providerFax) {
+      corrections.push({
+        type: 'fax',
+        ocrText: original.providerFax,
+        correctedText: editedFields.providerFax
+      });
+    }
+
+    // HIPAA: Insurance carrier (safe to learn, but NOT Member ID)
+    if (editedFields.insuranceCarrier !== original.insuranceCarrier) {
+      corrections.push({
+        type: 'carrier',
+        ocrText: original.insuranceCarrier,
+        correctedText: editedFields.insuranceCarrier
+      });
+    }
+
+    // HIPAA: Procedure codes & descriptions (non-PHI - safe to learn)
+    if (editedFields.procedureCpt !== original.procedureCpt) {
+      corrections.push({
+        type: 'cpt',
+        ocrText: original.procedureCpt,
+        correctedText: editedFields.procedureCpt
+      });
+    }
+    
+    if (editedFields.procedureDescription !== original.procedureDescription) {
+      corrections.push({
+        type: 'procedureDescription',
+        ocrText: original.procedureDescription,
+        correctedText: editedFields.procedureDescription
+      });
+    }
+
+    // HIPAA: Diagnosis codes & descriptions (non-PHI - safe to learn)
+    if (editedFields.diagnosisCode !== original.diagnosisCode) {
+      corrections.push({
+        type: 'icd',
+        ocrText: original.diagnosisCode,
+        correctedText: editedFields.diagnosisCode
+      });
+    }
+    
+    if (editedFields.diagnosisDescription !== original.diagnosisDescription) {
+      corrections.push({
+        type: 'diagnosisDescription',
+        ocrText: original.diagnosisDescription,
+        correctedText: editedFields.diagnosisDescription
+      });
+    }
+
+    // HIPAA: Patient data is NEVER sent to learning database
+    // (patientLast, patientFirst, patientDob, insuranceMemberId are silently filtered)
+
+    if (corrections.length === 0) {
+      notifications.show({
+        title: 'No Changes',
+        message: 'No non-PHI corrections to save (patient data not stored per HIPAA)',
+        color: 'blue',
+        autoClose: 2000
+      });
+      setSavingCorrection(false);
+      cancelEdit();
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/corrections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ corrections })
+      });
+
+      if (!response.ok) throw new Error('save-failed');
+
+      const result = await response.json();
+      
+      notifications.show({
+        title: 'Corrections Saved',
+        message: `${corrections.length} non-PHI corrections recorded. Patient data not stored per HIPAA.`,
+        color: 'green',
+        autoClose: 3000
+      });
+
+      // Update the local document with edited values (for immediate UI feedback)
+      setResultsMap(prev => ({
+        ...prev,
+        [docId]: {
+          ...prev[docId],
+          patient: {
+            ...prev[docId].patient,
+            last: editedFields.patientLast,
+            first: editedFields.patientFirst,
+            dob: editedFields.patientDob,
+            phones: [editedFields.patientPhone]
+          },
+          insurance: [{
+            ...prev[docId].insurance?.[0],
+            carrier: editedFields.insuranceCarrier,
+            memberId: editedFields.insuranceMemberId
+          }],
+          procedure: {
+            ...prev[docId].procedure,
+            cpt: editedFields.procedureCpt,
+            description: editedFields.procedureDescription
+          },
+          clinical: {
+            ...prev[docId].clinical,
+            primaryDiagnosis: {
+              code: editedFields.diagnosisCode,
+              description: editedFields.diagnosisDescription
+            }
+          },
+          provider: {
+            ...prev[docId].provider,
+            name: editedFields.providerName,
+            npi: editedFields.providerNpi,
+            phone: editedFields.providerPhone,
+            fax: editedFields.providerFax
+          }
+        }
+      }));
+
+      cancelEdit();
+    } catch (err) {
+      console.error('Failed to save corrections:', err);
+      notifications.show({
+        title: 'Save Failed',
+        message: 'Could not save corrections. Please try again.',
+        color: 'red',
+        autoClose: 4000
+      });
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
   function Details({ docId, doc }) {
     if (!doc) return null;
     const showRaw = !!showRawMap[docId];
     const conf = doc?.confidence || doc?.confidenceLevel;
+    const isEditing = editingDocId === docId;
 
     return (
   <Stack gap={16} style={{ borderTop: '1px solid #2a323c', paddingTop: 10 }}>
+        {/* Edit Mode Controls */}
+        {!isEditing && (
+          <Group justify="flex-end">
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconEdit size={14} />}
+              onClick={() => startEdit(docId, doc)}
+            >
+              Edit & Save Corrections
+            </Button>
+          </Group>
+        )}
+        
+        {isEditing && (
+          <Paper p="md" withBorder style={{ background: 'rgba(59, 130, 246, 0.05)', borderColor: '#3b82f6' }}>
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Group gap="xs">
+                  <Text size="sm" fw={600}>Editing Mode</Text>
+                  <Badge size="sm" color="blue">HIPAA-Compliant</Badge>
+                </Group>
+                <Group gap="xs">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    leftSection={<IconX size={14} />}
+                    onClick={cancelEdit}
+                    disabled={savingCorrection}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="filled"
+                    leftSection={<IconDeviceFloppy size={14} />}
+                    onClick={() => saveCorrections(docId, doc)}
+                    loading={savingCorrection}
+                  >
+                    Save Corrections
+                  </Button>
+                </Group>
+              </Group>
+              <Text size="xs" c="dimmed">
+                • <Badge size="xs" color="red" variant="light">PHI Protected</Badge> Patient data edited locally only, never stored
+                <br />
+                • <Badge size="xs" color="green" variant="light">Learned</Badge> Provider, codes, and facility info saved to improve future OCR
+              </Text>
+            </Stack>
+          </Paper>
+        )}
+
         <Section title="Patient">
-          <Stack gap={4}>
-            <Text size="sm">
-              {doc.patient?.last}, {doc.patient?.first} • DOB {doc.patient?.dob || '—'}
-              {doc.documentMeta?.intakeDate && (
-                <Text component="span" size="xs" c="dimmed">
-                  {' '}&nbsp;| Referral Date: {doc.documentMeta.intakeDate}
+          {!isEditing ? (
+            <Stack gap={4}>
+              <Text size="sm">
+                {doc.patient?.last}, {doc.patient?.first} • DOB {doc.patient?.dob || '—'}
+                {doc.documentMeta?.intakeDate && (
+                  <Text component="span" size="xs" c="dimmed">
+                    {' '}&nbsp;| Referral Date: {doc.documentMeta.intakeDate}
+                  </Text>
+                )}
+              </Text>
+              {Array.isArray(doc.patient?.phones) && doc.patient.phones.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Phone: {doc.patient.phones[0]}
+                  {doc.patient.phones[1] && ` / ${doc.patient.phones[1]}`}
                 </Text>
               )}
-            </Text>
-            {Array.isArray(doc.patient?.phones) && doc.patient.phones.length > 0 && (
-              <Text size="xs" c="dimmed">
-                Phone: {doc.patient.phones[0]}
-                {doc.patient.phones[1] && ` / ${doc.patient.phones[1]}`}
-              </Text>
-            )}
-            {doc.patient?.email && <Text size="xs">Email: {doc.patient.email}</Text>}
-            {doc.patient?.emergencyContact?.raw && (
-              <Text size="xs">
-                Emergency Contact: {doc.patient.emergencyContact.raw}
-                {doc.patient.emergencyContact.relationship && ` (${doc.patient.emergencyContact.relationship})`}
-                {doc.patient.emergencyContact.phone && ` / ${doc.patient.emergencyContact.phone}`}
-              </Text>
-            )}
-          </Stack>
+              {doc.patient?.email && <Text size="xs">Email: {doc.patient.email}</Text>}
+              {doc.patient?.emergencyContact?.raw && (
+                <Text size="xs">
+                  Emergency Contact: {doc.patient.emergencyContact.raw}
+                  {doc.patient.emergencyContact.relationship && ` (${doc.patient.emergencyContact.relationship})`}
+                  {doc.patient.emergencyContact.phone && ` / ${doc.patient.emergencyContact.phone}`}
+                </Text>
+              )}
+            </Stack>
+          ) : (
+            <Stack gap="xs">
+              <Group gap="xs" align="center">
+                <Text size="xs" fw={500}>Patient Info</Text>
+                <Badge size="xs" color="red" variant="light">PHI - Not Stored</Badge>
+              </Group>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Last Name</Text>
+                  <input
+                    type="text"
+                    value={editedFields.patientLast}
+                    onChange={e => setEditedFields(f => ({ ...f, patientLast: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>First Name</Text>
+                  <input
+                    type="text"
+                    value={editedFields.patientFirst}
+                    onChange={e => setEditedFields(f => ({ ...f, patientFirst: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Date of Birth</Text>
+                  <input
+                    type="text"
+                    value={editedFields.patientDob}
+                    onChange={e => setEditedFields(f => ({ ...f, patientDob: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Phone</Text>
+                  <input
+                    type="text"
+                    value={editedFields.patientPhone}
+                    onChange={e => setEditedFields(f => ({ ...f, patientPhone: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+            </Stack>
+          )}
         </Section>
 
         <Section title="Procedure">
-          <Text size="sm">
-            CPT: {doc.procedure?.cpt} {doc.procedure?.description && `— ${doc.procedure.description}`}
-          </Text>
-          {Array.isArray(doc.procedure?.cptDetails) && doc.procedure.cptDetails.length > 1 && (
-            <Stack gap="xs" mt="sm">
-              {doc.procedure.cptDetails.map(d => (
-                <Group key={d.code} gap="sm" align="flex-start">
-                  <Code size="xs">{d.code}</Code>
-                  <Text size="xs">
-                    {d.intent}
-                    {d.why && d.why !== 'pattern_match' ? ` / ${d.why}` : ''}
-                  </Text>
-                </Group>
-              ))}
+          {!isEditing ? (
+            <>
+              <Text size="sm">
+                CPT: {doc.procedure?.cpt} {doc.procedure?.description && `— ${doc.procedure.description}`}
+              </Text>
+              {Array.isArray(doc.procedure?.cptDetails) && doc.procedure.cptDetails.length > 1 && (
+                <Stack gap="xs" mt="sm">
+                  {doc.procedure.cptDetails.map(d => (
+                    <Group key={d.code} gap="sm" align="flex-start">
+                      <Code size="xs">{d.code}</Code>
+                      <Text size="xs">
+                        {d.intent}
+                        {d.why && d.why !== 'pattern_match' ? ` / ${d.why}` : ''}
+                      </Text>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </>
+          ) : (
+            <Stack gap="xs">
+              <Group gap="xs" align="center">
+                <Text size="xs" fw={500}>Procedure Codes</Text>
+                <Badge size="xs" color="green" variant="light">✓ Learned</Badge>
+              </Group>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>CPT Code</Text>
+                  <input
+                    type="text"
+                    value={editedFields.procedureCpt}
+                    onChange={e => setEditedFields(f => ({ ...f, procedureCpt: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Description</Text>
+                  <input
+                    type="text"
+                    value={editedFields.procedureDescription}
+                    onChange={e => setEditedFields(f => ({ ...f, procedureDescription: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
             </Stack>
           )}
         </Section>
 
         <Section title="Insurance">
-          {Array.isArray(doc.insurance) && doc.insurance.length > 0 ? (
-            <Stack gap="xs">
-              {doc.insurance.map((c, i) => (
-                <Text size="sm" key={i}>
-                  {c.carrier}
-                  {c.memberId && ` • ID: ${c.memberId}`}
-                  {c.groupId && ` • Group: ${c.groupId}`}
-                </Text>
-              ))}
-            </Stack>
+          {!isEditing ? (
+            Array.isArray(doc.insurance) && doc.insurance.length > 0 ? (
+              <Stack gap="xs">
+                {doc.insurance.map((c, i) => (
+                  <Text size="sm" key={i}>
+                    {c.carrier}
+                    {c.memberId && ` • ID: ${c.memberId}`}
+                    {c.groupId && ` • Group: ${c.groupId}`}
+                  </Text>
+                ))}
+              </Stack>
+            ) : (
+              <Text size="sm">—</Text>
+            )
           ) : (
-            <Text size="sm">—</Text>
+            <Stack gap="xs">
+              <Group gap="xs" align="center">
+                <Text size="xs" fw={500}>Insurance</Text>
+                <Badge size="xs" color="yellow" variant="light">Partial Learning</Badge>
+              </Group>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Carrier (Learned)</Text>
+                  <input
+                    type="text"
+                    value={editedFields.insuranceCarrier}
+                    onChange={e => setEditedFields(f => ({ ...f, insuranceCarrier: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Member ID (PHI - Not Stored)</Text>
+                  <input
+                    type="text"
+                    value={editedFields.insuranceMemberId}
+                    onChange={e => setEditedFields(f => ({ ...f, insuranceMemberId: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+            </Stack>
           )}
         </Section>
 
         <Section title="Clinical Information">
-          <Stack gap={4}>
-            {doc.clinical?.primaryDiagnosis && (
-              <Text size="sm">
-                Primary Diagnosis: {doc.clinical.primaryDiagnosis.code}
-                {doc.clinical.primaryDiagnosis.description && ` — ${doc.clinical.primaryDiagnosis.description}`}
-              </Text>
-            )}
-            {Array.isArray(doc.clinical?.symptoms) && doc.clinical.symptoms.length > 0 && (
-              <Text size="xs" c="dimmed">
-                Symptoms Present: {doc.clinical.symptoms.join(', ')}
-              </Text>
-            )}
-            {(() => {
-              const v = doc.clinical?.vitals || {};
-              const parts = [];
-              if (v.bmi) parts.push(`BMI ${v.bmi}`);
-              if (v.height || v.weightLbs) {
-                const hw = [v.height, v.weightLbs && `${v.weightLbs} lbs`].filter(Boolean).join(' / ');
-                if (hw) parts.push(hw);
-              }
-              if (v.bp) parts.push(`BP ${v.bp}`);
-              return parts.length ? (
-                <Text size="xs" c="dimmed">
-                  Vitals: {parts.join(' | ')}
+          {!isEditing ? (
+            <Stack gap={4}>
+              {doc.clinical?.primaryDiagnosis && (
+                <Text size="sm">
+                  Primary Diagnosis: {doc.clinical.primaryDiagnosis.code}
+                  {doc.clinical.primaryDiagnosis.description && ` — ${doc.clinical.primaryDiagnosis.description}`}
                 </Text>
-              ) : null;
-            })()}
-          </Stack>
+              )}
+              {Array.isArray(doc.clinical?.symptoms) && doc.clinical.symptoms.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Symptoms Present: {doc.clinical.symptoms.join(', ')}
+                </Text>
+              )}
+              {(() => {
+                const v = doc.clinical?.vitals || {};
+                const parts = [];
+                if (v.bmi) parts.push(`BMI ${v.bmi}`);
+                if (v.height || v.weightLbs) {
+                  const hw = [v.height, v.weightLbs && `${v.weightLbs} lbs`].filter(Boolean).join(' / ');
+                  if (hw) parts.push(hw);
+                }
+                if (v.bp) parts.push(`BP ${v.bp}`);
+                return parts.length ? (
+                  <Text size="xs" c="dimmed">
+                    Vitals: {parts.join(' | ')}
+                  </Text>
+                ) : null;
+              })()}
+            </Stack>
+          ) : (
+            <Stack gap="xs">
+              <Group gap="xs" align="center">
+                <Text size="xs" fw={500}>Primary Diagnosis</Text>
+                <Badge size="xs" color="green" variant="light">✓ Learned</Badge>
+              </Group>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>ICD-10 Code</Text>
+                  <input
+                    type="text"
+                    value={editedFields.diagnosisCode}
+                    onChange={e => setEditedFields(f => ({ ...f, diagnosisCode: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Description</Text>
+                  <input
+                    type="text"
+                    value={editedFields.diagnosisDescription}
+                    onChange={e => setEditedFields(f => ({ ...f, diagnosisDescription: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+            </Stack>
+          )}
         </Section>
 
         <Section title="Referring Physician">
-          <Stack gap={4}>
-            <Text size="sm">Name: {doc.provider?.name || '—'}</Text>
-            <Text size="xs" c="dimmed">NPI: {doc.provider?.npi || '—'}</Text>
-            {doc.provider?.practice && <Text size="xs" c="dimmed">Practice: {doc.provider.practice}</Text>}
-            {(doc.provider?.phone || doc.provider?.fax) && (
-              <Text size="xs" c="dimmed">
-                {doc.provider?.phone && `Phone: ${doc.provider.phone}`}
-                {doc.provider?.phone && doc.provider?.fax && ' • '}
-                {doc.provider?.fax && `Fax: ${doc.provider.fax}`}
-              </Text>
-            )}
-            {doc.provider?.supervising && (
-              <Text size="xs" c="dimmed">Supervising: {doc.provider.supervising}</Text>
-            )}
-          </Stack>
+          {!isEditing ? (
+            <Stack gap={4}>
+              <Text size="sm">Name: {doc.provider?.name || '—'}</Text>
+              <Text size="xs" c="dimmed">NPI: {doc.provider?.npi || '—'}</Text>
+              {doc.provider?.practice && <Text size="xs" c="dimmed">Practice: {doc.provider.practice}</Text>}
+              {(doc.provider?.phone || doc.provider?.fax) && (
+                <Text size="xs" c="dimmed">
+                  {doc.provider?.phone && `Phone: ${doc.provider.phone}`}
+                  {doc.provider?.phone && doc.provider?.fax && ' • '}
+                  {doc.provider?.fax && `Fax: ${doc.provider.fax}`}
+                </Text>
+              )}
+              {doc.provider?.supervising && (
+                <Text size="xs" c="dimmed">Supervising: {doc.provider.supervising}</Text>
+              )}
+            </Stack>
+          ) : (
+            <Stack gap="xs">
+              <Group gap="xs" align="center">
+                <Text size="xs" fw={500}>Provider Info</Text>
+                <Badge size="xs" color="green" variant="light">✓ Learned</Badge>
+              </Group>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Provider Name</Text>
+                  <input
+                    type="text"
+                    value={editedFields.providerName}
+                    onChange={e => setEditedFields(f => ({ ...f, providerName: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>NPI</Text>
+                  <input
+                    type="text"
+                    value={editedFields.providerNpi}
+                    onChange={e => setEditedFields(f => ({ ...f, providerNpi: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Phone</Text>
+                  <input
+                    type="text"
+                    value={editedFields.providerPhone}
+                    onChange={e => setEditedFields(f => ({ ...f, providerPhone: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Fax</Text>
+                  <input
+                    type="text"
+                    value={editedFields.providerFax}
+                    onChange={e => setEditedFields(f => ({ ...f, providerFax: e.target.value }))}
+                    className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+            </Stack>
+          )}
         </Section>
 
         <Section title="Information Alerts">
@@ -657,12 +1190,23 @@ export default function ReferralPage() {
                 size="xs"
                 variant="light"
                 component="a"
+                href={`/api/documents/${docId}/original.pdf`}
+                target="_blank"
+                disabled={!doc}
+              >
+                Original
+              </Button>
+              <Button
+                size="xs"
+                variant="light"
+                component="a"
                 href={`/api/documents/${docId}/summary.pdf`}
                 target="_blank"
                 disabled={!doc}
               >
                 PDF
               </Button>
+              {/* Patient Report button removed: Packet includes it inline */}
                 <Button
                   size="xs"
                   variant="light"
@@ -916,6 +1460,7 @@ export default function ReferralPage() {
                         <Tooltip label="Download each PDF (no ZIP)">
                           <Button size="compact-xs" variant="subtle" disabled={!selectedExportIds.size} onClick={() => exportIndividual(Array.from(selectedExportIds))}>PDFs</Button>
                         </Tooltip>
+                        {/* Reports bulk button removed: use Packets ZIP (includes Patient Report) */}
                         <Button size="compact-xs" variant="subtle" onClick={() => { if (selectedExportIds.size === doneIds.length) clearSelection(); else selectAll(); }}>
                           {selectedExportIds.size === doneIds.length ? 'None' : 'All'}
                         </Button>
@@ -1052,6 +1597,100 @@ export default function ReferralPage() {
           </Paper>
         </div>
       </div>
+
+      {/* Live Logs Panel */}
+      <Paper shadow="sm" p="md" withBorder radius="lg">
+        <Stack gap="xs">
+          <Group justify="space-between" align="center">
+            <Group gap="xs">
+              <Text size="sm" fw={600} c="dimmed" tt="uppercase">
+                OCR Service Logs
+              </Text>
+              {showLogs && (
+                <Badge size="sm" variant="light" color="blue">
+                  Live
+                </Badge>
+              )}
+            </Group>
+            <Button
+              size="xs"
+              variant={showLogs ? 'filled' : 'light'}
+              onClick={() => setShowLogs(v => !v)}
+            >
+              {showLogs ? 'Hide Logs' : 'Show Live Logs'}
+            </Button>
+          </Group>
+          
+          {showLogs && (
+            <Paper p="sm" withBorder style={{ background: '#0a0e13', fontFamily: 'monospace' }}>
+              <Stack gap="xs" mb="xs">
+                <Group gap="xs" align="center">
+                  <Text size="xs" c="dimmed">
+                    {autoScroll ? '📌 Auto-scrolling' : '⏸️ Scroll paused (scroll to bottom to resume)'}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    onClick={() => {
+                      setAutoScroll(true);
+                      if (logsScrollRef.current) {
+                        const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                        if (viewport) {
+                          viewport.scrollTop = viewport.scrollHeight;
+                        }
+                      }
+                    }}
+                  >
+                    Jump to Bottom
+                  </Button>
+                </Group>
+              </Stack>
+              <ScrollArea 
+                h={300} 
+                offsetScrollbars
+                ref={logsScrollRef}
+              >
+                <Stack gap={2}>
+                  {logs.length === 0 && (
+                    <Text size="xs" c="dimmed">
+                      Waiting for logs...
+                    </Text>
+                  )}
+                  {logs.map((line, i) => {
+                    // Color-code important log lines
+                    const isError = line.includes('ERROR') || line.includes('error');
+                    const isWarning = line.includes('WARN') || line.includes('warning');
+                    const isInfo = line.includes('INFO') || line.includes('page=');
+                    const isTiming = line.includes('took ') || line.includes('confidence=');
+                    
+                    let color = '#9ca3af'; // default gray
+                    if (isError) color = '#ef4444'; // red
+                    else if (isWarning) color = '#f59e0b'; // orange
+                    else if (isInfo) color = '#3b82f6'; // blue
+                    else if (isTiming) color = '#10b981'; // green
+                    
+                    return (
+                      <Text
+                        key={i}
+                        size="xs"
+                        style={{
+                          color,
+                          lineHeight: 1.4,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word'
+                        }}
+                      >
+                        {line}
+                      </Text>
+                    );
+                  })}
+                  <div ref={logsEndRef} />
+                </Stack>
+              </ScrollArea>
+            </Paper>
+          )}
+        </Stack>
+      </Paper>
 
     </Stack>
   );

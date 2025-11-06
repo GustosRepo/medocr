@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Group, Stack, Text, Paper, ScrollArea, JsonInput, Title, Badge } from '../ui/primitives.jsx';
+import { IconWorld, IconWorldOff } from '@tabler/icons-react';
 
 const FILES_ENDPOINT = '/api/admin/rules/files';
 const PATTERN_OVERRIDES_FILE = 'pattern_overrides.json';
@@ -36,11 +37,14 @@ export default function RulesEditorPage() {
   const [saving, setSaving] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [search, setSearch] = useState('');
+  const [npiEnabled, setNpiEnabled] = useState(true);
+  const [npiLoading, setNpiLoading] = useState(false);
 
   const dirty = useMemo(() => content !== original, [content, original]);
 
   useEffect(() => {
     refreshList();
+    loadAppConfig();
   }, []);
 
   function refreshList() {
@@ -66,6 +70,39 @@ export default function RulesEditorPage() {
       })
       .catch(err => setFilesError(err.message || String(err)))
       .finally(() => setLoadingFiles(false));
+  }
+
+  function loadAppConfig() {
+    fetch('/api/config')
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(data => {
+        setNpiEnabled(data?.npi?.enabled ?? true);
+      })
+      .catch(() => {
+        // Silently fail, keep default
+      });
+  }
+
+  async function toggleNpi() {
+    if (npiLoading) return;
+    setNpiLoading(true);
+    try {
+      const res = await fetch('/api/config/npi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !npiEnabled })
+      });
+      if (!res.ok) throw new Error('Failed to update NPI config');
+      const data = await res.json();
+      setNpiEnabled(data.npiEnabled);
+      setSaveMessage(`NPI lookups ${data.npiEnabled ? 'enabled' : 'disabled'}`);
+      setTimeout(() => setSaveMessage(''), 2500);
+    } catch (err) {
+      setSaveError(err.message || 'Failed to update NPI config');
+      setTimeout(() => setSaveError(''), 3000);
+    } finally {
+      setNpiLoading(false);
+    }
   }
 
   function loadFile(name) {
@@ -205,11 +242,38 @@ export default function RulesEditorPage() {
   return (
     <Stack gap="lg" className="page-container">
       <Stack gap="sm">
-        <Title order={2} className="page-title">Rules Editor</Title>
+        <Group justify="space-between" align="flex-start">
+          <Title order={2} className="page-title">Rules Editor</Title>
+          <Button
+            size="sm"
+            variant={npiEnabled ? 'light' : 'outline'}
+            color={npiEnabled ? 'blue' : 'gray'}
+            leftSection={npiEnabled ? <IconWorld size={16} /> : <IconWorldOff size={16} />}
+            onClick={toggleNpi}
+            loading={npiLoading}
+          >
+            NPI Lookups: {npiEnabled ? 'ON' : 'OFF'}
+          </Button>
+        </Group>
         <Text size="sm" c="dimmed">
           Edit the JSON catalogs that drive extraction logic. Changes are written directly to files under <code>backend/rules/data</code>{' '}.
           All rule files hot-reload automatically, so updates take effect immediately. Always validate JSON before saving.
         </Text>
+        <Paper withBorder radius="md" p="sm" className={npiEnabled ? "bg-blue-950/30 border-blue-700/60" : "bg-slate-950/30 border-slate-700/60"}>
+          <Stack gap="xs">
+            <Group gap="xs">
+              {npiEnabled ? <IconWorld size={16} className="text-blue-400" /> : <IconWorldOff size={16} className="text-slate-400" />}
+              <Text size="xs" fw={600} c={npiEnabled ? "blue" : "dimmed"}>
+                External NPI Registry: {npiEnabled ? 'ENABLED' : 'DISABLED'}
+              </Text>
+            </Group>
+            <Text size="xs" c="dimmed">
+              {npiEnabled 
+                ? 'Provider names will be validated against the public CMS NPPES registry (https://npiregistry.cms.hhs.gov). Only provider names are transmitted - no PHI.' 
+                : 'NPI lookups are disabled. The app runs in 100% offline mode, using cached NPI data only. No external network calls will be made.'}
+            </Text>
+          </Stack>
+        </Paper>
       </Stack>
       <Group align="flex-start" gap="lg" wrap="wrap">
         <Paper withBorder radius="md" className="w-full max-w-md" p="md">
