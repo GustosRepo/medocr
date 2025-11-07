@@ -307,15 +307,19 @@ export async function runExtraction(ocrPages) {
       result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_cpt_multiple']));
       trace.push({ rule: 'cpt_ambiguity', reasons: cpt.ambiguity });
     }
-    // 95811 prior-study evidence flag
+    // 95811 prior-study evidence flag - require prior study evidence OR sleep diagnosis
     if (cpt.primary === '95811') {
-      const priorStudyRe = /prior\s+(sleep\s+)?study|previous\s+(sleep\s+)?study|past\s+(sleep\s+)?study|earlier\s+(sleep\s+)?study|baseline\s+study|diagnostic\s+study\s+(completed|done|performed|shows|revealed)|hsat.*completed|home\s+sleep\s+test.*completed/i;
-      if (!priorStudyRe.test(fullText || '')) {
+      const priorStudyRe = /prior\s+(sleep\s+)?study|previous\s+(sleep\s+)?study|past\s+(sleep\s+)?study|earlier\s+(sleep\s+)?study|baseline\s+study|diagnostic\s+study\s+(completed|done|performed|shows|revealed)|hsat.*completed|home\s+sleep\s+test.*completed|psg.*failure|hsat.*failure|failed\s+(psg|hsat)/i;
+      const sleepDxSet = new Set(['G47.33', 'G47.30', 'G47.31', 'G47.37', 'G47.10', 'G47.00']);
+      const hasPriorStudy = priorStudyRe.test(fullText || '');
+      const hasSleepDx = Array.isArray(result.diagnoses) && result.diagnoses.some(dx => sleepDxSet.has(String(dx)));
+      
+      if (!hasPriorStudy && !hasSleepDx) {
         result.flags.verifyManually = true;
-        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'document_prior_study_evidence']));
-        trace.push({ rule: '95811_prior_study_evidence_missing' });
+        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'document_prior_study_evidence', 'review_indication']));
+        trace.push({ rule: '95811_prior_study_evidence_missing', reason: 'no_prior_study_or_sleep_dx' });
       } else {
-        trace.push({ rule: '95811_prior_study_evidence_found' });
+        trace.push({ rule: '95811_prior_study_evidence_found', hasPriorStudy, hasSleepDx });
       }
     }
   }
