@@ -820,8 +820,28 @@ export async function runExtraction(ocrPages) {
         result.alerts.actions.push('review_indication');
       }
     }
-    // Normalize unique actions
+    // Normalize unique actions and remove contradictory/redundant pairs
     result.alerts.actions = Array.from(new Set(result.alerts.actions));
+    
+    // Filter out redundant actions when more specific ones exist
+    const redundancyRules = [
+      { specific: 'obtain_cpap_compliance_data', generic: ['insurance_verification_needed', 'auth_required'] },
+      { specific: 'review_95811_required', generic: ['auth_required'] },
+      { specific: 'pediatric_protocol_review', generic: ['provider_followup_needed'] }
+    ];
+    
+    for (const rule of redundancyRules) {
+      if (result.alerts.actions.includes(rule.specific)) {
+        result.alerts.actions = result.alerts.actions.filter(a => !rule.generic.includes(a));
+      }
+    }
+    
+    // Normalize to snake_case
+    result.alerts.actions = result.alerts.actions.map(a => 
+      String(a).toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    );
+    result.alerts.actions = Array.from(new Set(result.alerts.actions));
+    
     const added = result.alerts.actions.filter(a => !actsBefore.has(a));
     if (added.length) {
       result.flags.verifyManually = true;
@@ -1321,7 +1341,7 @@ export async function runExtraction(ocrPages) {
     if (!result.provider.practice) {
       // Check for "From Provider" section - facility name is typically the first meaningful line after
       const fromProviderRe = /(?:^|\b)f?rom\s+prov(?:ider|der)\b/i;
-      const boilerplateRe = /(if you have medical|confidential|disclaimer|do\s*not\s*(write|fax)|cover\s*sheet|please\s*fax|information\s*contained|intended\s*recipient)/i;
+      const boilerplateRe = /(if you have medical|if you have questions|please contact|this fax|confidential|disclaimer|do\s*not\s*(write|fax)|cover\s*sheet|please\s*fax|information\s*contained|intended\s*recipient)/i;
       
       for (let i = 0; i < providerLines.length; i++) {
         const line = providerLines[i] || '';
@@ -1331,6 +1351,12 @@ export async function runExtraction(ocrPages) {
           const rawCand = (providerLines[j] || '').trim();
           console.log('[DEBUG] Checking line', j, ':', JSON.stringify(rawCand));
           if (!rawCand) { console.log('[DEBUG] Empty line, skipping'); continue; }
+          
+          // Hard skip disclaimer patterns first
+          if (/^\s*(If you have medical|If you have questions|Please contact|This fax|Confidential|Disclaimer)\b/i.test(rawCand)) {
+            console.log('[DEBUG] Matches explicit disclaimer pattern, skipping');
+            continue;
+          }
           
           // Skip boilerplate/disclaimer/address lines
           if (boilerplateRe.test(rawCand)) { console.log('[DEBUG] Contains boilerplate, skipping'); continue; }

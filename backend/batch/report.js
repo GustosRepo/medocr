@@ -351,12 +351,12 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   // Insurance
   section('INSURANCE');
   const primaryParts = [primaryIns.carrier || '—'];
-  if (primaryIns.memberId) primaryParts.push(`ID: ${primaryIns.memberId}`);
+  if (primaryIns.memberId) primaryParts.push(`Member: ${primaryIns.memberId}`);
   if (primaryIns.groupId) primaryParts.push(`Group: ${primaryIns.groupId}`);
   bullet(`Primary: ${primaryParts.join(' | ')}`);
   if (secondaryIns) {
     const secondaryParts = [secondaryIns.carrier || '—'];
-    if (secondaryIns.memberId) secondaryParts.push(`ID: ${secondaryIns.memberId}`);
+    if (secondaryIns.memberId) secondaryParts.push(`Member: ${secondaryIns.memberId}`);
     if (secondaryIns.groupId) secondaryParts.push(`Group: ${secondaryIns.groupId}`);
     bullet(`Secondary: ${secondaryParts.join(' | ')}`);
   }
