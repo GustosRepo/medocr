@@ -357,7 +357,8 @@ export default function ReferralPage() {
 
   async function pollStatus(id, onUpdate, onError) {
     let tries = 0;
-    const maxTries = 80;
+    // Increased to 1500 tries to support long-running documents (1500 × 2.6s ≈ 65 minutes per document)
+    const maxTries = 1500;
     setStatus('processing');
     let delay = 2600 + Math.random() * 400;
     let consecutive429 = 0;
