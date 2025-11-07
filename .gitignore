@@ -34,6 +34,7 @@ data/pids/
 data/feedback.ndjson
 data/metrics.json
 data/snapshots.ndjson
+data/processed.json
 
 # Release artifacts and wheelhouse (large binaries)
 release/
