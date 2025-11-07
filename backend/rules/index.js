@@ -11,6 +11,7 @@ import correctionsDB from '../corrections_db.js';
 import npiService from '../npi_service.js';
 import { applyOcrCorrections, applyFieldCorrection } from './utils/ocrCorrector.js';
 import { isFaxLike, isLikelyProviderLine, isHeaderLine } from './context_guard.js';
+import { isValidNANP } from './utils/phone.js';
 
 const BUSINESS_EMAIL_DEFAULTS = [
   'athomesleepstudies@ymail.com',
@@ -192,8 +193,17 @@ export async function runExtraction(ocrPages) {
   logRerankToTrace('dob', dob);
   const phones = detectPhones(fullText, lines);
   if (phones.hit) {
-    result.patient.phones = phones.value.map(p => p.formatted);
-    trace.push({ rule: phones.why, count: phones.value.length });
+    // Filter phones through NANP validation
+    const validPhones = phones.value.filter(p => {
+      const digits = p.formatted.replace(/\D/g, '');
+      if (!isValidNANP(digits)) {
+        trace.push({ rule: 'phone_suspect', value: p.formatted, reason: 'invalid_nanp', context: 'patient' });
+        return false;
+      }
+      return true;
+    });
+    result.patient.phones = validPhones.map(p => p.formatted);
+    trace.push({ rule: phones.why, count: validPhones.length, rejected: phones.value.length - validPhones.length });
   } else if (phones && phones.why) {
     trace.push({ rule: phones.why });
   }
@@ -297,6 +307,17 @@ export async function runExtraction(ocrPages) {
       result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_cpt_multiple']));
       trace.push({ rule: 'cpt_ambiguity', reasons: cpt.ambiguity });
     }
+    // 95811 prior-study evidence flag
+    if (cpt.primary === '95811') {
+      const priorStudyRe = /prior\s+(sleep\s+)?study|previous\s+(sleep\s+)?study|past\s+(sleep\s+)?study|earlier\s+(sleep\s+)?study|baseline\s+study|diagnostic\s+study\s+(completed|done|performed|shows|revealed)|hsat.*completed|home\s+sleep\s+test.*completed/i;
+      if (!priorStudyRe.test(fullText || '')) {
+        result.flags.verifyManually = true;
+        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'document_prior_study_evidence']));
+        trace.push({ rule: '95811_prior_study_evidence_missing' });
+      } else {
+        trace.push({ rule: '95811_prior_study_evidence_found' });
+      }
+    }
   }
 
   // ICD
@@ -367,7 +388,8 @@ export async function runExtraction(ocrPages) {
       if (!value) return null;
       const normalized = value.replace(/[^A-Za-z0-9]/g, '');
       const upper = normalized.toUpperCase();
-      if (upper.length < 4 || !/\d/.test(upper)) return null;
+      // Tighten eligibility: require at least 8 chars AND at least one digit
+      if (upper.length < 8 || !/\d/.test(upper)) return null;
       const entry = memberIdCandidates.get(upper) || { value: upper, score: 0, count: 0, sources: [] };
       entry.score += weight;
       entry.count += 1;
@@ -389,7 +411,8 @@ export async function runExtraction(ocrPages) {
           for (const rx of carrierRegexes) {
             const m = windowText.match(rx);
             if (m) {
-              const registered = registerMemberCandidate(m[1] || m[0], 6, 'insurance_id_carrier_pattern', { scope: 'primary_block', pattern: String(rx) });
+              // Boost carrier-pattern hits by +1.5 to prefer them over generic patterns
+              const registered = registerMemberCandidate(m[1] || m[0], 7.5, 'insurance_id_carrier_pattern', { scope: 'primary_block', pattern: String(rx) });
               if (registered && !primaryBlockUpper) primaryBlockUpper = registered;
               break;
             }
@@ -469,7 +492,8 @@ export async function runExtraction(ocrPages) {
       for (const rx of carrierRegexes) {
         const m = rawText.match(rx);
         if (m) {
-          registerMemberCandidate(m[1] || m[0], 4.5, 'insurance_id_carrier_pattern', { scope: 'global', pattern: String(rx) });
+          // Boost carrier-pattern hits by +1.5 to prefer them over generic patterns
+          registerMemberCandidate(m[1] || m[0], 6, 'insurance_id_carrier_pattern', { scope: 'global', pattern: String(rx) });
           break;
         }
       }
@@ -1297,6 +1321,8 @@ export async function runExtraction(ocrPages) {
     if (!result.provider.practice) {
       // Check for "From Provider" section - facility name is typically the first meaningful line after
       const fromProviderRe = /(?:^|\b)f?rom\s+prov(?:ider|der)\b/i;
+      const boilerplateRe = /(if you have medical|confidential|disclaimer|do\s*not\s*(write|fax)|cover\s*sheet|please\s*fax|information\s*contained|intended\s*recipient)/i;
+      
       for (let i = 0; i < providerLines.length; i++) {
         const line = providerLines[i] || '';
         if (!fromProviderRe.test(line)) continue;
@@ -1305,11 +1331,13 @@ export async function runExtraction(ocrPages) {
           const rawCand = (providerLines[j] || '').trim();
           console.log('[DEBUG] Checking line', j, ':', JSON.stringify(rawCand));
           if (!rawCand) { console.log('[DEBUG] Empty line, skipping'); continue; }
-          // Skip address/phones/zip and obvious non-facility boilerplate
-          if (/^\d+\s+/.test(rawCand)) { console.log('[DEBUG] Starts with number, skipping'); continue; } // address line starting with number
+          
+          // Skip boilerplate/disclaimer/address lines
+          if (boilerplateRe.test(rawCand)) { console.log('[DEBUG] Contains boilerplate, skipping'); continue; }
+          if (/^\d+\s+/.test(rawCand)) { console.log('[DEBUG] Starts with number (address), skipping'); continue; } // address line starting with number
           if (/phone|fax|ordering/i.test(rawCand)) { console.log('[DEBUG] Contains phone/fax/ordering, skipping'); continue; }
           if (/\b\d{5}(?:-\d{4})?\b/.test(rawCand)) { console.log('[DEBUG] Contains zip code, skipping'); continue; } // zip code
-          if (/(confidential|disclaimer|do\s*not\s*write|cover\s*sheet|please\s*fax|do\s*not\s*fax|information\s*contained|intended\s*recipient)/i.test(rawCand)) { console.log('[DEBUG] Contains boilerplate, skipping'); continue; }
+          if (/\d{3}.*\d{3}.*\d{4}/.test(rawCand)) { console.log('[DEBUG] Phone-only line, skipping'); continue; } // phone-only line
           if (isHeaderLine(rawCand)) { console.log('[DEBUG] Is header line, skipping'); continue; }
 
           // Skip label-only lines like "Place of Surgery" or "Place ot Surgery" (OCR typo) - value is on next line
@@ -1322,11 +1350,7 @@ export async function runExtraction(ocrPages) {
           let candidate = rawCand.replace(/^\s*:\s*/, '').trim();
           console.log('[DEBUG] Processing candidate:', JSON.stringify(candidate));
           
-          if (!candidate) continue;
-
-          // Exclude phone-looking entries and check length
-          if (candidate.length <= 2) continue;
-          if (/\d{3}.*\d{3}.*\d{4}/.test(candidate)) continue;
+          if (!candidate || candidate.length < 6) continue;
           
           // Valid candidate found - assign it directly (don't use stripAddressTail for practice names!)
           result.provider.practice = candidate;
@@ -1447,8 +1471,13 @@ export async function runExtraction(ocrPages) {
       }
       if (!chosen && orderedAll.length) chosen = orderedAll[0];
       if (chosen) {
-        result.provider.phone = chosen;
-        trace.push({ rule: 'provider_phone_detect', value: chosen, candidates: orderedAll.length });
+        const digits = chosen.replace(/\D/g, '');
+        if (!isValidNANP(digits)) {
+          trace.push({ rule: 'phone_suspect', value: chosen, reason: 'invalid_nanp' });
+        } else {
+          result.provider.phone = chosen;
+          trace.push({ rule: 'provider_phone_detect', value: chosen, candidates: orderedAll.length });
+        }
       }
     }
     // Post-filter patient phones: remove provider fax if present

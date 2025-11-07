@@ -2,6 +2,7 @@
   {
     "code": "95811",
     "why": "cpt_95811",
+    "description": "In-lab PAP titration / split-night polysomnography",
     "patterns": [
       "\\b95811\\b",
       "titration",
@@ -73,6 +74,7 @@
   {
     "code": "95810",
     "why": "cpt_95810",
+    "description": "In-lab diagnostic polysomnography",
     "patterns": [
       "\\b95810\\b",
       "sleep study",
@@ -201,6 +203,7 @@
   {
     "code": "95806",
     "why": "cpt_95806",
+    "description": "Home sleep apnea test (HSAT)",
     "patterns": [
       "\\b95806\\b",
       "95800",
