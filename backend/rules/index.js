@@ -328,14 +328,35 @@ export async function runExtraction(ocrPages) {
   const icd = detectICDs(fullText, lines);
   if (icd.hit) {
     let values = Array.isArray(icd.values) ? [...icd.values] : [];
-    // If CPT indicates a sleep study, prioritize sleep-related diagnoses first
+    // If CPT indicates a sleep study, prioritize sleep-related diagnoses with clinical hierarchy
     const cptCode = result.procedure?.cpt;
     const sleepStudyCPT = new Set(['95811', '95810', '95806', 'G0399', '95782', '95783', '95805']);
     if (cptCode && sleepStudyCPT.has(String(cptCode))) {
-      const sleepICD = new Set(['G47.33', 'G47.30', 'G47.10', 'G47.00', 'G47.31', 'G47.37', 'R06.83', 'R06.09', 'R53.83', 'G25.81', 'F51.9']);
-      const weighted = values.map((code, idx) => ({ code, idx, w: sleepICD.has(String(code)) ? 0 : 1 }));
+      // Clinical priority tiers (lower number = higher priority)
+      const getWeight = (code) => {
+        const c = String(code);
+        if (c === 'G47.30') return 0;  // Sleep Apnea, Unspecified (safest/broadest)
+        if (c === 'G47.33') return 1;  // Obstructive Sleep Apnea (most common)
+        if (c === 'G47.31') return 2;  // Primary Central Sleep Apnea
+        if (c === 'G47.37') return 3;  // Central SA in Other Conditions (never primary alone)
+        // Other sleep-related codes
+        if (['G47.10', 'G47.00', 'R06.83', 'R06.09', 'R53.83', 'G25.81', 'F51.9'].includes(c)) return 4;
+        return 10;  // Non-sleep codes (HTN, diabetes, etc.)
+      };
+      
+      const weighted = values.map((code, idx) => ({ code, idx, w: getWeight(code) }));
       weighted.sort((a, b) => (a.w - b.w) || (a.idx - b.idx));
       values = weighted.map(x => x.code);
+      
+      // Special case: G47.37 should never be primary if G47.33 is present
+      if (values[0] === 'G47.37' && values.includes('G47.33')) {
+        const idx37 = values.indexOf('G47.37');
+        const idx33 = values.indexOf('G47.33');
+        values[idx37] = 'G47.33';
+        values[idx33] = 'G47.37';
+        trace.push({ rule: 'icd_g4737_demoted_secondary', primary: 'G47.33', secondary: 'G47.37' });
+      }
+      
       trace.push({ rule: 'icd_prioritize_for_cpt', top: values[0] || null, cpt: cptCode });
     }
     result.diagnoses = values;
