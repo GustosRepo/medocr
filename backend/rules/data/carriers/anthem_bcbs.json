@@ -1,0 +1,65 @@
+{
+  "carrier": "Anthem BCBS",
+  "status": "accepted",
+  "synonyms": [
+    "anthem bcbs"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^[A-Z]{3}\\d{9}$",
+        "name": "Standard BCBS Format",
+        "score": 22,
+        "examples": [
+          "ABC123456789"
+        ]
+      },
+      {
+        "pattern": "^[A-Z]{2}\\d{10}$",
+        "name": "Alternate BCBS Format",
+        "score": 18,
+        "examples": [
+          "AB1234567890"
+        ]
+      },
+      {
+        "pattern": "^[A-Z0-9]{11}$",
+        "name": "Alphanumeric 11-char",
+        "score": 15
+      },
+      {
+        "pattern": "^[A-Z]{1}\\d{8}$",
+        "name": "Single letter + 8 digits",
+        "score": 12,
+        "examples": [
+          "W12345678"
+        ]
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": [
+      "header",
+      "footer",
+      "page_identifier"
+    ]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 6,
+      "max": 15
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

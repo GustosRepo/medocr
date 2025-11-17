@@ -1,0 +1,13 @@
+{
+  "category": "Oximetry",
+  "codes": [
+    {
+      "code": "94762",
+      "name": "Noninvasive ear or pulse oximetry for oxygen saturation; by continuous overnight monitoring",
+      "type": "diagnostic",
+      "priority": 12,
+      "keywords": ["oximetry", "oxygen saturation", "pulse ox", "overnight monitoring", "spo2"],
+      "relatedIcd": ["G47.33", "G47.30", "R06.83"]
+    }
+  ]
+}

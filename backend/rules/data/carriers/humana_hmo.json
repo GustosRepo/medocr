@@ -1,0 +1,49 @@
+{
+  "carrier": "Humana HMO",
+  "status": "accepted",
+  "synonyms": [
+    "humana hmo"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^H\\d{8,9}$",
+        "name": "H-prefix format",
+        "score": 22,
+        "examples": [
+          "H12345678"
+        ]
+      },
+      {
+        "pattern": "^\\d{9,11}$",
+        "name": "Pure numeric",
+        "score": 15
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": [
+      "header",
+      "footer",
+      "page_identifier"
+    ]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 6,
+      "max": 15
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

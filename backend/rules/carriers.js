@@ -60,8 +60,18 @@ function daysUntil(dateStr) {
 export function detectCarrier(fullText, lines) {
   const carrierSyn = getCarrierSynonyms();
   const policies = getPolicies();
+  console.log('[DEBUG carriers.js] carrierSyn count:', carrierSyn.length);
+  console.log('[DEBUG carriers.js] Medicare entry:', carrierSyn.find(c => c.name === 'Medicare'));
+  const lineTexts = Array.isArray(lines)
+    ? lines.map(entry => {
+        if (entry == null) return '';
+        if (typeof entry === 'string') return String(entry);
+        return String(entry?.text || '');
+      })
+    : [];
 
   const U = norm(fullText);
+  console.log('[DEBUG carriers.js] fullText sample:', U.substring(0, 200));
   const actions = new Set();
   const notes = [];
   const meta = {};
@@ -115,13 +125,17 @@ export function detectCarrier(fullText, lines) {
     let status = applyPolicyDecorations(c.name, c.status);
     return { hit: true, value: { carrier: c.name, status }, why: 'carrier_detect', actions: Array.from(actions), notes, meta };
   }
-  const labeled = lines.find(l => /(insurance|plan|payer)\s*[:\-]/i.test(l));
-  if (labeled) {
-    for (const c of carrierSyn) {
-      for (const re of c.reList) {
-        if (re.test(labeled)) {
-          let status = applyPolicyDecorations(c.name, c.status);
-          return { hit: true, value: { carrier: c.name, status }, why: 'carrier_detect', actions: Array.from(actions), notes, meta };
+  const labeledIdx = lineTexts.findIndex(line => /(insurance|plan|payer)/i.test(line));
+  if (labeledIdx !== -1) {
+    // Check the labeled line AND the next 3 lines (carrier info often follows label)
+    for (let offset = 0; offset <= 3 && labeledIdx + offset < lineTexts.length; offset++) {
+      const checkLine = lineTexts[labeledIdx + offset];
+      for (const c of carrierSyn) {
+        for (const re of c.reList) {
+          if (re.test(checkLine)) {
+            let status = applyPolicyDecorations(c.name, c.status);
+            return { hit: true, value: { carrier: c.name, status }, why: 'carrier_detect', actions: Array.from(actions), notes, meta };
+          }
         }
       }
     }

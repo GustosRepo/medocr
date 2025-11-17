@@ -82,39 +82,41 @@ function applyCorrectionsPostprocess(mappedResult, trace = [], context = {}) {
       }
     }
 
-    // Provider name (exact, fuzzy, from practice)
-    if (mappedResult.provider?.name) {
-      let provName = mappedResult.provider.name;
-      const exact = applyFieldCorrection('provider', provName, correctionsDB);
-      if (exact !== provName) {
-        trace.push({ rule: 'learned_correction_provider_postprocess', from: provName, to: exact });
-        provName = exact;
-      } else {
-        try {
-          const fuzzy = correctionsDB.fuzzyMatch('provider', provName, 0.84);
-          if (fuzzy && fuzzy.text && fuzzy.text !== provName) {
-            trace.push({ rule: 'learned_correction_provider_fuzzy_postprocess', from: provName, to: fuzzy.text, similarity: fuzzy.similarity });
-            provName = fuzzy.text;
-          }
-        } catch {}
-        if (mappedResult.provider?.practice) {
-          try {
-            const byPractice = correctionsDB.getCorrection('provider', mappedResult.provider.practice);
-            if (byPractice && byPractice.text && byPractice.text !== provName) {
-              trace.push({ rule: 'learned_correction_provider_from_practice_postprocess', from: provName, to: byPractice.text });
-              provName = byPractice.text;
-            } else {
-              const fuzzyByPractice = correctionsDB.fuzzyMatch('provider', mappedResult.provider.practice, 0.84);
-              if (fuzzyByPractice && fuzzyByPractice.text && fuzzyByPractice.text !== provName) {
-                trace.push({ rule: 'learned_correction_provider_from_practice_fuzzy_postprocess', from: provName, to: fuzzyByPractice.text, similarity: fuzzyByPractice.similarity });
-                provName = fuzzyByPractice.text;
-              }
-            }
-          } catch {}
-        }
-      }
-      mappedResult.provider.name = provName;
-    }
+    // Provider name - DISABLED to test raw OCR extraction
+    // if (mappedResult.provider?.name) {
+    //   let provName = mappedResult.provider.name;
+    //   const exact = applyFieldCorrection('provider', provName, correctionsDB);
+    //   if (exact !== provName) {
+    //     trace.push({ rule: 'learned_correction_provider_postprocess', from: provName, to: exact });
+    //     provName = exact;
+    //   }
+    //   // DISABLED: Fuzzy matching and practice-based inference too risky with thousands of unique providers
+    //   // else {
+    //   //   try {
+    //   //     const fuzzy = correctionsDB.fuzzyMatch('provider', provName, 0.84);
+    //   //     if (fuzzy && fuzzy.text && fuzzy.text !== provName) {
+    //   //       trace.push({ rule: 'learned_correction_provider_fuzzy_postprocess', from: provName, to: fuzzy.text, similarity: fuzzy.similarity });
+    //   //       provName = fuzzy.text;
+    //   //     }
+    //   //   } catch {}
+    //   //   if (mappedResult.provider?.practice) {
+    //   //     try {
+    //   //       const byPractice = correctionsDB.getCorrection('provider', mappedResult.provider.practice);
+    //   //       if (byPractice && byPractice.text && byPractice.text !== provName) {
+    //   //         trace.push({ rule: 'learned_correction_provider_from_practice_postprocess', from: provName, to: byPractice.text });
+    //   //         provName = byPractice.text;
+    //   //       } else {
+    //   //         const fuzzyByPractice = correctionsDB.fuzzyMatch('provider', mappedResult.provider.practice, 0.84);
+    //   //         if (fuzzyByPractice && fuzzyByPractice.text && fuzzyByPractice.text !== provName) {
+    //   //           trace.push({ rule: 'learned_correction_provider_from_practice_fuzzy_postprocess', from: provName, to: fuzzyByPractice.text, similarity: fuzzyByPractice.similarity });
+    //   //           provName = fuzzyByPractice.text;
+    //   //         }
+    //   //       }
+    //   //     } catch {}
+    //   //   }
+    //   // }
+    //   mappedResult.provider.name = provName;
+    // }
 
     // Practice name
     if (mappedResult.provider?.practice) {
@@ -143,8 +145,9 @@ function applyCorrectionsPostprocess(mappedResult, trace = [], context = {}) {
       }
     }
 
+    // DISABLED: Do NOT auto-fill phone/fax from learned corrections - thousands of unique providers
     // Fallback: learned phone by provider/practice if phone missing
-    if (!mappedResult.provider?.phone) {
+    if (false && !mappedResult.provider?.phone) {
       const provName = mappedResult.provider?.name || null;
       const practice = mappedResult.provider?.practice || null;
       let learnedPhone = null;

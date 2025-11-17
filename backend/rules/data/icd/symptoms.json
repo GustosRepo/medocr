@@ -1,0 +1,26 @@
+{
+  "category": "Signs and Symptoms",
+  "codes": [
+    {
+      "code": "R06.83",
+      "name": "Snoring",
+      "priority": 40,
+      "canBePrimary": false,
+      "keywords": ["snoring", "loud breathing", "noisy breathing", "snore"],
+      "relatedCpt": ["95806", "95810", "G0399"],
+      "chronic": false,
+      "severity": "mild",
+      "notes": "Common symptom of sleep apnea, usually secondary"
+    },
+    {
+      "code": "R53.83",
+      "name": "Other fatigue",
+      "priority": 35,
+      "canBePrimary": false,
+      "keywords": ["fatigue", "tiredness", "exhaustion", "low energy", "tired"],
+      "chronic": false,
+      "severity": "mild",
+      "notes": "May indicate sleep disorder, usually secondary"
+    }
+  ]
+}

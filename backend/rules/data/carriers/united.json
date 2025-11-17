@@ -1,0 +1,57 @@
+{
+  "carrier": "UnitedHealthcare",
+  "status": "accepted",
+  "synonyms": [
+    "united",
+    "uhc",
+    "united healthcare",
+    "unitedhealthcare",
+    "united health",
+    "optum"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^\\d{9}$",
+        "name": "Standard UHC 9-digit",
+        "score": 20,
+        "examples": ["123456789"],
+        "description": "9 digits"
+      },
+      {
+        "pattern": "^[A-Z]{1}\\d{8}$",
+        "name": "Letter + 8 digits",
+        "score": 18,
+        "examples": ["W12345678"],
+        "description": "Single letter followed by 8 digits"
+      },
+      {
+        "pattern": "^[A-Z0-9]{9,11}$",
+        "name": "Alphanumeric variant",
+        "score": 12,
+        "examples": ["ABC123456"]
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "id number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": ["header", "footer", "page_identifier"]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 9,
+      "max": 11
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

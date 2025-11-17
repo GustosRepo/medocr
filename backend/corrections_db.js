@@ -249,6 +249,65 @@ class CorrectionsDB {
   }
 
   /**
+   * Get detailed correction stats for gating logic
+   * @param {string} type
+   * @param {string} ocrText
+   * @returns {object|null} - { text, confidence, totalCount, topCount, source }
+   */
+  getCorrectionDetail(type, ocrText) {
+    if (!ocrText) return null;
+
+    // HIPAA COMPLIANCE: Block patient data
+    if (type === 'patient' || type === 'memberId' || type === 'patientName' || type === 'dob') {
+      return null;
+    }
+
+    const fieldMap = {
+      'provider': 'providerNames',
+      'npi': 'npi',
+      'phone': 'phone',
+      'fax': 'fax',
+      'carrier': 'carrier',
+      'cpt': 'cpt',
+      'icd': 'icd',
+      'facility': 'facilities',
+      // Tier 1-3 types
+      'procedureDescription': 'procedureDescription',
+      'practiceName': 'practiceName',
+      'referringProvider': 'referringProvider',
+      'referringNpi': 'referringNpi',
+      'referringPhone': 'referringPhone',
+      'referringFax': 'referringFax',
+      'diagnosisDescription': 'diagnosisDescription',
+      'providerNotes': 'providerNotes',
+      'safetyCategory': 'safetyCategory',
+      'accommodationType': 'accommodationType',
+      'supervisingProvider': 'supervisingProvider',
+      'supervisingNpi': 'supervisingNpi',
+      'planType': 'planType',
+      'studyType': 'studyType'
+    };
+
+    const field = fieldMap[type];
+    if (!field || !this.corrections[field]) return null;
+
+    const key = this.normalizeKey(ocrText);
+    const entry = this.corrections[field][key];
+    if (!entry || !entry.corrections.length) return null;
+
+    const best = entry.corrections.reduce((a, b) => a.count > b.count ? a : b);
+    const topCount = best.count || 0;
+    const totalCount = entry.count || topCount;
+    return {
+      text: best.text,
+      confidence: entry.confidence,
+      totalCount,
+      topCount,
+      source: 'user_corrections'
+    };
+  }
+
+  /**
    * Fuzzy match OCR text against corrections database
    * @param {string} type - Correction type: 'provider', 'npi', 'phone', 'fax', 'carrier', 'cpt', 'icd', 'facility',
    *                        and all Tier 1-3 types

@@ -1,0 +1,33 @@
+{
+  "category": "Home Sleep Test",
+  "codes": [
+    {
+      "code": "95806",
+      "name": "Sleep study, unattended, Type III portable monitor",
+      "type": "diagnostic",
+      "priority": 18,
+      "keywords": ["home sleep test", "hst", "unattended", "portable", "type 3", "type iii"],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "Type III portable monitor - 4 channels minimum",
+      "contraindicatedBy": ["J44.9", "I50.9"]
+    },
+    {
+      "code": "G0399",
+      "name": "Home sleep study test with type II portable monitor",
+      "type": "diagnostic",
+      "priority": 16,
+      "keywords": ["home sleep test", "hst", "type 2", "type ii", "portable monitor"],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "Type II portable monitor - 7 channels minimum, more comprehensive than Type III"
+    },
+    {
+      "code": "G0400",
+      "name": "Home sleep test with type III portable monitor",
+      "type": "diagnostic",
+      "priority": 14,
+      "keywords": ["home sleep test", "hst", "type 3", "type iii", "portable"],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "Type III portable monitor, similar to 95806"
+    }
+  ]
+}

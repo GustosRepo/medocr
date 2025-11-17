@@ -1,0 +1,13 @@
+{
+  "category": "PAP Management",
+  "codes": [
+    {
+      "code": "94660",
+      "name": "Continuous positive airway pressure ventilation (CPAP), initiation and management",
+      "type": "therapeutic",
+      "priority": 15,
+      "keywords": ["cpap", "continuous positive", "pap management", "initiation"],
+      "relatedIcd": ["G47.33", "G47.30"]
+    }
+  ]
+}

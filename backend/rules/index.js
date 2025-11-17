@@ -12,6 +12,16 @@ import npiService from '../npi_service.js';
 import { applyOcrCorrections, applyFieldCorrection } from './utils/ocrCorrector.js';
 import { isFaxLike, isLikelyProviderLine, isHeaderLine } from './context_guard.js';
 import { isValidNANP } from './utils/phone.js';
+import ruleEngine from './utils/ruleEngine.js';
+import { 
+  normalizeHistoryNotes, 
+  hasHistoryOfFalls, 
+  hasOpioidMed, 
+  hasOxygenOrCaretaker,
+  isPediatricDescription,
+  hasPriorStudyEvidence,
+  hasCpapTitrationContext
+} from './utils/clinicalNormalization.js';
 
 const BUSINESS_EMAIL_DEFAULTS = [
   'athomesleepstudies@ymail.com',
@@ -28,6 +38,23 @@ function getPatternOverrides() {
 
 function getCarrierIdPatterns() {
   return loadJsonConfig('carrier_id_patterns.json', { defaultFactory: () => ({}) }) || {};
+}
+
+function getCptCatalog() {
+  return loadJsonConfig('cpt_catalog.json', { 
+    defaultFactory: () => ([]),
+    transform: (arr) => {
+      const map = {};
+      if (Array.isArray(arr)) {
+        arr.forEach(entry => {
+          if (entry.code) {
+            map[entry.code] = { description: entry.description || null, why: entry.why };
+          }
+        });
+      }
+      return map;
+    }
+  }) || {};
 }
 
 function buildBusinessEmailBlock(overrides) {
@@ -98,6 +125,309 @@ function buildProviderCredentialRegexes(overrides) {
       }
     })
     .filter(Boolean);
+}
+
+// ==================== INTELLIGENT MEMBER ID DETECTION ====================
+
+/**
+ * Detects section type based on Y position and nearby text
+ */
+function detectSection(pages, pageIndex, yPosition) {
+  if (!pages || !pages[pageIndex]) return 'unknown';
+  
+  const page = pages[pageIndex];
+  const pageHeight = 3300; // Typical OCR page height
+  const relativeY = yPosition / pageHeight;
+
+  // Header/footer detection based on position
+  if (relativeY < 0.1) return 'header';
+  if (relativeY > 0.9) return 'footer';
+
+  // Check nearby text for section indicators
+  const nearbyText = (page.text || '').toLowerCase();
+  
+  if (/insurance|coverage|payer|policy|plan|carrier/i.test(nearbyText)) {
+    return 'insurance_section';
+  }
+  if (/patient|demographics|personal\s+info/i.test(nearbyText)) {
+    return 'patient_demographics';
+  }
+  if (/page\s+\d+|^\d+\s+of\s+\d+|pags\s+\d+/i.test(nearbyText)) {
+    return 'page_identifier';
+  }
+
+  return 'body';
+}
+
+/**
+ * Scores how well a member ID matches the detected carrier's typical format
+ */
+function scoreCarrierMatch(memberId, carrierName) {
+  if (!carrierName || !memberId) return 0;
+
+  const carrier = carrierName.toLowerCase();
+  const id = String(memberId).toUpperCase();
+
+  // Medicare patterns - new MBI format or legacy
+  if (carrier.includes('medicare')) {
+    // New MBI: 1 letter, 1 digit, 1 letter, 1 digit, 1 letter, 4 digits
+    if (/^[A-Z]\d[A-Z]\d[A-Z]\d{4}$/i.test(id)) return 20;
+    // Variations: 2-3 letters, 2-4 digits, 2-4 alphanumeric
+    if (/^[A-Z]{2,3}\d{2,4}[A-Z0-9]{2,4}$/i.test(id)) return 15;
+    // All numeric (legacy) - less common now
+    if (/^\d{10,11}$/.test(id)) return 5;
+    // Medicare unlikely to be very long alphanumeric
+    if (id.length > 15) return -10;
+  }
+
+  // Medicaid patterns - vary by state
+  if (carrier.includes('medicaid')) {
+    // Common: 8-12 digits
+    if (/^\d{8,12}$/.test(id)) return 15;
+    // State prefix + digits
+    if (/^[A-Z]{2}\d{6,10}$/i.test(id)) return 15;
+    // Alphanumeric
+    if (/^[A-Z0-9]{8,12}$/i.test(id)) return 10;
+  }
+
+  // Blue Cross Blue Shield patterns
+  if (carrier.includes('blue cross') || carrier.includes('bcbs') || carrier.includes('anthem')) {
+    // Common: 3 letters + 9 digits
+    if (/^[A-Z]{3}\d{9}$/i.test(id)) return 18;
+    // 2 letters + 10 digits
+    if (/^[A-Z]{2}\d{10}$/i.test(id)) return 15;
+    // Pure alphanumeric 11 chars
+    if (/^[A-Z0-9]{11}$/i.test(id)) return 12;
+  }
+
+  // UnitedHealthcare patterns
+  if (carrier.includes('united') || carrier.includes('uhc')) {
+    // Common: 9 digits
+    if (/^\d{9}$/.test(id)) return 18;
+    // Or starts with letter
+    if (/^[A-Z]\d{8}$/i.test(id)) return 15;
+  }
+
+  // Aetna patterns
+  if (carrier.includes('aetna')) {
+    // Letter + 8 digits
+    if (/^[A-Z]\d{8}$/i.test(id)) return 18;
+    // Or W + 9 digits
+    if (/^W\d{9}$/i.test(id)) return 20;
+  }
+
+  // Cigna patterns
+  if (carrier.includes('cigna')) {
+    // Typically alphanumeric
+    if (/^[A-Z0-9]{8,11}$/i.test(id)) return 15;
+  }
+
+  // Humana patterns
+  if (carrier.includes('humana')) {
+    // Often starts with H
+    if (/^H\d{8,9}$/i.test(id)) return 18;
+    // Or pure numeric
+    if (/^\d{9,11}$/.test(id)) return 12;
+  }
+
+  return 0;
+}
+
+/**
+ * Scores the quality of the label used to identify the member ID
+ */
+function scoreLabelQuality(labelText) {
+  if (!labelText) return 0;
+  
+  const label = labelText.toLowerCase().trim();
+  
+  // Perfect matches
+  if (label === 'insurance id' || label === 'member id') return 25;
+  if (label === 'policy number' || label === 'member number') return 23;
+  if (label === 'id number' || label === 'subscriber id') return 20;
+  if (label === 'insurance number') return 20;
+  
+  // Good partial matches
+  if (label.includes('insurance') && label.includes('id')) return 18;
+  if (label.includes('member') && label.includes('id')) return 18;
+  if (label.includes('policy') && label.includes('number')) return 15;
+  if (label.includes('subscriber')) return 15;
+  
+  // Decent matches
+  if (label.includes('member')) return 12;
+  if (label.includes('policy')) return 10;
+  if (label.includes('insurance')) return 8;
+  
+  // Generic
+  if (label === 'id' || label === 'number') return 5;
+  
+  return 0;
+}
+
+/**
+ * Checks if a value is likely NOT a member ID (filters out dates, phones, etc)
+ */
+function isLikelyNotMemberId(value) {
+  if (!value) return true;
+  
+  const str = String(value);
+  
+  // Too short or too long
+  if (str.length < 6 || str.length > 20) return true;
+  
+  // Looks like a date
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return true;
+  if (/^\d{8}$/.test(str) && /^(19|20)\d{6}$/.test(str)) return true; // YYYYMMDD
+  
+  // Looks like a phone number
+  if (/^\d{10}$/.test(str)) return true; // Could be phone
+  if (/^\(\d{3}\)\s*\d{3}-?\d{4}$/.test(str)) return true;
+  
+  // Looks like a ZIP code
+  if (/^\d{5}(-\d{4})?$/.test(str)) return true;
+  
+  // Looks like an SSN
+  if (/^\d{3}-\d{2}-\d{4}$/.test(str)) return true;
+  if (/^\d{9}$/.test(str)) return true; // Could be SSN without dashes
+  
+  // Looks like a fax/document header ID
+  if (/^17027102839$/.test(str)) return true; // Known header ID pattern
+  
+  return false;
+}
+
+/**
+ * Calculates proximity score based on how close an ID is to insurance keywords
+ */
+function calculateProximityScore(fullText, candidateIndex, keywords = ['insurance', 'member', 'policy', 'carrier', 'payer']) {
+  if (candidateIndex === undefined || candidateIndex === null) return 0;
+  
+  let bestScore = 0;
+  const lowerText = fullText.toLowerCase();
+  
+  for (const keyword of keywords) {
+    let idx = lowerText.indexOf(keyword);
+    while (idx !== -1) {
+      const distance = Math.abs(candidateIndex - idx);
+      // Score decreases with distance: 20 points for 0-50 chars, 15 for 50-150, 10 for 150-300, 5 for 300-500
+      let score = 0;
+      if (distance < 50) score = 20;
+      else if (distance < 150) score = 15;
+      else if (distance < 300) score = 10;
+      else if (distance < 500) score = 5;
+      
+      if (score > bestScore) bestScore = score;
+      
+      idx = lowerText.indexOf(keyword, idx + 1);
+    }
+  }
+  
+  return bestScore;
+}
+
+/**
+ * Main scoring function for member ID candidates
+ * Uses RuleEngine for carrier-specific pattern matching + fallback logic
+ */
+function scoreIntelligentMemberIdCandidate(candidate, carrierName, pages) {
+  let score = 0;
+  const reasons = [];
+
+  // 1. Source type scoring (most important factor)
+  const sourceScores = {
+    'insurance_member_labeled_id': 50,           // Labeled as "INSURANCE ID"
+    'insurance_member_labeled_primary': 45,      // Labeled as "MEMBER ID"
+    'insurance_id_carrier_pattern': 40,          // Matches carrier-specific pattern
+    'insurance_id_primary_window': 35,           // Found in insurance section window
+    'insurance_member_labeled_fallback': 30,     // Labeled as "SUBSCRIBER ID" etc
+    'insurance_id_proximity_fallback': 15        // Generic pattern near insurance keywords
+  };
+  
+  const sourceScore = candidate.sources?.[0]?.rule ? (sourceScores[candidate.sources[0].rule] || 10) : 10;
+  score += sourceScore;
+  reasons.push(`source:${candidate.sources?.[0]?.rule || 'unknown'}(+${sourceScore})`);
+
+  // 2. Section type scoring
+  const sectionType = candidate.sectionType || 'unknown';
+  const sectionScores = {
+    'insurance_section': 25,
+    'body': 10,
+    'patient_demographics': 5,
+    'header': -15,
+    'footer': -20,
+    'page_identifier': -30
+  };
+  const sectionScore = sectionScores[sectionType] || 0;
+  if (sectionScore !== 0) {
+    score += sectionScore;
+    reasons.push(`section:${sectionType}(${sectionScore >= 0 ? '+' : ''}${sectionScore})`);
+  }
+
+  // 3. **NEW: Use RuleEngine for carrier-specific scoring**
+  if (carrierName) {
+    const ruleScore = ruleEngine.scoreCandidate(
+      {
+        value: candidate.value,
+        label: candidate.sources?.[0]?.meta?.label,
+        sectionType: sectionType
+      },
+      carrierName
+    );
+    
+    if (ruleScore.score > 0) {
+      score += ruleScore.score;
+      reasons.push(...ruleScore.reasons);
+      
+      if (ruleScore.matchedPattern) {
+        reasons.push(`matched_pattern:${ruleScore.matchedPattern}`);
+      }
+    }
+  } else {
+    // Fallback: use hardcoded carrier matching if no carrier detected yet
+    const carrierScore = scoreCarrierMatch(candidate.value, carrierName);
+    if (carrierScore !== 0) {
+      score += carrierScore;
+      reasons.push(`carrier_match_fallback(${carrierScore >= 0 ? '+' : ''}${carrierScore})`);
+    }
+  }
+
+  // 4. Proximity scoring
+  if (candidate.sources?.[0]?.meta?.proximityScore !== undefined) {
+    const proxScore = Math.min(candidate.sources[0].meta.proximityScore / 50, 15); // Max 15 points
+    score += proxScore;
+    reasons.push(`proximity(+${proxScore.toFixed(1)})`);
+  }
+
+  // 5. Format validation penalty
+  if (isLikelyNotMemberId(candidate.value)) {
+    score -= 40;
+    reasons.push(`invalid_format(-40)`);
+  }
+
+  // 6. Alphanumeric bonus (most insurance IDs have letters and numbers)
+  if (/[A-Z]/.test(candidate.value) && /\d/.test(candidate.value)) {
+    score += 8;
+    reasons.push(`alphanumeric(+8)`);
+  }
+
+  // 7. Length preference (8-12 is most common)
+  const len = String(candidate.value).length;
+  if (len >= 8 && len <= 12) {
+    score += 5;
+    reasons.push(`optimal_length(+5)`);
+  } else if (len >= 13 && len <= 15) {
+    score += 2;
+    reasons.push(`acceptable_length(+2)`);
+  }
+
+  // 8. Duplicate occurrence penalty (if value appears many times, likely not unique ID)
+  if (candidate.count && candidate.count > 3) {
+    const penalty = (candidate.count - 3) * 3;
+    score -= penalty;
+    reasons.push(`duplicate_penalty(-${penalty})`);
+  }
+
+  return { score, reasons };
 }
 
 const DEV = process.env.NODE_ENV !== 'production';
@@ -321,6 +651,24 @@ export async function runExtraction(ocrPages) {
       } else {
         trace.push({ rule: '95811_prior_study_evidence_found', hasPriorStudy, hasSleepDx });
       }
+      
+      // NEW SAFETY FLAG: Titration requires clinical review
+      // If CPT 95811 AND prior study evidence found BUT no CPAP failure/intolerance documentation
+      const allCpts = Array.isArray(cpt.candidates) ? cpt.candidates.map(c => c.code) : [];
+      const priorStudy = hasPriorStudyEvidence(fullText || '', allCpts);
+      const hasCpapContext = hasCpapTitrationContext(fullText || '');
+      
+      if (priorStudy.found && !hasCpapContext) {
+        result.flags.verifyManually = true;
+        result.flags.reasons.push('titration_requires_clinical_review');
+        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_titration_justification']));
+        trace.push({
+          rule: 'titration_requires_clinical_review',
+          priorStudyCpts: priorStudy.cpts,
+          priorStudyKeywords: priorStudy.keywords,
+          missingJustification: 'no_cpap_failure_or_intolerance_documented'
+        });
+      }
     }
   }
 
@@ -369,7 +717,9 @@ export async function runExtraction(ocrPages) {
         const { code, description, chronic = null, severity = null, note = null } = det;
         result.clinical.primaryDiagnosis = { code, description, chronic, severity, note };
       }
-      result.clinical.diagnosesDetailed = icd.details;
+      // Re-order diagnosesDetailed to match the ranked values array
+      const detailsMap = new Map(icd.details.map(d => [d.code, d]));
+      result.clinical.diagnosesDetailed = values.map(code => detailsMap.get(code)).filter(Boolean);
     }
     if (Array.isArray(icd.actions) && icd.actions.length) {
       result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), ...icd.actions]));
@@ -379,6 +729,10 @@ export async function runExtraction(ocrPages) {
 
   // Carrier
   const car = detectCarrier(fullText, lines);
+  // Always trace carrier detection result
+  if (!car.hit) {
+    trace.push({ rule: car.why || 'carrier_detection_failed', linesProvided: Array.isArray(lines) ? lines.length : 'not_array', fullTextLength: (fullText || '').length });
+  }
   if (car.hit) {
     const insObj = { carrier: car.value.carrier, status: car.value.status };
     // Member / Group IDs (prefer explicit member labels and IDs containing digits)
@@ -404,7 +758,14 @@ export async function runExtraction(ocrPages) {
     const carrierRegexes = carrierPatterns.map(p => {
       try { return new RegExp(p, 'im'); } catch { return null; }
     }).filter(Boolean);
-    const linesLower = (lines || []).map(l => String(l || '').toLowerCase());
+    const structuredLineTexts = Array.isArray(lines)
+      ? lines.map(entry => {
+          if (entry == null) return '';
+          if (typeof entry === 'string') return String(entry || '');
+          return String(entry?.text || '');
+        })
+      : [];
+    const linesLower = structuredLineTexts.map(l => l.toLowerCase());
 
     const memberIdCandidates = new Map();
     const memberIdTraceEvents = [];
@@ -430,8 +791,8 @@ export async function runExtraction(ocrPages) {
       if (anchorIdx === -1) anchorIdx = linesLower.findIndex(l => /aetna\b|anthem\b|cigna\b|humana\b|united\b|medicare\b|medicaid\b/.test(l));
       if (anchorIdx !== -1) {
         const windowStart = Math.max(0, anchorIdx);
-        const windowEnd = Math.min(lines.length, anchorIdx + 8);
-        const windowText = lines.slice(windowStart, windowEnd).join('\n');
+        const windowEnd = Math.min(structuredLineTexts.length, anchorIdx + 8);
+        const windowText = structuredLineTexts.slice(windowStart, windowEnd).join('\n');
         if (carrierRegexes.length) {
           for (const rx of carrierRegexes) {
             const m = windowText.match(rx);
@@ -453,9 +814,9 @@ export async function runExtraction(ocrPages) {
       }
     } catch {}
 
-    const MEMBER_PRIMARY_RE = /\bmember\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
-    const MEMBER_FALLBACK_RE = /\b(?:subscriber|insured|policy(?!\s*holder))\s*(?:id|#|number)\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
-    const INSURANCE_ID_LABEL_RE = /\bins(?:urance)?\s*(?:no\.?|#|id|number)?\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const MEMBER_PRIMARY_RE = /\b(member\s*(?:id|#|number)?)\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const MEMBER_FALLBACK_RE = /\b((?:subscriber|insured|policy(?!\s*holder))\s*(?:id|#|number))\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
+    const INSURANCE_ID_LABEL_RE = /\b(ins(?:urance)?\s*(?:no\.?|#|id|number)?)\s*[:#-]?\s*([A-Z0-9]{3,})\b/ig;
     const GROUP_RE = /\bgroup\s*(?:id|#|number)?\s*[:#-]?\s*([A-Z0-9]{2,})\b/ig;
     const pickBestId = matches => {
       for (const match of matches) {
@@ -465,17 +826,17 @@ export async function runExtraction(ocrPages) {
     };
 
     for (const match of rawText.matchAll(MEMBER_PRIMARY_RE)) {
-      registerMemberCandidate(match[1], 4.5, 'insurance_member_labeled_primary', { index: match.index });
+      registerMemberCandidate(match[2], 4.5, 'insurance_member_labeled_primary', { index: match.index, label: match[1] });
     }
     for (const match of rawText.matchAll(MEMBER_FALLBACK_RE)) {
-      registerMemberCandidate(match[1], 3.5, 'insurance_member_labeled_fallback', { index: match.index });
+      registerMemberCandidate(match[2], 3.5, 'insurance_member_labeled_fallback', { index: match.index, label: match[1] });
     }
 
     let labeledPickUpper = null;
     const labeledIdCandidates = [...rawText.matchAll(INSURANCE_ID_LABEL_RE)];
     if (labeledIdCandidates.length) {
       for (const match of labeledIdCandidates) {
-        const registered = registerMemberCandidate(match[1], 4, 'insurance_member_labeled_id', { index: match.index });
+        const registered = registerMemberCandidate(match[2], 8, 'insurance_member_labeled_id', { index: match.index, label: match[1] });
         if (!labeledPickUpper && registered) labeledPickUpper = registered;
       }
     }
@@ -728,10 +1089,24 @@ export async function runExtraction(ocrPages) {
     }
     mergeEvents.forEach(ev => trace.push(ev));
 
+    // Use intelligent scoring system that considers context, carrier patterns, and section detection
     const rankedMemberCandidates = Array.from(memberIdCandidates.values()).map(candidate => {
-      const alnumBoost = /[A-Z]/.test(candidate.value) ? 0.7 : 0;
-      const lengthBoost = candidate.value.length >= 8 ? 0.3 : 0;
-      return { ...candidate, compositeScore: candidate.score + alnumBoost + lengthBoost };
+      // Determine section type if we have page info
+      const sectionType = 'unknown'; // Would need page coordinates to detect accurately
+      const candidateWithSection = { ...candidate, sectionType };
+      
+      // Apply intelligent scoring
+      const { score: intelligentScore, reasons } = scoreIntelligentMemberIdCandidate(
+        candidateWithSection, 
+        car?.value?.carrier || null,
+        ocrPages
+      );
+      
+      return { 
+        ...candidate, 
+        compositeScore: intelligentScore,
+        scoreReasons: reasons
+      };
     }).sort((a, b) => {
       if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
       if (b.count !== a.count) return b.count - a.count;
@@ -742,7 +1117,18 @@ export async function runExtraction(ocrPages) {
     const bestMemberCandidate = rankedMemberCandidates[0];
     if (bestMemberCandidate) {
       insObj.memberId = bestMemberCandidate.value;
-      trace.push({ rule: 'insurance_id_select_best', value: bestMemberCandidate.value, score: Number(bestMemberCandidate.compositeScore.toFixed(2)), sources: bestMemberCandidate.sources.map(s => s.rule) });
+      trace.push({ 
+        rule: 'insurance_id_intelligent_select', 
+        value: bestMemberCandidate.value, 
+        score: Number(bestMemberCandidate.compositeScore.toFixed(2)), 
+        sources: bestMemberCandidate.sources.map(s => s.rule),
+        scoreBreakdown: bestMemberCandidate.scoreReasons,
+        allCandidates: rankedMemberCandidates.slice(0, 5).map(c => ({
+          value: c.value,
+          score: Number(c.compositeScore.toFixed(2)),
+          source: c.sources?.[0]?.rule || 'unknown'
+        }))
+      });
       if (primaryBlockUpper && bestMemberCandidate.value === primaryBlockUpper) {
         trace.push({ rule: 'insurance_id_primary_block', value: bestMemberCandidate.value });
       }
@@ -1336,9 +1722,33 @@ export async function runExtraction(ocrPages) {
       }
     }
     if (!result.provider.name) {
+      const credentialRe = /\b(MD|DO|NP|FNP|FNP-C|FNP-BC|NP-C|PA-C|APRN|ANP|DC|PhD|RN)\b/i;
       const specialtyRe = /(family\s+practice|primary\s+care|pulm|pulmon|sleep|cardio|obgyn|clinic|wellness|internal\s+medicine|pediatrics|neurology|fnp|fnp-c|np\b|aprn|md\b|do\b)/i;
       let fallback = null;
+      
+      // First pass: check for name WITH credentials on the same line
+      const disclaimerRe = /\b(do\s+not|if\s+you|this\s+(fax|message|communication)|confidential|intended\s+recipient|addressee|please\s+contact|disclaimer)\b/i;
+      
       for (let i = 0; i < providerLines.length; i++) {
+        const line = providerLines[i] || '';
+        if (!credentialRe.test(line)) continue;
+        if (disclaimerRe.test(line)) continue; // Skip disclaimer lines
+        
+        // Extract name before credentials: "James Lentini APRN, FNP-C, FNP-BC" → "James Lentini"
+        const nameMatch = line.match(/\b([A-Z][a-zA-Z''\-]+(?:\s+[A-Z][a-zA-Z''\-]+){1,3})\s*,?\s*(MD|DO|NP|FNP|PA-C|APRN|ANP|DC|PhD|RN|FNP-C|FNP-BC|NP-C)/i);
+        if (nameMatch) {
+          const raw = nameMatch[1].replace(/\s+/g, ' ').trim();
+          const norm = normalizeName(raw);
+          if (norm && !patientNameVariants.has(norm)) {
+            fallback = raw;
+            break;
+          }
+        }
+      }
+      
+      // Second pass: original logic - look backward from specialty lines
+      if (!fallback) {
+        for (let i = 0; i < providerLines.length; i++) {
         const line = providerLines[i] || '';
         if (!specialtyRe.test(line)) continue;
         for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
@@ -1357,7 +1767,9 @@ export async function runExtraction(ocrPages) {
           break;
         }
         if (fallback) break;
+        }
       }
+      
       if (fallback) {
         result.provider.name = fallback;
         trace.push({ rule: 'provider_name_detect_fallback', value: fallback });
@@ -1680,7 +2092,47 @@ export async function runExtraction(ocrPages) {
     }
   }
 
+  // Normalize clinical notes (deduplicate similar lines, remove footer noise)
+  if (Array.isArray(infoAlerts.history) && infoAlerts.history.length > 0) {
+    const beforeCount = infoAlerts.history.length;
+    infoAlerts.history = normalizeHistoryNotes(infoAlerts.history);
+    if (infoAlerts.history.length !== beforeCount) {
+      trace.push({ rule: 'clinical_notes_normalized', before: beforeCount, after: infoAlerts.history.length });
+    }
+  }
+  if (Array.isArray(infoAlerts.medications) && infoAlerts.medications.length > 0) {
+    const beforeCount = infoAlerts.medications.length;
+    infoAlerts.medications = normalizeHistoryNotes(infoAlerts.medications);
+    if (infoAlerts.medications.length !== beforeCount) {
+      trace.push({ rule: 'medications_normalized', before: beforeCount, after: infoAlerts.medications.length });
+    }
+  }
+
   result.infoAlerts = infoAlerts;
+  
+  // NEW SAFETY FLAG: High Acuity Safety Review Required
+  // If patient has history of falls + opioid medication + oxygen/caretaker accommodations
+  const fallsDetected = hasHistoryOfFalls([...(infoAlerts.history || []), ...(infoAlerts.safety || [])]);
+  const opioidDetected = hasOpioidMed(infoAlerts.medications || []);
+  const oxygenOrCaretaker = hasOxygenOrCaretaker([
+    ...(infoAlerts.accommodations || []),
+    ...(infoAlerts.safety || []),
+    ...(infoAlerts.history || [])
+  ]);
+  
+  if (fallsDetected.found && opioidDetected.found && oxygenOrCaretaker.found) {
+    result.flags.verifyManually = true;
+    result.flags.reasons.push('high_acuity_safety_review_required');
+    result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'safety_review_high_acuity']));
+    trace.push({
+      rule: 'high_acuity_safety_review_required',
+      fallsPhrase: fallsDetected.phrase,
+      opioidMedication: opioidDetected.name,
+      oxygenOrCaretaker: oxygenOrCaretaker.term,
+      reason: 'falls_plus_opioid_plus_oxygen_or_caretaker'
+    });
+  }
+  
   // Missing Chart Notes
   if (!/(chart\s*notes?|progress\s*note|consult|H&P|history\s*&\s*physical|history\s+and\s+physical)/i.test(fullText || '')) {
     result.flags.verifyManually = true;
@@ -1727,6 +2179,25 @@ export async function runExtraction(ocrPages) {
       result.flags.reasons.push('special_considerations_pediatric');
       result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'special_considerations']));
       trace.push({ rule: 'problem_pediatric_requirements', mode: (ageYears != null && ageYears < 18) ? 'age' : pedCpt ? 'cpt' : 'context' });
+    }
+    
+    // NEW SAFETY FLAG: Age/CPT Pediatric Mismatch
+    // If patient age >= 18 but CPT or description indicates pediatric, flag for review
+    if (ageYears != null && ageYears >= 18) {
+      const descriptionText = String(result.procedure?.description || '');
+      const hasPediatricIndicator = pedCpt || isPediatricDescription(descriptionText);
+      if (hasPediatricIndicator) {
+        result.flags.verifyManually = true;
+        result.flags.reasons.push('age_cpt_pediatric_mismatch');
+        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_age_cpt_mismatch']));
+        trace.push({ 
+          rule: 'age_cpt_pediatric_mismatch', 
+          age: ageYears, 
+          pediatricIndicator: pedCpt ? 'cpt' : 'description',
+          cpt: cptCode,
+          description: descriptionText.slice(0, 100) 
+        });
+      }
     }
   }
   if (typeof dme?.hit === 'boolean' && dme.hit) {
@@ -1974,9 +2445,16 @@ export async function runExtraction(ocrPages) {
               if (!newPrimary && candidates.length) newPrimary = candidates.find(c=>c!=='95782'&&c!=='95783');
               if (newPrimary && newPrimary !== result.procedure.cpt) {
                 const was = result.procedure.cpt;
+                const wasDesc = result.procedure.description;
                 result.procedure.cpt = newPrimary;
                 result.procedure.cptPrimary = newPrimary;
                 trace.push({ rule: 'pediatric_age_guard_demote', from: was, to: newPrimary, age });
+                // Update description to match new CPT code
+                const cptCatalog = getCptCatalog();
+                if (cptCatalog[newPrimary] && cptCatalog[newPrimary].description) {
+                  result.procedure.description = cptCatalog[newPrimary].description;
+                  trace.push({ rule: 'cpt_description_updated_age_guard', from: wasDesc, to: result.procedure.description, cpt: newPrimary });
+                }
                 // Reinsert pediatric code in candidates order after primary
                 result.procedure.cptCandidates = [newPrimary, ...candidates.filter(c=>c!==newPrimary)];
                 if (Array.isArray(result.procedure.cptAmbiguity) && !result.procedure.cptAmbiguity.includes('pediatric_age_guard')) {
@@ -2067,21 +2545,52 @@ export async function runExtraction(ocrPages) {
           to: corrected 
         });
         result.procedure.cpt = corrected;
+        // Update description to match new CPT code
+        const cptCatalog = getCptCatalog();
+        const catalogEntry = cptCatalog[corrected];
+        if (catalogEntry?.description) {
+          trace.push({
+            rule: 'cpt_description_updated',
+            from: result.procedure.description || 'none',
+            to: catalogEntry.description
+          });
+          result.procedure.description = catalogEntry.description;
+        }
       }
     }
     
-    // Provider name
-    if (result.provider?.name) {
-      const corrected = applyFieldCorrection('provider', result.provider.name, correctionsDB);
-      if (corrected !== result.provider.name) {
-        trace.push({ 
-          rule: 'learned_correction_provider', 
-          from: result.provider.name, 
-          to: corrected 
+    // Re-check titration flag after CPT corrections
+    if (result.procedure?.cpt === '95811') {
+      const allCpts = cpt?.candidates ? cpt.candidates.map(c => c.code) : [];
+      const priorStudy = hasPriorStudyEvidence(fullText || '', allCpts);
+      const hasCpapContext = hasCpapTitrationContext(fullText || '');
+      
+      if (priorStudy.found && !hasCpapContext && !result.flags.reasons.includes('titration_requires_clinical_review')) {
+        result.flags.verifyManually = true;
+        result.flags.reasons.push('titration_requires_clinical_review');
+        result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'review_titration_justification']));
+        trace.push({
+          rule: 'titration_requires_clinical_review',
+          timing: 'post_corrections',
+          priorStudyCpts: priorStudy.cpts,
+          priorStudyKeywords: priorStudy.keywords,
+          missingJustification: 'no_cpap_failure_or_intolerance_documented'
         });
-        result.provider.name = corrected;
       }
     }
+    
+    // Provider name - DISABLED to test raw OCR extraction
+    // if (result.provider?.name) {
+    //   const corrected = applyFieldCorrection('provider', result.provider.name, correctionsDB);
+    //   if (corrected !== result.provider.name) {
+    //     trace.push({ 
+    //       rule: 'learned_correction_provider', 
+    //       from: result.provider.name, 
+    //       to: corrected 
+    //     });
+    //     result.provider.name = corrected;
+    //   }
+    // }
     
     // Practice name
     if (result.provider?.practice) {
@@ -2123,30 +2632,85 @@ export async function runExtraction(ocrPages) {
     }
 
     // Fallback: If provider phone was not detected from OCR, try learned phone by provider/practice
+    // Conservative: require high confidence OR >=3 occurrences, and NANP-valid, to avoid cross-document leakage
     if (!result.provider?.phone) {
       const provName = result.provider?.name || null;
       const practice = result.provider?.practice || null;
       let learnedPhone = null;
+      const minHighConfidence = 0.9;
       if (provName) {
-        const corr = correctionsDB.getCorrection('referringPhone', provName);
-        if (corr && corr.text) {
-          learnedPhone = corr.text;
-          trace.push({ rule: 'learned_provider_phone_from_name', to: corr.text, source: corr.source || 'corrections_db' });
+        const detail = correctionsDB.getCorrectionDetail('referringPhone', provName);
+        if (detail && detail.text) {
+          const pass = (typeof detail.confidence === 'number' && detail.confidence >= minHighConfidence) || (typeof detail.topCount === 'number' && detail.topCount >= 3);
+          if (pass) {
+            learnedPhone = detail.text;
+            trace.push({ rule: 'learned_provider_phone_from_name', to: detail.text, confidence: detail.confidence, occurrences: detail.topCount, source: detail.source || 'corrections_db' });
+          } else {
+            trace.push({ rule: 'learned_provider_phone_rejected_threshold_name', candidate: detail.text, confidence: detail.confidence ?? null, occurrences: detail.topCount ?? null });
+          }
         }
       }
       if (!learnedPhone && practice) {
-        const corr2 = correctionsDB.getCorrection('referringPhone', practice);
-        if (corr2 && corr2.text) {
-          learnedPhone = corr2.text;
-          trace.push({ rule: 'learned_provider_phone_from_practice', to: corr2.text, source: corr2.source || 'corrections_db' });
+        const detail2 = correctionsDB.getCorrectionDetail('referringPhone', practice);
+        if (detail2 && detail2.text) {
+          const pass2 = (typeof detail2.confidence === 'number' && detail2.confidence >= minHighConfidence) || (typeof detail2.topCount === 'number' && detail2.topCount >= 3);
+          if (pass2) {
+            learnedPhone = detail2.text;
+            trace.push({ rule: 'learned_provider_phone_from_practice', to: detail2.text, confidence: detail2.confidence, occurrences: detail2.topCount, source: detail2.source || 'corrections_db' });
+          } else {
+            trace.push({ rule: 'learned_provider_phone_rejected_threshold_practice', candidate: detail2.text, confidence: detail2.confidence ?? null, occurrences: detail2.topCount ?? null });
+          }
         }
       }
       if (learnedPhone) {
-        result.provider.phone = learnedPhone;
+        // final validation: basic NANP formatting
+        const digits = String(learnedPhone || '').replace(/\D/g, '');
+        if (digits.length === 10 && isValidNANP(digits)) {
+          result.provider.phone = learnedPhone;
+          trace.push({ rule: 'learned_provider_phone_applied', to: learnedPhone });
+        } else {
+          trace.push({ rule: 'learned_provider_phone_rejected_format', candidate: learnedPhone });
+        }
       }
     }
   } catch (err) {
     console.warn('[runExtraction] Failed to apply learned corrections:', err.message);
+  }
+
+  // Harmonize CPT description to match final CPT code (guard against stale descriptions)
+  try {
+    if (result.procedure?.cpt) {
+      // Load the catalog array directly and find the matching entry
+      const cptCatalogArray = loadJsonConfig('cpt_catalog.json', { 
+        defaultFactory: () => [],
+        transform: (arr) => Array.isArray(arr) ? arr : []
+      });
+      const catalogEntry = cptCatalogArray.find(entry => entry.code === result.procedure.cpt);
+      // Fallback static map if catalog is missing or incomplete
+      const CPT_FALLBACK = {
+        '95810': 'In-lab diagnostic polysomnography',
+        '95811': 'In-lab PAP titration / split-night polysomnography',
+        '95806': 'Home sleep apnea test (HSAT)',
+        'G0399': 'Home sleep apnea test (Type III) - alternative code',
+        '95782': 'Pediatric in-lab polysomnography',
+        '95783': 'Pediatric PAP titration',
+        '95805': 'MSLT / MWT daytime sleep testing',
+        '99245': 'Office consultation (80 minutes)'
+      };
+      const finalDesc = (catalogEntry && catalogEntry.description) ? catalogEntry.description : CPT_FALLBACK[result.procedure.cpt];
+      if (finalDesc) {
+        if (finalDesc !== result.procedure.description) {
+          trace.push({ rule: 'cpt_description_harmonize', from: result.procedure.description || null, to: finalDesc, cpt: result.procedure.cpt });
+          result.procedure.description = finalDesc;
+        } else {
+          trace.push({ rule: 'cpt_description_harmonize_keep', cpt: result.procedure.cpt });
+        }
+      } else {
+        trace.push({ rule: 'cpt_description_harmonize_unavailable', cpt: result.procedure.cpt, catalogSize: cptCatalogArray.length });
+      }
+    }
+  } catch (e) {
+    trace.push({ rule: 'cpt_description_harmonize_error', error: e.message, stack: e.stack });
   }
 
   return { result, trace };

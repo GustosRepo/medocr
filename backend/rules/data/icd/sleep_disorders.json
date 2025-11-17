@@ -1,0 +1,112 @@
+{
+  "category": "Sleep Disorders",
+  "codes": [
+    {
+      "code": "G47.33",
+      "name": "Obstructive sleep apnea, adult",
+      "priority": 100,
+      "canBePrimary": true,
+      "keywords": ["obstructive", "osa", "obstructive sleep apnea", "adult osa"],
+      "relatedCpt": ["95806", "95810", "95811", "G0399"],
+      "chronic": true,
+      "severity": "varies"
+    },
+    {
+      "code": "G47.30",
+      "name": "Sleep apnea, unspecified",
+      "priority": 80,
+      "canBePrimary": true,
+      "keywords": ["sleep apnea", "apnea", "unspecified apnea", "hypopnea"],
+      "relatedCpt": ["95806", "95810", "95811", "G0399"],
+      "chronic": true,
+      "severity": "unspecified"
+    },
+    {
+      "code": "G47.31",
+      "name": "Primary central sleep apnea",
+      "priority": 90,
+      "canBePrimary": true,
+      "keywords": ["primary central", "central sleep apnea", "csa"],
+      "relatedCpt": ["95810", "95811"],
+      "chronic": true,
+      "severity": "moderate"
+    },
+    {
+      "code": "G47.37",
+      "name": "Central sleep apnea in conditions classified elsewhere",
+      "priority": 70,
+      "canBePrimary": false,
+      "mustBeSecondaryTo": ["G47.33", "G47.30", "G47.31"],
+      "keywords": ["central", "cheyne-stokes", "secondary central"],
+      "chronic": true,
+      "severity": "moderate",
+      "notes": "Usually secondary to heart failure or other conditions"
+    },
+    {
+      "code": "G47.00",
+      "name": "Insomnia, unspecified",
+      "priority": 60,
+      "canBePrimary": true,
+      "keywords": ["insomnia", "difficulty sleeping", "sleep onset", "sleep maintenance"],
+      "chronic": false,
+      "severity": "mild"
+    },
+    {
+      "code": "G47.10",
+      "name": "Hypersomnia, unspecified",
+      "priority": 65,
+      "canBePrimary": true,
+      "keywords": ["hypersomnia", "excessive sleepiness", "daytime sleepiness"],
+      "relatedCpt": ["95805", "95810"],
+      "chronic": true,
+      "severity": "mild"
+    },
+    {
+      "code": "G47.11",
+      "name": "Idiopathic hypersomnia with long sleep time",
+      "priority": 68,
+      "canBePrimary": true,
+      "keywords": ["idiopathic hypersomnia", "long sleep", "excessive sleep"],
+      "chronic": true,
+      "severity": "moderate"
+    },
+    {
+      "code": "G47.12",
+      "name": "Idiopathic hypersomnia without long sleep time",
+      "priority": 67,
+      "canBePrimary": true,
+      "keywords": ["idiopathic hypersomnia", "excessive daytime sleepiness"],
+      "chronic": true,
+      "severity": "moderate"
+    },
+    {
+      "code": "G47.20",
+      "name": "Circadian rhythm sleep disorder, unspecified type",
+      "priority": 55,
+      "canBePrimary": true,
+      "keywords": ["circadian", "rhythm disorder", "sleep-wake cycle"],
+      "chronic": true,
+      "severity": "mild"
+    },
+    {
+      "code": "G47.411",
+      "name": "Narcolepsy with cataplexy",
+      "priority": 95,
+      "canBePrimary": true,
+      "keywords": ["narcolepsy", "cataplexy", "type 1 narcolepsy"],
+      "relatedCpt": ["95805", "95810"],
+      "chronic": true,
+      "severity": "severe"
+    },
+    {
+      "code": "G47.419",
+      "name": "Narcolepsy without cataplexy",
+      "priority": 92,
+      "canBePrimary": true,
+      "keywords": ["narcolepsy", "type 2 narcolepsy", "hypocretin"],
+      "relatedCpt": ["95805", "95810"],
+      "chronic": true,
+      "severity": "moderate"
+    }
+  ]
+}

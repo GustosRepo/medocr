@@ -48,6 +48,6 @@ export function invalidateConfigCache(filename) {
     cache.clear();
     return;
   }
-  const abs = path.resolve(process.cwd(), 'backend/rules/data', filename);
+  const abs = path.resolve(process.cwd(), 'rules/data', filename);
   cache.delete(abs);
 }

@@ -394,6 +394,18 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   } else {
     bullet('Primary Diagnosis: —');
   }
+  // Show all additional diagnoses with descriptions (ranked order)
+  const allDiags = Array.isArray(clinical.diagnosesDetailed) ? clinical.diagnosesDetailed : [];
+  if (allDiags.length > 1) {
+    const additionalDiags = allDiags.slice(1).map(d => {
+      const parts = [d.code];
+      if (d.description) parts.push(d.description);
+      return parts.join(' — ');
+    }).slice(0, 5); // Show up to 5 additional diagnoses
+    if (additionalDiags.length) {
+      bullet(`Additional Diagnoses: ${additionalDiags.join(' | ')}`);
+    }
+  }
   if (Array.isArray(clinical.symptoms) && clinical.symptoms.length) {
     bullet(`Symptoms Present: ${clinical.symptoms.join(', ')}`);
   }
