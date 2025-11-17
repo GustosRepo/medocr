@@ -1,0 +1,14 @@
+{
+  "category": "Sleep Studies - Latency Testing",
+  "codes": [
+    {
+      "code": "95805",
+      "name": "Multiple sleep latency or maintenance of wakefulness testing",
+      "type": "diagnostic",
+      "priority": 18,
+      "keywords": ["mslt", "multiple sleep latency", "mwt", "maintenance of wakefulness", "sleepiness testing", "narcolepsy test"],
+      "relatedIcd": ["G47.419", "G47.411", "G47.10"],
+      "notes": "Used for narcolepsy and excessive daytime sleepiness evaluation"
+    }
+  ]
+}

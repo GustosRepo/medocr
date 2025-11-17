@@ -1,0 +1,15 @@
+{
+  "category": "History Codes",
+  "codes": [
+    {
+      "code": "Z86.16",
+      "name": "Personal history of COVID-19",
+      "priority": 20,
+      "canBePrimary": false,
+      "keywords": ["covid", "covid-19", "coronavirus", "sars-cov-2", "covid 19"],
+      "chronic": false,
+      "severity": "unspecified",
+      "notes": "May affect sleep patterns and respiratory function"
+    }
+  ]
+}

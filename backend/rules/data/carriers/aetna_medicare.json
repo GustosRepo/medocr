@@ -1,0 +1,57 @@
+{
+  "carrier": "Aetna Medicare",
+  "status": "accepted",
+  "synonyms": [
+    "aetna medicare"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^W\\d{9}$",
+        "name": "W-prefix format",
+        "score": 25,
+        "examples": [
+          "W123456789"
+        ]
+      },
+      {
+        "pattern": "^[A-Z]{1}\\d{8}$",
+        "name": "Standard Aetna Format",
+        "score": 22,
+        "examples": [
+          "W12345678"
+        ]
+      },
+      {
+        "pattern": "^[A-Z0-9]{9,11}$",
+        "name": "Alphanumeric variant",
+        "score": 12
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": [
+      "header",
+      "footer",
+      "page_identifier"
+    ]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 6,
+      "max": 15
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

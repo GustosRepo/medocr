@@ -1,0 +1,67 @@
+{
+  "category": "Comorbidities",
+  "codes": [
+    {
+      "code": "E66.9",
+      "name": "Obesity, unspecified",
+      "priority": 45,
+      "canBePrimary": false,
+      "keywords": ["obesity", "obese", "overweight", "high bmi", "body mass index"],
+      "chronic": true,
+      "severity": "moderate",
+      "notes": "Risk factor for sleep apnea"
+    },
+    {
+      "code": "E66.01",
+      "name": "Morbid (severe) obesity due to excess calories",
+      "priority": 48,
+      "canBePrimary": false,
+      "keywords": ["morbid obesity", "severe obesity", "bmi 40", "class 3 obesity"],
+      "chronic": true,
+      "severity": "severe",
+      "notes": "Significant risk factor for OSA"
+    },
+    {
+      "code": "I10",
+      "name": "Essential (primary) hypertension",
+      "priority": 42,
+      "canBePrimary": false,
+      "keywords": ["hypertension", "high blood pressure", "htn", "elevated bp"],
+      "chronic": true,
+      "severity": "moderate",
+      "notes": "Often comorbid with sleep apnea"
+    },
+    {
+      "code": "E11.9",
+      "name": "Type 2 diabetes mellitus without complications",
+      "priority": 44,
+      "canBePrimary": false,
+      "keywords": ["diabetes", "type 2 diabetes", "t2dm", "diabetic", "dm2"],
+      "chronic": true,
+      "severity": "moderate",
+      "notes": "Common comorbidity with sleep disorders"
+    },
+    {
+      "code": "J44.9",
+      "name": "Chronic obstructive pulmonary disease, unspecified",
+      "priority": 46,
+      "canBePrimary": false,
+      "keywords": ["copd", "chronic obstructive", "emphysema", "chronic bronchitis"],
+      "chronic": true,
+      "severity": "moderate",
+      "notes": "May contraindicate HST (95806)",
+      "contraindicates": ["95806"]
+    },
+    {
+      "code": "I50.9",
+      "name": "Heart failure, unspecified",
+      "priority": 47,
+      "canBePrimary": false,
+      "keywords": ["heart failure", "chf", "congestive heart failure", "cardiac failure", "hf"],
+      "chronic": true,
+      "severity": "severe",
+      "notes": "May contraindicate HST (95806)",
+      "contraindicates": ["95806"]
+    }
+  ]
+}

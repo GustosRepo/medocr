@@ -1,0 +1,14 @@
+{
+  "category": "Movement Disorders",
+  "codes": [
+    {
+      "code": "G25.81",
+      "name": "Restless legs syndrome",
+      "priority": 50,
+      "canBePrimary": true,
+      "keywords": ["restless legs", "rls", "leg discomfort", "periodic limb movement", "plmd"],
+      "chronic": true,
+      "severity": "mild"
+    }
+  ]
+}

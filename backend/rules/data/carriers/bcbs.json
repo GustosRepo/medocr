@@ -1,0 +1,85 @@
+{
+  "carrier": "Blue Cross Blue Shield",
+  "status": "accepted",
+  "synonyms": [
+    "bcbs",
+    "blue cross",
+    "blue shield",
+    "anthem",
+    "anthem blue cross",
+    "anthem bcbs",
+    "wellpoint"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^[A-Z]{3}\\d{9}$",
+        "name": "Standard BCBS Format",
+        "score": 22,
+        "examples": ["ABC123456789"],
+        "description": "3 letters followed by 9 digits"
+      },
+      {
+        "pattern": "^[A-Z]{2}\\d{10}$",
+        "name": "Alternate BCBS Format",
+        "score": 18,
+        "examples": ["AB1234567890"],
+        "description": "2 letters followed by 10 digits"
+      },
+      {
+        "pattern": "^[A-Z0-9]{11}$",
+        "name": "Alphanumeric 11-char",
+        "score": 15,
+        "examples": ["ABC12345678"],
+        "description": "11-character alphanumeric"
+      },
+      {
+        "pattern": "^[A-Z]{1}\\d{8}$",
+        "name": "Single letter + 8 digits",
+        "score": 12,
+        "examples": ["W12345678"],
+        "description": "Often used by Anthem"
+      }
+    ],
+    "groupId": [
+      {
+        "pattern": "^[A-Z0-9]{5,10}$",
+        "name": "Alphanumeric group ID",
+        "score": 10
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number",
+      "id number"
+    ],
+    "groupId": [
+      "group",
+      "group id",
+      "group number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": ["header", "footer", "page_identifier"]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 8,
+      "max": 13
+    },
+    "mustHaveAlphanumeric": true,
+    "cannotBeAllNumeric": false
+  },
+  "metadata": {
+    "requiresPreauth": true,
+    "notes": [
+      "BCBS policies vary by state",
+      "Anthem is a BCBS affiliate"
+    ]
+  }
+}

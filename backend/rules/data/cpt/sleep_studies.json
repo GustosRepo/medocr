@@ -1,0 +1,49 @@
+{
+  "category": "Sleep Studies - In-Lab",
+  "codes": [
+    {
+      "code": "95810",
+      "name": "Polysomnography; age 6 years or older, diagnostic",
+      "type": "diagnostic",
+      "priority": 20,
+      "ageRestriction": "6+",
+      "keywords": ["polysomnography", "psg", "diagnostic", "in-lab", "sleep study", "attended", "in lab", "facility"],
+      "conflictsWith": ["95806", "G0399", "G0400"],
+      "relatedIcd": ["G47.33", "G47.30", "G47.31", "G47.37"],
+      "notes": "Full attended PSG with sleep staging"
+    },
+    {
+      "code": "95811",
+      "name": "Polysomnography; age 6 years or older, with PAP titration",
+      "type": "therapeutic",
+      "priority": 22,
+      "ageRestriction": "6+",
+      "keywords": ["titration", "cpap", "bipap", "pap", "therapeutic", "split night", "split-night", "cpap titration", "bipap titration", "pap titration"],
+      "conflictsWith": ["95806", "G0399", "G0400"],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "CPAP/BiPAP titration study"
+    },
+    {
+      "code": "95782",
+      "name": "Polysomnography; younger than 6 years, diagnostic",
+      "type": "diagnostic",
+      "priority": 19,
+      "ageRestriction": "<6",
+      "keywords": ["pediatric", "child", "infant", "psg", "polysomnography"],
+      "ageRange": [0, 6],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "Pediatric PSG for children under 6"
+    },
+    {
+      "code": "95783",
+      "name": "Polysomnography; younger than 6 years, with PAP titration",
+      "type": "therapeutic",
+      "priority": 21,
+      "ageRestriction": "<6",
+      "keywords": ["pediatric", "child", "infant", "titration", "cpap", "bipap"],
+      "ageRange": [0, 6],
+      "relatedIcd": ["G47.33", "G47.30"],
+      "notes": "Pediatric CPAP/BiPAP titration"
+    }
+  ]
+}

@@ -357,7 +357,12 @@
     "name": "Medicare",
     "status": "accepted",
     "patterns": [
-      "\\bMEDICARE\\b"
+      "\\bMEDICARE\\b",
+      "MEDICARE\\s+B",
+      "MEDICARE\\s+PART\\s+B",
+      "MAC\\s+J1",
+      "MAC\\s+J\\d+",
+      "PRIMARY\\s+PAYER"
     ]
   },
   {

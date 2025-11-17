@@ -1,0 +1,53 @@
+{
+  "carrier": "Aetna",
+  "status": "accepted",
+  "synonyms": [
+    "aetna",
+    "aetha",
+    "aethna"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^[A-Z]{1}\\d{8}$",
+        "name": "Standard Aetna Format",
+        "score": 22,
+        "examples": ["W12345678"],
+        "description": "Letter followed by 8 digits"
+      },
+      {
+        "pattern": "^W\\d{9}$",
+        "name": "W-prefix format",
+        "score": 25,
+        "examples": ["W123456789"],
+        "description": "W followed by 9 digits (common)"
+      },
+      {
+        "pattern": "^[A-Z0-9]{9,11}$",
+        "name": "Alphanumeric variant",
+        "score": 12
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "aetna id"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": ["header", "footer", "page_identifier"]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 9,
+      "max": 11
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

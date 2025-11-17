@@ -1,0 +1,41 @@
+{
+  "carrier": "Clark County Self-Funded",
+  "status": "accepted",
+  "synonyms": [
+    "clark county self-funded"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^[A-Z0-9]{8,12}$",
+        "name": "Generic alphanumeric",
+        "score": 10
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": [
+      "header",
+      "footer",
+      "page_identifier"
+    ]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 6,
+      "max": 15
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}

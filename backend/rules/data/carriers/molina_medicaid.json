@@ -1,0 +1,46 @@
+{
+  "carrier": "Molina Medicaid",
+  "status": "accepted",
+  "synonyms": [
+    "molina medicaid"
+  ],
+  "patterns": {
+    "memberId": [
+      {
+        "pattern": "^\\d{8,12}$",
+        "name": "Standard Medicaid Format",
+        "score": 18
+      },
+      {
+        "pattern": "^[A-Z]{2}\\d{6,10}$",
+        "name": "State prefix + digits",
+        "score": 15
+      }
+    ]
+  },
+  "labels": {
+    "memberId": [
+      "insurance id",
+      "member id",
+      "subscriber id",
+      "policy number"
+    ]
+  },
+  "sections": {
+    "preferredLocation": "insurance_section",
+    "avoidLocations": [
+      "header",
+      "footer",
+      "page_identifier"
+    ]
+  },
+  "validation": {
+    "memberIdLength": {
+      "min": 6,
+      "max": 15
+    }
+  },
+  "metadata": {
+    "requiresPreauth": true
+  }
+}
