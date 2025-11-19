@@ -29,6 +29,8 @@ import { buildPdfModel } from './pdf/model.js';
 import { mapAction, mapActions } from './actionMap.js';
 import { addFeedback, listFeedback, stats as feedbackStats } from './feedback/store.js';
 import { buildCoverage } from './coverage.js';
+import { processDualEngine } from './utils/dualEngineProcessor.js';
+import { DecisionTreeEngine } from './decisionTree.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
 
 // Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
@@ -1444,8 +1446,56 @@ async function processDocument(id) {
   const ocrPages = Array.isArray(ocrJson.ocr) ? ocrJson.ocr : [];
   const maxPages = parseInt(process.env.MAX_PDF_PAGES || '150',10);
   if (ocrPages.length > maxPages) throw new Error(`PDF exceeds max pages (${maxPages})`);
+  
   // Map from OCR using rules engine (no template seed)
   const { result: mappedResult, trace } = await runExtractionWithDates(ocrPages);
+
+  // Dual-engine processing: Run OCR + Ollama LLM in parallel if enabled
+  let dualEngineData = null;
+  let decisionTreeResult = null;
+  const enableLLM = process.env.ENABLE_LLM === 'true';
+  
+  if (enableLLM) {
+    try {
+      log('info', 'dual_engine_start', { id, filePath: entry.filePath });
+      
+      // Mock OCR processor for dual-engine (already have OCR results)
+      const mockOcrProcessor = async () => ({ ocr: ocrPages, result: mappedResult, trace });
+      
+      // Run dual-engine processing
+      const dualResult = await processDualEngine(mockOcrProcessor, entry.filePath, {
+        timeout: parseInt(process.env.OLLAMA_TIMEOUT || '60000', 10)
+      });
+      
+      dualEngineData = dualResult;
+      log('info', 'dual_engine_complete', { 
+        id, 
+        mode: dualResult.mode,
+        agreementScore: dualResult.agreementScore,
+        hasConflicts: dualResult.conflicts?.length > 0
+      });
+      
+      // Run decision tree on merged result
+      const decisionTree = new DecisionTreeEngine();
+      decisionTreeResult = decisionTree.evaluate(dualResult.mergedExtraction || mappedResult);
+      
+      log('info', 'decision_tree_complete', {
+        id,
+        route: decisionTreeResult.route.action,
+        priority: decisionTreeResult.route.priority,
+        validationPassed: decisionTreeResult.validationSteps.filter(s => s.passed).length,
+        validationTotal: decisionTreeResult.validationSteps.length
+      });
+      
+      // Use merged extraction if available
+      if (dualResult.mergedExtraction) {
+        Object.assign(mappedResult, dualResult.mergedExtraction);
+      }
+    } catch (err) {
+      log('warn', 'dual_engine_failed', { id, err: String(err.message || err) });
+      // Continue with OCR-only results
+    }
+  }
 
   // Defensive post-process: re-apply learned corrections
   applyCorrectionsPostprocess(mappedResult, trace, { id });
@@ -1468,7 +1518,22 @@ async function processDocument(id) {
         intakeDate,
     suggestedFilename: suggestedFilename ? `${suggestedFilename}.pdf` : undefined,
     fileHash
-      }
+      },
+      // Add dual-engine results if available
+      ...(dualEngineData && {
+        dualEngine: {
+          mode: dualEngineData.mode,
+          agreementScore: dualEngineData.agreementScore,
+          ocrExtraction: dualEngineData.ocrExtraction,
+          llmExtraction: dualEngineData.llmExtraction,
+          conflicts: dualEngineData.conflicts,
+          timing: dualEngineData.timing
+        }
+      }),
+      // Add decision tree routing if available
+      ...(decisionTreeResult && {
+        routing: decisionTreeResult
+      })
     };
   const filenameName = parseNameFromFilename(result.documentMeta?.filename);
   if (filenameName) {

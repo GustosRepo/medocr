@@ -486,4 +486,5 @@ class DecisionTreeEngine {
   }
 }
 
-module.exports = DecisionTreeEngine;
+export { DecisionTreeEngine };
+export default DecisionTreeEngine;
