@@ -33,6 +33,36 @@ services:
     networks:
       - medocr-net
 
+  llm:
+    image: medocr-llm:local
+    build:
+      context: ./llm_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - MODEL_NAME=microsoft/phi-3.5-vision-instruct
+      - DEVICE=cuda
+      - MAX_NEW_TOKENS=2048
+      - TEMPERATURE=0.0
+      - TRANSFORMERS_CACHE=/app/models
+      - HF_HOME=/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 16G
+    volumes:
+      - ./llm_service/models:/app/models
+      - ./uploads:/app/uploads:ro
+    restart: unless-stopped
+    networks:
+      - medocr-net
+
   api:
     image: medocr-backend:local
     build:
@@ -43,6 +73,9 @@ services:
     environment:
       - NODE_ENV=development
       - OCR_SERVICE_URL=http://ocr:8000
+      - LLM_SERVICE_URL=http://llm:8001
+      - ENABLE_LLM=true
+      - LLM_TIMEOUT=30000
       - OCR_TIMEOUT_MS=900000
       - OCR_MAX_CONCURRENCY=4
       - DOC_MAX_CONCURRENCY=2
@@ -52,6 +85,7 @@ services:
       - RATE_MAX=500
     depends_on:
       - ocr
+      - llm
     restart: unless-stopped
     volumes:
       - ./backend/data:/app/data
