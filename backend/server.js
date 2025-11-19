@@ -32,6 +32,7 @@ import { buildCoverage } from './coverage.js';
 import { processDualEngine } from './utils/dualEngineProcessor.js';
 import { DecisionTreeEngine } from './decisionTree.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
+import { getOllamaHealth, ollamaMonitor } from './ollamaMonitor.js';
 
 // Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
 try {
@@ -1743,6 +1744,52 @@ app.post('/api/benchmark', upload.single('file'), async (req, res) => {
 // Metrics endpoint
 app.get('/api/metrics', (_req, res) => {
   res.json(metricsSnapshot());
+});
+
+// Ollama health check endpoint
+app.get('/api/ollama/health', async (req, res) => {
+  try {
+    const health = await getOllamaHealth();
+    res.json(health);
+  } catch (error) {
+    log('error', 'ollama_health_check_failed', { err: String(error.message || error) });
+    res.status(500).json({ 
+      status: 'error',
+      available: false,
+      message: error.message
+    });
+  }
+});
+
+// Ollama processing statistics
+app.get('/api/ollama/stats', (req, res) => {
+  try {
+    const stats = ollamaMonitor.getStats();
+    const enableLLM = process.env.ENABLE_LLM === 'true';
+    res.json({
+      enabled: enableLLM,
+      stats,
+      config: {
+        host: process.env.OLLAMA_HOST || 'http://127.0.0.1:11434',
+        model: process.env.OLLAMA_MODEL || 'llava-phi3',
+        timeout: process.env.OLLAMA_TIMEOUT || '60000'
+      }
+    });
+  } catch (error) {
+    log('error', 'ollama_stats_failed', { err: String(error.message || error) });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset Ollama statistics
+app.post('/api/ollama/stats/reset', (req, res) => {
+  try {
+    ollamaMonitor.reset();
+    res.json({ success: true, message: 'Statistics reset' });
+  } catch (error) {
+    log('error', 'ollama_stats_reset_failed', { err: String(error.message || error) });
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Export persisted processed records (newest first)

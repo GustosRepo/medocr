@@ -15,6 +15,7 @@ import fetch from 'node-fetch';
 import FormData from 'form-data';
 import fs from 'fs';
 import { log } from './logging/logger.js';
+import { ollamaMonitor } from './ollamaMonitor.js';
 
 // Ollama configuration
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
@@ -110,6 +111,8 @@ export async function checkOllamaHealth() {
  * @returns {Promise<Object>} Extracted data
  */
 export async function extractWithOllama(imagePath, customPrompt = null) {
+  const startTime = Date.now();
+  
   try {
     // Read image and convert to base64
     const imageBuffer = await fs.promises.readFile(imagePath);
@@ -122,8 +125,6 @@ export async function extractWithOllama(imagePath, customPrompt = null) {
       model: OLLAMA_MODEL,
       imageSize: imageBuffer.length 
     });
-    
-    const startTime = Date.now();
     
     // Call Ollama API
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
@@ -157,6 +158,9 @@ export async function extractWithOllama(imagePath, customPrompt = null) {
     // Parse JSON from response
     const extracted = parseJsonResponse(result.response);
     
+    // Record successful request
+    ollamaMonitor.recordRequest(true, duration);
+    
     return {
       extracted,
       rawResponse: result.response,
@@ -166,10 +170,15 @@ export async function extractWithOllama(imagePath, customPrompt = null) {
     };
     
   } catch (error) {
+    const duration = Date.now() - startTime;
+    
     log('error', 'ollama_extract_failed', { 
       imagePath, 
       error: String(error) 
     });
+    
+    // Record failed request
+    ollamaMonitor.recordRequest(false, duration, error);
     
     throw error;
   }

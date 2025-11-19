@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect } from '../ui/primitives.jsx';
 import { IconRefresh, IconFileText, IconEye, IconChevronDown, IconChevronRight, IconCircleCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react';
 import Section from '../components/Section.jsx';
+import OllamaMonitor from '../components/OllamaMonitor.jsx';
 
 function statusColor(s) {
   switch (s) {
@@ -382,6 +383,9 @@ export default function ChecklistPage() {
             <Text component="pre" size="xs" style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{textView || '—'}</Text>
           </ScrollArea>
         )}
+      </Section>
+      <Section title="Ollama LLM Monitor">
+        <OllamaMonitor />
       </Section>
     </Stack>
   );
