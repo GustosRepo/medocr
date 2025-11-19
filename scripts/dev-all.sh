@@ -71,6 +71,39 @@ if ! command -v pdftoppm >/dev/null 2>&1; then
   echo "[warn] 'pdftoppm' not found. Install poppler (macOS): brew install poppler" >&2
 fi
 
+# Check Ollama if LLM is enabled
+check_ollama() {
+  if [ "${ENABLE_LLM:-false}" = "true" ] && [ -n "${OLLAMA_HOST:-}" ]; then
+    if ! command -v ollama >/dev/null 2>&1; then
+      echo "[warn] Ollama not found but ENABLE_LLM=true. Install from https://ollama.com" >&2
+      return 1
+    fi
+    
+    # Check if Ollama service is running
+    local ollama_url="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+    if ! curl -sf "$ollama_url/api/tags" >/dev/null 2>&1; then
+      echo "[info] Starting Ollama service..."
+      ollama serve >/dev/null 2>&1 &
+      sleep 2
+      
+      if ! curl -sf "$ollama_url/api/tags" >/dev/null 2>&1; then
+        echo "[warn] Could not start Ollama service. Start manually: ollama serve" >&2
+        return 1
+      fi
+    fi
+    
+    # Check if vision model is installed
+    local model="${OLLAMA_MODEL:-llava-phi3}"
+    if ! ollama list 2>/dev/null | grep -q "$model"; then
+      echo "[warn] Ollama model '$model' not found. Pull it with: ollama pull $model" >&2
+    else
+      echo "[info] Ollama running with model '$model'"
+    fi
+  fi
+}
+
+check_ollama || true
+
 # Start OCR service (FastAPI + RapidOCR)
 start_ocr() {
   local ocr_dir="$ROOT_DIR/ocr_service"
@@ -165,7 +198,10 @@ for url in "${OCR_URL_ARR[@]}"; do
 done
 echo "    API:      http://127.0.0.1:4387 (log: $LOG_DIR/backend.log)"
 echo "    Frontend: http://127.0.0.1:5173 (log: $LOG_DIR/frontend.log)"
-echo "    To stop: bash scripts/stop-all.sh"
+if [ "${ENABLE_LLM:-false}" = "true" ] && [ -n "${OLLAMA_HOST:-}" ]; then
+  echo "    Ollama:   ${OLLAMA_HOST:-http://127.0.0.1:11434} (model: ${OLLAMA_MODEL:-llava-phi3})"
+fi
+echo "    To stop: npm run stop:all"
 if [ $HOLD -eq 1 ]; then
   echo "==> HOLD MODE: Ctrl-C to stop all services"
   trap 'echo "\n[trap] Stopping services"; bash "$ROOT_DIR/scripts/stop-all.sh"; exit 0' INT TERM
