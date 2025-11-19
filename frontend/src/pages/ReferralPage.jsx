@@ -5,6 +5,7 @@ import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport
 import { getStatusBadgeColor } from '../ui/utils.js';
 import Section from '../components/Section.jsx';
 import PlaceholderPanel from '../components/PlaceholderPanel.jsx';
+import OllamaMonitor from '../components/OllamaMonitor.jsx';
 
 const apiBase = '/api';
 
@@ -1692,6 +1693,9 @@ export default function ReferralPage() {
           )}
         </Stack>
       </Paper>
+
+      {/* Ollama LLM Monitor */}
+      <OllamaMonitor />
 
     </Stack>
   );
