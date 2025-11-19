@@ -21,7 +21,18 @@ import uvicorn
 
 # Configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "microsoft/phi-3.5-vision-instruct")
-DEVICE = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+
+# Auto-detect device: CUDA > MPS (Apple Silicon) > CPU
+if torch.cuda.is_available():
+    DEVICE = "cuda"
+    print("🚀 Using NVIDIA CUDA")
+elif torch.backends.mps.is_available():
+    DEVICE = "mps"  # Apple Silicon Metal Performance Shaders
+    print("🍎 Using Apple Metal Performance Shaders (MPS)")
+else:
+    DEVICE = "cpu"
+    print("⚠️  Using CPU (slow)")
+
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "2048"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
 
@@ -106,10 +117,13 @@ def load_model():
     print(f"[LLM] Device: {DEVICE}")
     print(f"[LLM] PyTorch version: {torch.__version__}")
     print(f"[LLM] CUDA available: {torch.cuda.is_available()}")
+    print(f"[LLM] MPS available: {torch.backends.mps.is_available()}")
     
     if torch.cuda.is_available():
         print(f"[LLM] CUDA device: {torch.cuda.get_device_name(0)}")
         print(f"[LLM] CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    elif torch.backends.mps.is_available():
+        print(f"[LLM] Apple Silicon GPU detected (MPS)")
     
     try:
         # Load processor
@@ -120,14 +134,37 @@ def load_model():
         )
         print("[LLM] Processor loaded successfully")
         
-        # Load model
-        model = AutoModelForVision2Seq.from_pretrained(
-            MODEL_NAME,
-            torch_dtype=torch.float16 if DEVICE == "cuda" else torch.float32,
-            device_map="auto",
-            trust_remote_code=True,
-            cache_dir=os.getenv("TRANSFORMERS_CACHE", "/app/models")
-        )
+        # Load model with device-specific settings
+        if DEVICE == "mps":
+            # MPS-specific loading (Apple Silicon)
+            model = AutoModelForVision2Seq.from_pretrained(
+                MODEL_NAME,
+                torch_dtype=torch.float16,  # MPS supports float16
+                trust_remote_code=True,
+                low_cpu_mem_usage=True,
+                cache_dir=os.getenv("TRANSFORMERS_CACHE", "/app/models")
+            ).to(DEVICE)
+            print("[LLM] Model loaded on Apple Silicon (MPS)")
+        elif DEVICE == "cuda":
+            # CUDA-specific loading
+            model = AutoModelForVision2Seq.from_pretrained(
+                MODEL_NAME,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                trust_remote_code=True,
+                cache_dir=os.getenv("TRANSFORMERS_CACHE", "/app/models")
+            )
+            print("[LLM] Model loaded on NVIDIA CUDA")
+        else:
+            # CPU fallback
+            model = AutoModelForVision2Seq.from_pretrained(
+                MODEL_NAME,
+                torch_dtype=torch.float32,
+                trust_remote_code=True,
+                cache_dir=os.getenv("TRANSFORMERS_CACHE", "/app/models")
+            ).to(DEVICE)
+            print("[LLM] Model loaded on CPU (slow)")
+        
         print(f"[LLM] Model loaded successfully on {DEVICE}")
         
         # Warm-up inference
@@ -167,9 +204,8 @@ def _run_inference(image: Image.Image, prompt: str) -> str:
         return_tensors="pt"
     )
     
-    # Move to device
-    if DEVICE == "cuda":
-        inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+    # Move to device (works for CUDA, MPS, and CPU)
+    inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
     
     # Generate
     with torch.no_grad():
@@ -205,8 +241,10 @@ def health_check():
         "status": "ok",
         "model": MODEL_NAME,
         "device": DEVICE,
-        "gpu_available": torch.cuda.is_available(),
-        "model_loaded": model is not None
+        "cuda_available": torch.cuda.is_available(),
+        "mps_available": torch.backends.mps.is_available(),
+        "model_loaded": model is not None,
+        "pytorch_version": torch.__version__
     }
 
 
