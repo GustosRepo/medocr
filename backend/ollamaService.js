@@ -14,7 +14,7 @@
 import fetch from 'node-fetch';
 import FormData from 'form-data';
 import fs from 'fs';
-import { log } from '../logging/logger.js';
+import { log } from './logging/logger.js';
 
 // Ollama configuration
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
