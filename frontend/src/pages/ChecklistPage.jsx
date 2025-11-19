@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect, Select } from '../ui/primitives.jsx';
+import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect } from '../ui/primitives.jsx';
 import { IconRefresh, IconFileText, IconEye, IconChevronDown, IconChevronRight, IconCircleCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react';
 import Section from '../components/Section.jsx';
 
@@ -164,17 +164,16 @@ export default function ChecklistPage() {
             searchable
             className="min-w-[200px]"
           />
-          <Select
-            placeholder="Route"
-            data={[
-              { value: '', label: 'All Routes' },
-              ...Object.entries(routeConfig).map(([key, cfg]) => ({ value: key, label: cfg.label }))
-            ]}
+          <select
             value={routeFilter}
-            onChange={setRouteFilter}
-            clearable
-            className="min-w-[180px]"
-          />
+            onChange={e => setRouteFilter(e.target.value)}
+            className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs min-w-[180px]"
+          >
+            <option value="">All Routes</option>
+            {Object.entries(routeConfig).map(([key, cfg]) => (
+              <option key={key} value={key}>{cfg.label}</option>
+            ))}
+          </select>
           <label className="flex items-center gap-1 text-xs text-slate-300">
             <input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)} /> Archived
           </label>
