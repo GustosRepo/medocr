@@ -5,17 +5,24 @@
  * and decision tree routing.
  * 
  * This module enhances the existing OCR processing with:
- * - Parallel execution of OCR and Phi-3.5 Vision LLM
+ * - Parallel execution of OCR and Vision LLM (Ollama or Python service)
  * - Intelligent conflict resolution between engines
  * - Decision tree routing based on validation results
  * - Comprehensive audit trail
  */
 
+// Try Ollama first (simpler), fallback to Python LLM service
+import { extractWithOllama, checkOllamaHealth } from '../ollamaService.js';
 import { extractWithLocalLLM, checkLLMHealth } from '../llmService.js';
 import DecisionTreeEngine from '../decisionTree.js';
 import { mergeExtractions, assessDataQuality, pdfToImage } from './dualEngine.js';
 import { performance } from 'perf_hooks';
 import { log } from '../logging/logger.js';
+
+// Auto-detect LLM backend (Ollama or Python service)
+const USE_OLLAMA = process.env.OLLAMA_HOST !== undefined;
+const extractWithLLM = USE_OLLAMA ? extractWithOllama : extractWithLocalLLM;
+const checkHealth = USE_OLLAMA ? checkOllamaHealth : checkLLMHealth;
 
 const decisionTree = new DecisionTreeEngine();
 
@@ -44,11 +51,11 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
     return await ocrProcessor();
   }
   
-  // Check LLM service health
+  // Check LLM service health (Ollama or Python service)
   try {
-    const healthy = await checkLLMHealth();
+    const healthy = await checkHealth();
     if (!healthy) {
-      log('warn', 'llm_service_unhealthy', { documentId });
+      log('warn', 'llm_service_unhealthy', { documentId, backend: USE_OLLAMA ? 'ollama' : 'python' });
       return await ocrProcessor();
     }
   } catch (error) {
@@ -67,16 +74,16 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
         throw err;
       }),
       
-      // LLM processing (new Phi-3.5 Vision)
+      // LLM processing (Ollama or Python service)
       (async () => {
         try {
-          // Convert PDF to image if needed (LLM service accepts both)
+          // Convert PDF to image if needed
           const imagePath = await pdfToImage(filePath);
           
-          // Call LLM service with timeout
+          // Call LLM service with timeout (auto-detects Ollama vs Python)
           const llmStartTime = performance.now();
           const result = await Promise.race([
-            extractWithLocalLLM(imagePath),
+            extractWithLLM(imagePath),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('LLM timeout')), LLM_TIMEOUT)
             )
@@ -85,6 +92,7 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
           const llmDuration = performance.now() - llmStartTime;
           log('debug', 'llm_extraction_complete', { 
             documentId, 
+            backend: USE_OLLAMA ? 'ollama' : 'python',
             duration: Math.round(llmDuration) 
           });
           
