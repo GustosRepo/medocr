@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect } from '../ui/primitives.jsx';
-import { IconRefresh, IconFileText, IconEye, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
+import { Group, Text, Badge, Button, Stack, ActionIcon, Tooltip, ScrollArea, MultiSelect, Select } from '../ui/primitives.jsx';
+import { IconRefresh, IconFileText, IconEye, IconChevronDown, IconChevronRight, IconCircleCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react';
 import Section from '../components/Section.jsx';
 
 function statusColor(s) {
@@ -12,6 +12,15 @@ function statusColor(s) {
     default: return 'gray';
   }
 }
+
+// Decision tree routing configuration
+const routeConfig = {
+  ready_to_schedule: { color: 'green', label: 'Ready to Schedule', icon: IconCircleCheck, priority: 'low' },
+  insurance_verification: { color: 'yellow', label: 'Insurance Verification', icon: IconAlertTriangle, priority: 'medium' },
+  authorization_request: { color: 'orange', label: 'Prior Auth', icon: IconClock, priority: 'medium' },
+  provider_followup: { color: 'blue', label: 'Provider Followup', icon: IconAlertTriangle, priority: 'high' },
+  manual_review: { color: 'red', label: 'Manual Review', icon: IconAlertTriangle, priority: 'high' }
+};
 
 function categoryMeta(r, overrideCat) {
   const map = {
@@ -37,6 +46,7 @@ export default function ChecklistPage() {
   const [overrides, setOverrides] = useState({}); // id -> { note, category }
   const [statusFilter, setStatusFilter] = useState([]); // array of categories
   const [insuranceFilter, setInsuranceFilter] = useState([]); // carriers
+  const [routeFilter, setRouteFilter] = useState(''); // decision tree route filter
   const [showArchived, setShowArchived] = useState(false);
   const [expanded, setExpanded] = useState({}); // id -> bool (false means collapsed); persisted
   const [printExpanded, setPrintExpanded] = useState(false);
@@ -154,6 +164,17 @@ export default function ChecklistPage() {
             searchable
             className="min-w-[200px]"
           />
+          <Select
+            placeholder="Route"
+            data={[
+              { value: '', label: 'All Routes' },
+              ...Object.entries(routeConfig).map(([key, cfg]) => ({ value: key, label: cfg.label }))
+            ]}
+            value={routeFilter}
+            onChange={setRouteFilter}
+            clearable
+            className="min-w-[180px]"
+          />
           <label className="flex items-center gap-1 text-xs text-slate-300">
             <input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)} /> Archived
           </label>
@@ -161,14 +182,27 @@ export default function ChecklistPage() {
       }>
         {error && <Text c="red" size="xs" mb="xs">{error}</Text>}
         <Group gap={8} mb="xs" wrap="wrap">
+          <Text size="xs" c="dimmed" fw={500}>Status:</Text>
           <Badge size="xs" color="green" variant="light">Ready to Schedule</Badge>
           <Badge size="xs" color="orange" variant="light">Needs Attention</Badge>
           <Badge size="xs" color="blue" variant="light">Processing</Badge>
           <Badge size="xs" color="red" variant="light">Error</Badge>
         </Group>
+        <Group gap={8} mb="xs" wrap="wrap">
+          <Text size="xs" c="dimmed" fw={500}>Decision Tree Routes:</Text>
+          {Object.entries(routeConfig).map(([key, cfg]) => (
+            <Badge key={key} size="xs" color={cfg.color} variant="dot" leftSection={<cfg.icon size={10} />}>
+              {cfg.label}
+            </Badge>
+          ))}
+        </Group>
   {/* Removed ScrollArea to allow full-height giant list */}
   <div style={{ display:'flex', flexWrap:'wrap', gap:18, alignItems:'stretch', minWidth: 0 }}>
-            {rows.map(r=>{
+            {rows.filter(r => {
+              // Client-side route filter
+              if (routeFilter && r.routing?.route?.action !== routeFilter) return false;
+              return true;
+            }).map(r=>{
               const name = [r.last, r.first].filter(Boolean).join(', ') || '—';
               const acts = (r.actions||[]);
               const needs = r.manual || acts.length > 0;
@@ -177,6 +211,14 @@ export default function ChecklistPage() {
               const effCategory = override?.category || null;
               const cat = categoryMeta(r, effCategory);
               const isExpanded = expanded[r.id] !== false; // default expanded
+              
+              // Decision tree routing info
+              const routing = r.routing?.route;
+              const routeAction = routing?.action;
+              const routeMeta = routeAction ? routeConfig[routeAction] : null;
+              const validationSteps = r.routing?.validationSteps || [];
+              const passedSteps = validationSteps.filter(s => s.passed).length;
+              const totalSteps = validationSteps.length;
               return (
         <div
           key={r.id}
@@ -235,6 +277,20 @@ export default function ChecklistPage() {
                   <Text size="xs" c="dimmed">Insurance: {r.insurance || '—'} {r.memberId && <>(ID: {r.memberId})</>}</Text>
                   <Group gap={6} wrap="wrap" mt={4}>
                     <Badge size="xs" color={cat.color} variant="filled">{cat.label}</Badge>
+                    {routeMeta && (
+                      <Tooltip label={`Decision Tree: ${routeMeta.label} (Priority: ${routeMeta.priority})`}>
+                        <Badge size="xs" color={routeMeta.color} variant="dot" leftSection={<routeMeta.icon size={10} />}>
+                          {routeMeta.label}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                    {totalSteps > 0 && (
+                      <Tooltip label={`Validation: ${passedSteps}/${totalSteps} checks passed`}>
+                        <Badge size="xs" color={passedSteps === totalSteps ? 'green' : 'orange'} variant="light">
+                          {passedSteps}/{totalSteps} ✓
+                        </Badge>
+                      </Tooltip>
+                    )}
                     {r.confidence && <Badge size="xs" color="grape" variant="light">{r.confidence}</Badge>}
                     {needs && <Badge size="xs" color="orange" variant="outline">Review</Badge>}
                   </Group>
@@ -275,6 +331,20 @@ export default function ChecklistPage() {
                     <div style={{ background:'rgba(255,0,0,0.05)', border:'1px solid #ff6b6b55', borderRadius:6, padding:6, marginBottom:4 }}>
                       <Text size="xs" c="red" style={{ whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{r.error}</Text>
                     </div>
+                  )}
+                  {isExpanded && routing?.nextSteps && routing.nextSteps.length > 0 && (
+                    <>
+                      <Text size="xs" fw={500} mt={8} mb={4}>Next Steps (Decision Tree)</Text>
+                      <Stack gap={3}>
+                        {routing.nextSteps.map((step, i) => (
+                          <Group key={i} gap={4} wrap="nowrap">
+                            <Text size="xs" c="dimmed">•</Text>
+                            <Text size="xs">{step.action}</Text>
+                            {step.estimatedTime && <Text size="xs" c="dimmed">({step.estimatedTime})</Text>}
+                          </Group>
+                        ))}
+                      </Stack>
+                    </>
                   )}
                   {isExpanded && <Text size="xs" fw={500} mt={8} mb={4}>Actions</Text>}
                   {isExpanded && acts.length === 0 && !r.manual && <Text size="xs" c="dimmed">None</Text>}
