@@ -206,18 +206,39 @@ export function selectInformationRichPages(ocrResult, options = {}) {
 
   const startTime = Date.now();
   
-  // Handle case where OCR result doesn't have page texts
-  if (!ocrResult.pageTexts || !Array.isArray(ocrResult.pageTexts)) {
-    log('warn', 'no_page_texts', { reason: 'No pageTexts found in OCR result, using full text' });
+  // Extract page texts from OCR result
+  // OCR result can have different structures:
+  // 1. ocrResult.pageTexts (ideal)
+  // 2. ocrResult.ocr (array of page objects with .text)
+  // 3. ocrResult.pages (array of page objects with .text)
+  let pageTexts = null;
+  
+  if (ocrResult.pageTexts && Array.isArray(ocrResult.pageTexts)) {
+    pageTexts = ocrResult.pageTexts;
+  } else if (ocrResult.ocr && Array.isArray(ocrResult.ocr)) {
+    pageTexts = ocrResult.ocr.map(page => page.text || '');
+  } else if (ocrResult.pages && Array.isArray(ocrResult.pages)) {
+    pageTexts = ocrResult.pages.map(page => page.text || '');
+  }
+  
+  // Handle case where we can't extract page texts
+  if (!pageTexts || pageTexts.length === 0) {
+    log('warn', 'no_page_texts', { 
+      reason: 'No page texts found in OCR result',
+      hasOcr: !!ocrResult.ocr,
+      hasPages: !!ocrResult.pages,
+      hasPageTexts: !!ocrResult.pageTexts
+    });
     return {
       selectedPages: [0], // Fallback to first page
       analyses: [],
+      totalPages: 0,
       reason: 'No page-by-page text available'
     };
   }
 
   // Analyze each page
-  const analyses = ocrResult.pageTexts.map((pageText, index) => 
+  const analyses = pageTexts.map((pageText, index) => 
     analyzePageContent(pageText, index)
   );
 
@@ -261,7 +282,7 @@ export function selectInformationRichPages(ocrResult, options = {}) {
   return {
     selectedPages,
     analyses,
-    totalPages: ocrResult.pageTexts.length,
+    totalPages: pageTexts.length,
     duration
   };
 }
