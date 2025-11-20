@@ -30,8 +30,10 @@
     "multer": "^1.4.5-lts.1",
     "node-fetch": "^2.7.0",
     "pdf-lib": "^1.17.1",
+    "pdf-to-png-converter": "^3.11.0",
     "pdfkit": "^0.15.0",
     "puppeteer": "^24.27.0",
+    "sharp": "^0.34.5",
     "undici": "^5.28.4"
   }
 }

@@ -302,6 +302,199 @@ function calculateAgreementScore(conflicts) {
 }
 
 /**
+ * Extract structured data from multiple page images with error recovery
+ * Processes pages sequentially to avoid memory issues and crashes
+ * @param {string[]} imagePaths - Array of image file paths
+ * @param {string} customPrompt - Optional custom prompt
+ * @returns {Promise<Object>} Aggregated extraction results
+ */
+export async function extractMultiplePages(imagePaths, customPrompt = null) {
+  const overallStartTime = Date.now();
+  const results = [];
+  const errors = [];
+  let successCount = 0;
+  let failCount = 0;
+
+  log('info', 'multi_page_extraction_start', {
+    pageCount: imagePaths.length,
+    model: OLLAMA_MODEL
+  });
+
+  // Process pages sequentially to avoid overwhelming Ollama
+  for (let i = 0; i < imagePaths.length; i++) {
+    const imagePath = imagePaths[i];
+    const pageNum = i + 1;
+
+    try {
+      log('debug', 'processing_page', { pageNum, total: imagePaths.length, imagePath });
+
+      // Extract from this page
+      const pageResult = await extractWithOllama(imagePath, customPrompt);
+      
+      results.push({
+        pageIndex: i,
+        success: true,
+        data: pageResult,
+        error: null
+      });
+      
+      successCount++;
+      
+      log('info', 'page_extraction_success', { 
+        pageNum, 
+        confidence: pageResult.extracted?.confidence || pageResult.confidence 
+      });
+
+    } catch (error) {
+      // Log error but continue with next page
+      log('error', 'page_extraction_failed', { 
+        pageNum, 
+        imagePath,
+        error: error.message 
+      });
+      
+      results.push({
+        pageIndex: i,
+        success: false,
+        data: null,
+        error: error.message
+      });
+      
+      errors.push({ pageNum, error: error.message });
+      failCount++;
+      
+      // Continue to next page instead of failing completely
+    }
+  }
+
+  const overallDuration = Date.now() - overallStartTime;
+
+  // If all pages failed, throw error
+  if (successCount === 0) {
+    const errorMsg = `All ${imagePaths.length} pages failed to process`;
+    log('error', 'multi_page_extraction_failed', { 
+      pageCount: imagePaths.length,
+      errors: errors.map(e => e.error)
+    });
+    throw new Error(errorMsg);
+  }
+
+  // Merge successful results
+  const successfulResults = results.filter(r => r.success).map(r => r.data);
+  const mergedExtraction = mergeMultipleExtractions(successfulResults);
+
+  log('info', 'multi_page_extraction_complete', {
+    totalPages: imagePaths.length,
+    successCount,
+    failCount,
+    duration: `${overallDuration}ms`,
+    mergedConfidence: mergedExtraction.confidence
+  });
+
+  return {
+    extracted: mergedExtraction,
+    metadata: {
+      totalPages: imagePaths.length,
+      successfulPages: successCount,
+      failedPages: failCount,
+      pageResults: results,
+      errors: errors.length > 0 ? errors : undefined,
+      duration: overallDuration
+    }
+  };
+}
+
+/**
+ * Merge extraction results from multiple pages
+ * Prioritizes non-null values and higher confidence scores
+ * @param {Array<Object>} extractions - Array of extraction results
+ * @returns {Object} Merged extraction result
+ */
+function mergeMultipleExtractions(extractions) {
+  if (extractions.length === 0) {
+    return { confidence: 0, notes: 'No successful extractions' };
+  }
+
+  if (extractions.length === 1) {
+    return extractions[0].extracted || extractions[0];
+  }
+
+  // Initialize merged result
+  const merged = {
+    patient: {},
+    insurance: {},
+    provider: {},
+    clinical: {},
+    confidence: 0,
+    notes: ''
+  };
+
+  const allNotes = [];
+
+  // Merge each extraction
+  for (const extraction of extractions) {
+    const data = extraction.extracted || extraction;
+    
+    // Merge patient data
+    if (data.patient) {
+      for (const [key, value] of Object.entries(data.patient)) {
+        if (value && !merged.patient[key]) {
+          merged.patient[key] = value;
+        }
+      }
+    }
+
+    // Merge insurance data
+    if (data.insurance) {
+      for (const [key, value] of Object.entries(data.insurance)) {
+        if (value && !merged.insurance[key]) {
+          merged.insurance[key] = value;
+        }
+      }
+    }
+
+    // Merge provider data
+    if (data.provider) {
+      for (const [key, value] of Object.entries(data.provider)) {
+        if (value && !merged.provider[key]) {
+          merged.provider[key] = value;
+        }
+      }
+    }
+
+    // Merge clinical data
+    if (data.clinical) {
+      for (const [key, value] of Object.entries(data.clinical)) {
+        if (value && !merged.clinical[key]) {
+          merged.clinical[key] = value;
+        }
+      }
+    }
+
+    // Collect notes
+    if (data.notes) {
+      allNotes.push(data.notes);
+    }
+  }
+
+  // Calculate average confidence
+  const confidences = extractions
+    .map(e => (e.extracted || e).confidence)
+    .filter(c => typeof c === 'number' && c > 0);
+  
+  merged.confidence = confidences.length > 0
+    ? confidences.reduce((sum, c) => sum + c, 0) / confidences.length
+    : 0.5;
+
+  // Merge notes
+  merged.notes = allNotes.length > 0
+    ? `Merged from ${extractions.length} pages: ${allNotes.join('; ')}`
+    : `Merged from ${extractions.length} pages`;
+
+  return merged;
+}
+
+/**
  * List available Ollama models
  */
 export async function listOllamaModels() {
@@ -326,6 +519,7 @@ export async function listOllamaModels() {
 export default {
   checkOllamaHealth,
   extractWithOllama,
+  extractMultiplePages,
   validateWithOllama,
   listOllamaModels
 };
