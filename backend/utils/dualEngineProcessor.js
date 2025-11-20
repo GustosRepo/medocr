@@ -68,19 +68,16 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
   log('info', 'dual_engine_start', { documentId, filePath });
   
   try {
-    // Run OCR and LLM in parallel for maximum efficiency
-    const [ocrResult, llmResult] = await Promise.allSettled([
-      // OCR processing (existing pipeline)
-      ocrProcessor().catch(err => {
-        log('error', 'ocr_processing_failed', { documentId, error: String(err) });
-        throw err;
-      }),
-      
-      // LLM processing (Ollama or Python service) with smart page selection
+    // STEP 1: Run OCR first (we need page texts for smart page selection)
+    const ocrData = await ocrProcessor().catch(err => {
+      log('error', 'ocr_processing_failed', { documentId, error: String(err) });
+      throw err;
+    });
+    
+    // STEP 2: Now run LLM with smart page selection based on OCR results
+    const llmResult = await Promise.race([
       (async () => {
         try {
-          // Wait for OCR to complete first (we need page texts for selection)
-          const ocrData = await ocrProcessor();
           
           // Select information-rich pages from OCR results
           const pageSelection = selectInformationRichPages(ocrData, {
@@ -159,26 +156,20 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
           log('error', 'llm_processing_failed', { documentId, error: String(err) });
           throw err;
         }
-      })()
-    ]);
-    
-    // Handle processing results
-    const ocrSuccess = ocrResult.status === 'fulfilled';
-    const llmSuccess = llmResult.status === 'fulfilled';
-    
-    // If OCR failed, we can't proceed
-    if (!ocrSuccess) {
-      log('error', 'dual_engine_ocr_failed', { documentId });
-      throw ocrResult.reason;
-    }
-    
-    const ocrData = ocrResult.value;
+      })(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('LLM timeout')), LLM_TIMEOUT)
+      )
+    ]).catch(err => {
+      // LLM failed - return marker for fallback
+      return { __llm_failed: true, error: err };
+    });
     
     // If LLM failed, fallback to OCR-only
-    if (!llmSuccess) {
+    if (llmResult && llmResult.__llm_failed) {
       log('warn', 'dual_engine_llm_failed_fallback', { 
         documentId, 
-        error: String(llmResult.reason) 
+        error: String(llmResult.error) 
       });
       
       return {
@@ -186,12 +177,12 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
         dualEngine: {
           mode: 'ocr_only',
           reason: 'LLM processing failed',
-          error: String(llmResult.reason)
+          error: String(llmResult.error)
         }
       };
     }
     
-    const llmData = llmResult.value;
+    const llmData = llmResult;
     
     // Both engines succeeded - merge and validate
     const mergeStartTime = performance.now();
