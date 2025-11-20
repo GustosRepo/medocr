@@ -12,10 +12,12 @@
  */
 
 // Try Ollama first (simpler), fallback to Python LLM service
-import { extractWithOllama, checkOllamaHealth } from '../ollamaService.js';
+import { extractWithOllama, checkOllamaHealth, extractMultiplePages } from '../ollamaService.js';
 import { extractWithLocalLLM, checkLLMHealth } from '../llmService.js';
 import DecisionTreeEngine from '../decisionTree.js';
 import { mergeExtractions, assessDataQuality, pdfToImage } from './dualEngine.js';
+import { selectInformationRichPages, getSelectionSummary } from '../pageSelector.js';
+import { convertPdfPagesToImages, cleanupTempImages } from './imageResizer.js';
 import { performance } from 'perf_hooks';
 import { log } from '../logging/logger.js';
 
@@ -74,27 +76,83 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
         throw err;
       }),
       
-      // LLM processing (Ollama or Python service)
+      // LLM processing (Ollama or Python service) with smart page selection
       (async () => {
         try {
-          // Convert PDF to image if needed
-          const imagePath = await pdfToImage(filePath);
+          // Wait for OCR to complete first (we need page texts for selection)
+          const ocrData = await ocrProcessor();
           
-          // Call LLM service with timeout (auto-detects Ollama vs Python)
-          const llmStartTime = performance.now();
-          const result = await Promise.race([
-            extractWithLLM(imagePath),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('LLM timeout')), LLM_TIMEOUT)
+          // Select information-rich pages from OCR results
+          const pageSelection = selectInformationRichPages(ocrData, {
+            maxPages: 3,
+            minScore: 20
+          });
+          
+          log('info', 'page_selection', {
+            documentId,
+            summary: getSelectionSummary(pageSelection)
+          });
+          
+          // If no pages selected, skip LLM processing
+          if (pageSelection.selectedPages.length === 0) {
+            log('warn', 'no_pages_selected', { documentId });
+            throw new Error('No information-rich pages found');
+          }
+          
+          // Convert selected pages to low-res images
+          const imageResults = await convertPdfPagesToImages(
+            filePath,
+            pageSelection.selectedPages,
+            {
+              targetDPI: 150,
+              maxWidth: 1600,
+              quality: 85,
+              outputDir: 'data/temp'
+            }
+          );
+          
+          log('info', 'images_prepared', {
+            documentId,
+            pageCount: imageResults.length,
+            totalSize: imageResults.reduce((sum, r) => sum + r.processedSize, 0),
+            avgReduction: Math.round(
+              imageResults.reduce((sum, r) => sum + r.reduction, 0) / imageResults.length
             )
-          ]);
+          });
+          
+          // Process multiple pages with Ollama (with error recovery)
+          const llmStartTime = performance.now();
+          let result;
+          
+          if (USE_OLLAMA) {
+            // Use new multi-page Ollama function
+            result = await Promise.race([
+              extractMultiplePages(imageResults.map(r => r.imagePath)),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('LLM timeout')), LLM_TIMEOUT)
+              )
+            ]);
+          } else {
+            // Fallback to single-page Python service (first page only)
+            const imagePath = imageResults[0].imagePath;
+            result = await Promise.race([
+              extractWithLLM(imagePath),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('LLM timeout')), LLM_TIMEOUT)
+              )
+            ]);
+          }
           
           const llmDuration = performance.now() - llmStartTime;
           log('debug', 'llm_extraction_complete', { 
             documentId, 
             backend: USE_OLLAMA ? 'ollama' : 'python',
+            pagesProcessed: imageResults.length,
             duration: Math.round(llmDuration) 
           });
+          
+          // Clean up temporary images
+          await cleanupTempImages(imageResults);
           
           return result;
         } catch (err) {
