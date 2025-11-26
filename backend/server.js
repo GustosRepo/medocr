@@ -29,10 +29,12 @@ import { buildPdfModel } from './pdf/model.js';
 import { mapAction, mapActions } from './actionMap.js';
 import { addFeedback, listFeedback, stats as feedbackStats } from './feedback/store.js';
 import { buildCoverage } from './coverage.js';
+import { generateDisplayFilename, isValidFilename } from './utils/filenameGenerator.js';
 import { processDualEngine } from './utils/dualEngineProcessor.js';
 import { DecisionTreeEngine } from './decisionTree.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
 import { getOllamaHealth, ollamaMonitor } from './ollamaMonitor.js';
+import { normalizeFields, getClientConfig } from './utils/fieldNormalizer.js';
 
 // Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
 try {
@@ -332,17 +334,16 @@ function scheduleDocumentProcessing(id) {
 const docs = new Map(); // id -> { filePath, status, result, error, ocrParams? }
 
 function buildSummaryFileStem(result) {
-  const r = result || {};
-  const patient = r.patient || {};
-  const first = patient.first || '';
-  const last = patient.last || '';
-  const dob = patient.dob || '';
-  const referralDate = r.documentMeta?.intakeDate || r.pdfModel?.document?.intakeDate || '';
-  const safe = (s) => String(s).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  const partsRaw = [safe(last), safe(first), safe(dob), safe(referralDate)];
-  const parts = partsRaw.filter((segment, idx) => segment || (idx === 3 && referralDate));
-  const stem = parts.length >= 2 ? parts.join('_') : (parts[0] || 'Referral_Summary');
-  return stem || 'Referral_Summary';
+  // Use intelligent filename generator for exports
+  try {
+    const filename = generateExportFilename(result);
+    // Remove .pdf extension to get stem
+    return filename.replace(/\.pdf$/i, '');
+  } catch (err) {
+    // Fallback to safe default if generation fails
+    const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    return `Referral_Summary_${timestamp}`;
+  }
 }
 
 function renderSummaryPdfBuffer(result, logoPath) {
@@ -481,6 +482,7 @@ function makeProcessedSummary(id, entry) {
     pages: r.documentMeta?.pages || (r.ocr ? r.ocr.length : 0) || 0,
     intakeDate: r.documentMeta?.intakeDate || null,
     suggestedFilename: r.documentMeta?.suggestedFilename || null,
+    displayFilename: entry.displayFilename || r.documentMeta?.displayFilename || null,
     fileHash: r.documentMeta?.fileHash || null,
     patient: { first: patient.first || null, last: patient.last || null, dob: patient.dob || null },
     confidence: r.confidenceLevel || r.confidence || null,
@@ -521,7 +523,8 @@ app.get('/api/documents', (req, res) => {
       confidence: r.confidenceLevel || r.confidence || null,
       manual: !!r.flags?.verifyManually,
       actions: (r.alerts?.actions || []).slice(0,5),
-      suggestedFilename: r.documentMeta?.suggestedFilename || null
+      suggestedFilename: r.documentMeta?.suggestedFilename || null,
+      displayFilename: entry.displayFilename || r.documentMeta?.displayFilename || null
     });
     if (items.length >= limit) break;
   }
@@ -582,6 +585,7 @@ app.get('/api/checklist', (req, res) => {
       intakeDate: r.documentMeta?.intakeDate || null,
       insurance: primaryIns.carrier || '—',
       memberId: primaryIns.memberId || '—',
+      routing: r.routing || null,
       actions: prettyActs,
       actionsRaw,
       confidence: r.confidenceLevel || r.confidence || null,
@@ -752,6 +756,158 @@ app.get('/api/documents/:id/result', (req, res) => {
   req.logger?.error('result_internal_error', { id, err: String(err?.message || err) });
   res.status(500).json({ error: { code: 'internal_error', category: classifyError('internal_error'), message: String(err?.message || err) } });
   });
+});
+
+// Apply a single field edit to a processed document (persists for this document only)
+// POST /api/documents/:id/update-field { path: 'patient.dob', value: '01/02/1970' }
+app.post('/api/documents/:id/update-field', express.json({ limit: '64kb' }), (req, res) => {
+  try {
+    const { id } = req.params;
+    const { path: fieldPath, value } = req.body || {};
+    if (!fieldPath) {
+      return res.status(400).json({ error: { code: 'bad_request', message: 'path is required' } });
+    }
+    const entry = docs.get(id);
+    if (!entry || entry.status !== 'done' || !entry.result) {
+      return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
+    }
+
+    const before = JSON.parse(JSON.stringify(entry.result));
+
+    // Helper to set deep value supporting dot paths and basic [index]
+    const setByPath = (obj, pth, val) => {
+      const tokens = [];
+      // Split on dots but also expand [idx]
+      pth.split('.').forEach(part => {
+        const re = /(\w+)(\[(\d+)\])?/g;
+        let m;
+        while ((m = re.exec(part)) !== null) {
+          tokens.push(m[1]);
+          if (m[3] !== undefined) tokens.push(Number(m[3]));
+        }
+      });
+      if (!tokens.length) return false;
+      let cur = obj;
+      for (let i = 0; i < tokens.length - 1; i++) {
+        const key = tokens[i];
+        // Special-case: insurance path often points to first element
+        if (key === 'insurance' && Array.isArray(cur[key])) {
+          // If next token is not a number, default to index 0
+          const next = tokens[i + 1];
+          if (typeof next !== 'number') {
+            cur = cur[key][0] = cur[key][0] || {};
+            continue;
+          }
+        }
+        if (typeof tokens[i + 1] === 'number') {
+          // Ensure array exists
+          if (!Array.isArray(cur[key])) cur[key] = [];
+          const idx = tokens[i + 1];
+          if (!cur[key][idx]) cur[key][idx] = {};
+          cur = cur[key][idx];
+          i++; // consumed index
+        } else {
+          if (cur[key] == null || typeof cur[key] !== 'object') cur[key] = {};
+          cur = cur[key];
+        }
+      }
+      const last = tokens[tokens.length - 1];
+      const prevVal = cur && (typeof last === 'number' ? cur[last] : cur[last]);
+      if (typeof last === 'number') {
+        cur[last] = val;
+      } else {
+        cur[last] = val;
+      }
+      return prevVal;
+    };
+
+    const prev = setByPath(entry.result, fieldPath, value);
+
+    // Record trace
+    try {
+      const trace = Array.isArray(entry._trace) ? entry._trace : [];
+      trace.push({ rule: 'doc_edit', path: fieldPath, from: prev === undefined ? null : prev, to: value, at: new Date().toISOString() });
+      entry._trace = trace;
+    } catch {}
+
+    docs.set(id, entry);
+    return res.json({ ok: true, id, result: entry.result });
+  } catch (e) {
+    return res.status(500).json({ error: { code: 'update_failed', message: String(e?.message || e) } });
+  }
+});
+
+// Apply multiple field edits at once
+// POST /api/documents/:id/update-fields { edits: [{ path, value }, ...] }
+app.post('/api/documents/:id/update-fields', express.json({ limit: '128kb' }), (req, res) => {
+  try {
+    const { id } = req.params;
+    const edits = Array.isArray(req.body?.edits) ? req.body.edits : [];
+    if (!edits.length) {
+      return res.status(400).json({ error: { code: 'bad_request', message: 'edits array required' } });
+    }
+    const entry = docs.get(id);
+    if (!entry || entry.status !== 'done' || !entry.result) {
+      return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
+    }
+
+    // Reuse single-field logic
+    const applyOne = (p, v) => {
+      const tokens = [];
+      p.split('.').forEach(part => {
+        const re = /(\w+)(\[(\d+)\])?/g;
+        let m;
+        while ((m = re.exec(part)) !== null) {
+          tokens.push(m[1]);
+          if (m[3] !== undefined) tokens.push(Number(m[3]));
+        }
+      });
+      if (!tokens.length) return;
+      let cur = entry.result;
+      for (let i = 0; i < tokens.length - 1; i++) {
+        const key = tokens[i];
+        if (key === 'insurance' && Array.isArray(cur[key])) {
+          const next = tokens[i + 1];
+          if (typeof next !== 'number') {
+            cur = cur[key][0] = cur[key][0] || {};
+            continue;
+          }
+        }
+        if (typeof tokens[i + 1] === 'number') {
+          if (!Array.isArray(cur[key])) cur[key] = [];
+          const idx = tokens[i + 1];
+          if (!cur[key][idx]) cur[key][idx] = {};
+          cur = cur[key][idx];
+          i++;
+        } else {
+          if (cur[key] == null || typeof cur[key] !== 'object') cur[key] = {};
+          cur = cur[key];
+        }
+      }
+      const last = tokens[tokens.length - 1];
+      cur[last] = v;
+    };
+
+    const trace = Array.isArray(entry._trace) ? entry._trace : [];
+    for (const edit of edits) {
+      if (!edit || typeof edit.path !== 'string') continue;
+      const beforeVal = (() => {
+        try {
+          // Shallow fetch before change for trace (best effort)
+          return null;
+        } catch { return null; }
+      })();
+      applyOne(edit.path, edit.value);
+      try {
+        trace.push({ rule: 'doc_edit', path: edit.path, from: beforeVal, to: edit.value, at: new Date().toISOString() });
+      } catch {}
+    }
+    entry._trace = trace;
+    docs.set(id, entry);
+    return res.json({ ok: true, id, result: entry.result });
+  } catch (e) {
+    return res.status(500).json({ error: { code: 'update_failed', message: String(e?.message || e) } });
+  }
 });
 
 // Apply corrections to an already-processed document without re-OCR
@@ -1054,6 +1210,37 @@ app.get('/api/logs/ocr', (req, res) => {
     const content = fs.readFileSync(logPath, 'utf8');
     const allLines = content.split('\n').filter(l => l.trim());
     const recentLines = allLines.slice(-lines);
+    
+    res.json({ logs: recentLines });
+  } catch (err) {
+    res.status(500).json({ error: { code: 'log_read_error', message: String(err.message || err) } });
+  }
+});
+
+// Live logs endpoint: read recent backend logs filtered for Ollama/LLM events
+app.get('/api/logs/ollama', (req, res) => {
+  try {
+    const lines = parseInt(req.query.lines) || 100;
+    const logPath = path.join(process.cwd(), 'data/logs/backend.log');
+    
+    if (!fs.existsSync(logPath)) {
+      return res.json({ logs: [] });
+    }
+    
+    const content = fs.readFileSync(logPath, 'utf8');
+    const allLines = content.split('\n').filter(l => l.trim());
+    
+    // Filter for Ollama/LLM-related events
+    const ollamaLines = allLines.filter(line => {
+      const lower = line.toLowerCase();
+      return lower.includes('ollama') || 
+             lower.includes('llm_') || 
+             lower.includes('dual_engine') ||
+             lower.includes('page_selection') ||
+             lower.includes('multi_page');
+    });
+    
+    const recentLines = ollamaLines.slice(-lines);
     
     res.json({ logs: recentLines });
   } catch (err) {
@@ -1476,9 +1663,28 @@ async function processDocument(id) {
         hasConflicts: dualResult.conflicts?.length > 0
       });
       
-      // Run decision tree on merged result
+      // Normalize fields to handle different document layouts
+      const dataToValidate = dualResult.mergedExtraction || mappedResult;
+      const clientConfig = getClientConfig('default', dataToValidate); // Future: pass actual client ID
+      const normalizedData = normalizeFields(dataToValidate, { clientConfig });
+      
+      log('info', 'fields_normalized', {
+        id,
+        hasFirstName: !!normalizedData.patient?.firstName || !!normalizedData.firstName,
+        hasLastName: !!normalizedData.patient?.lastName || !!normalizedData.lastName,
+        hasAddress: !!normalizedData.patient?.address || !!normalizedData.address
+      });
+      
+      // Run decision tree on normalized data with dual-engine metadata
       const decisionTree = new DecisionTreeEngine();
-      decisionTreeResult = decisionTree.evaluate(dualResult.mergedExtraction || mappedResult);
+      decisionTreeResult = decisionTree.evaluate(
+        normalizedData,
+        {
+          agreementScore: dualResult.agreementScore,
+          conflicts: dualResult.conflicts,
+          dataQuality: dualResult.dataQuality
+        }
+      );
       
       log('info', 'decision_tree_complete', {
         id,
@@ -1488,9 +1694,15 @@ async function processDocument(id) {
         validationTotal: decisionTreeResult.validationSteps.length
       });
       
-      // Use merged extraction if available
-      if (dualResult.mergedExtraction) {
-        Object.assign(mappedResult, dualResult.mergedExtraction);
+      // Merge core extracted data from dualResult (preserves problemsList)
+      const dataFields = ['patient', 'insurance', 'provider', 'procedure', 'diagnoses', 
+                          'clinical', 'flags', 'alerts', 'infoAlerts', 'confidence', 
+                          'qc', 'confidenceDetail', 'risk', 'vitals'];
+      
+      for (const field of dataFields) {
+        if (dualResult[field] !== undefined) {
+          mappedResult[field] = dualResult[field];
+        }
       }
     } catch (err) {
       log('warn', 'dual_engine_failed', { id, err: String(err.message || err) });
@@ -1504,7 +1716,8 @@ async function processDocument(id) {
     const first = mappedResult?.patient?.first || '';
     const last = mappedResult?.patient?.last || '';
     const dob = mappedResult?.patient?.dob || '';
-    const intakeDate = new Date().toISOString().slice(0, 10);
+    // Use extracted referralDate if available, otherwise fall back to today's date
+    const intakeDate = mappedResult?.documentMeta?.referralDate || new Date().toISOString().slice(0, 10);
     const safe = (s) => String(s).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     const suggestedFilename = (last && first && dob)
       ? `${safe(last)}_${safe(first)}_${safe(dob)}_${safe(intakeDate)}`
@@ -1522,14 +1735,7 @@ async function processDocument(id) {
       },
       // Add dual-engine results if available
       ...(dualEngineData && {
-        dualEngine: {
-          mode: dualEngineData.mode,
-          agreementScore: dualEngineData.agreementScore,
-          ocrExtraction: dualEngineData.ocrExtraction,
-          llmExtraction: dualEngineData.llmExtraction,
-          conflicts: dualEngineData.conflicts,
-          timing: dualEngineData.timing
-        }
+        dualEngine: dualEngineData.dualEngine
       }),
       // Add decision tree routing if available
       ...(decisionTreeResult && {
@@ -1591,6 +1797,21 @@ async function processDocument(id) {
       }
     }
   } catch {}
+  
+  // Generate intelligent display filename from extracted data
+  try {
+    const displayFilename = generateDisplayFilename(result, { includeDate: true, includeExtension: true });
+    if (displayFilename && isValidFilename(displayFilename)) {
+      entry.displayFilename = displayFilename;
+      if (result.documentMeta) {
+        result.documentMeta.displayFilename = displayFilename;
+      }
+      log('info', 'display_filename_generated', { id, displayFilename });
+    }
+  } catch (err) {
+    log('warn', 'display_filename_generation_failed', { id, err: String(err?.message || err) });
+  }
+  
   entry.result = result; entry._trace = trace; entry.status = 'done'; entry.error = null; docs.set(id, entry);
   incCounter('docsProcessed');
   recordLatency(performance.now() - t0);

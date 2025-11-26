@@ -27,6 +27,40 @@ export function detectDates(fullText) {
     { type: 'service', re: /(service|svc)\s*(?:date)?\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i },
     { type: 'study', re: /(study|appt|appointment)\s*(?:date|scheduled)?\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i }
   ];
+  
+  // Multi-line context check: Date label and value on separate lines
+  for (let i = 0; i < lines.length - 1; i++) {
+    const currentLine = lines[i];
+    const nextLine = lines[i + 1] || '';
+    const prevLine = i > 0 ? lines[i - 1] : '';
+    
+    // Case 1: "Date: XX/XX/XXXX" on one line, referral context on next
+    const dateMatch = currentLine.match(/\bDate\s*[:\-]\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+    if (dateMatch && /\bRE\b|referral|patient/i.test(nextLine)) {
+      const iso = toISO(dateMatch[1]);
+      if (iso && !seen.has('referral'+iso)) {
+        seen.add('referral'+iso);
+        results.push({ type: 'referral', value: iso, raw: dateMatch[1], confidence: 'high' });
+      }
+    }
+    
+    // Case 2: "DATE" label on one line, date value on next, check context
+    if (/^\s*DATE\s*$/i.test(currentLine)) {
+      const dateValueMatch = nextLine.match(/^\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+      if (dateValueMatch) {
+        // Check previous lines for referral context (Subject: Patient Referral, etc.)
+        const contextLines = [prevLine, i > 1 ? lines[i-2] : ''].join(' ');
+        if (/referral|patient\s+referral/i.test(contextLines)) {
+          const iso = toISO(dateValueMatch[1]);
+          if (iso && !seen.has('referral'+iso)) {
+            seen.add('referral'+iso);
+            results.push({ type: 'referral', value: iso, raw: dateValueMatch[1], confidence: 'high' });
+          }
+        }
+      }
+    }
+  }
+  
   for (const line of lines) {
     for (const lp of labelPatterns) {
       const m = line.match(lp.re);

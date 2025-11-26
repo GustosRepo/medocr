@@ -83,9 +83,12 @@ export function Button({
   loading = false,
   fullWidth = false,
   leftSection,
+  leftIcon, // Legacy prop, same as leftSection
   onClick,
   ...rest
 }) {
+  // Handle legacy leftIcon prop
+  const iconElement = leftSection || leftIcon;
   const base = 'inline-flex items-center justify-center font-medium rounded focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap';
   const sizes = { xs: 'px-2 py-1 text-[11px]', sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', 'compact-xs': 'px-2 py-0.5 text-[11px]' };
   const variants = {
@@ -124,13 +127,13 @@ export function Button({
       {...rest}
     >
       {loading && <span className="animate-spin mr-1 border-2 border-t-transparent border-current rounded-full w-3 h-3" />}
-      {leftSection && <span className="mr-1 inline-flex">{leftSection}</span>}
+      {iconElement && <span className="mr-1 inline-flex">{iconElement}</span>}
       {children}
     </Component>
   );
 }
 
-export function Badge({ color = 'gray', variant = 'light', size = 'sm', children, className = '' }) {
+export function Badge({ color = 'gray', variant = 'light', size = 'sm', children, className = '', style, onClick, leftSection, ...rest }) {
   const colorMap = {
     gray: 'bg-slate-700 text-slate-200',
     green: 'bg-emerald-600 text-white',
@@ -142,7 +145,12 @@ export function Badge({ color = 'gray', variant = 'light', size = 'sm', children
   const base = 'inline-flex items-center rounded px-2 py-0.5 font-medium';
   const sizes = { xs: 'text-[10px]', sm: 'text-[11px]', md: 'text-xs' };
   const styleClass = variant === 'outline' ? 'border border-slate-500 text-slate-200' : (colorMap[color] || colorMap.gray);
-  return <span className={cx(base, sizes[size] || sizes.sm, styleClass, className)}>{children}</span>;
+  return (
+    <span className={cx(base, sizes[size] || sizes.sm, styleClass, className)} style={style} onClick={onClick} {...rest}>
+      {leftSection && <span className="mr-1 inline-flex">{leftSection}</span>}
+      {children}
+    </span>
+  );
 }
 
 export function Stack({ gap = 'md', className = '', children, align = 'stretch', justify = 'flex-start', style, ...props }) {
@@ -281,11 +289,12 @@ export function Paper({ withBorder, radius = 'md', p = 'md', className = '', chi
   );
 }
 
-export function ScrollArea({ h, children, className = '', offsetScrollbars, style, ...props }) {
+export const ScrollArea = React.forwardRef(({ h, children, className = '', offsetScrollbars, style, ...props }, ref) => {
   const [rest, spacingStyle] = consumeSpacingProps({ ...props, style });
   const maxHeight = h ? (typeof h === 'number' ? `${h}px` : h) : undefined;
   return (
     <div
+      ref={ref}
       className={cx('overflow-y-auto thin-scroll', className)}
       style={{ ...spacingStyle, maxHeight }}
       {...rest}
@@ -293,7 +302,7 @@ export function ScrollArea({ h, children, className = '', offsetScrollbars, styl
       {children}
     </div>
   );
-}
+});
 
 export function Title({ order = 3, children, className = '' }) {
   const Tag = `h${order}`;

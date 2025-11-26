@@ -3,6 +3,7 @@ import path from 'path';
 import PDFDocument from 'pdfkit';
 import { mapAction, mapActions } from '../actionMap.js';
 import { buildPdfModel } from '../pdf/model.js';
+import { generateExportFilename } from '../utils/filenameGenerator.js';
 
 // Centralized typography + spacing constants for PDF layout consistency
 const PDF_STYLE = {
@@ -304,7 +305,8 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
     return age;
   }
 
-  const intakeDate = m.document?.intakeDate || r.documentMeta?.intakeDate || null;
+  // Use referralDate from pdfModel header, or intakeDate from raw extraction result
+  const intakeDate = m.header?.referralDate || r.documentMeta?.intakeDate || null;
   const patientAge = computeAge(p.dob, intakeDate);
   const hasCaretaker = Array.isArray(info.accommodations) && info.accommodations.includes('caretaker');
   const mobilityConcern = Array.isArray(info.safety) && info.safety.includes('mobility');
@@ -329,8 +331,8 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
     doc.text(`- ${line}`);
   }
 
-  // Header line
-  const hdr = `PATIENT: ${[p.last, p.first].filter(Boolean).join(', ') || 'Unknown'} | DOB: ${p.dob || '—'} | REFERRAL DATE: ${m.document?.intakeDate || r.documentMeta?.intakeDate || '—'}`;
+  // Header line - use referralDate from pdfModel header, or intakeDate from raw extraction
+  const hdr = `PATIENT: ${[p.last, p.first].filter(Boolean).join(', ') || 'Unknown'} | DOB: ${p.dob || '—'} | REFERRAL DATE: ${m.header?.referralDate || r.documentMeta?.intakeDate || '—'}`;
   doc.fontSize(PDF_STYLE.sizes.meta).text(hdr, { continued: false });
   doc.moveDown(0.5);
 
@@ -351,12 +353,12 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   // Insurance
   section('INSURANCE');
   const primaryParts = [primaryIns.carrier || '—'];
-  if (primaryIns.memberId) primaryParts.push(`Member: ${primaryIns.memberId}`);
+  if (primaryIns.memberId) primaryParts.push(`ID: ${primaryIns.memberId}`);
   if (primaryIns.groupId) primaryParts.push(`Group: ${primaryIns.groupId}`);
   bullet(`Primary: ${primaryParts.join(' | ')}`);
   if (secondaryIns) {
     const secondaryParts = [secondaryIns.carrier || '—'];
-    if (secondaryIns.memberId) secondaryParts.push(`Member: ${secondaryIns.memberId}`);
+    if (secondaryIns.memberId) secondaryParts.push(`ID: ${secondaryIns.memberId}`);
     if (secondaryIns.groupId) secondaryParts.push(`Group: ${secondaryIns.groupId}`);
     bullet(`Secondary: ${secondaryParts.join(' | ')}`);
   }
@@ -394,27 +396,35 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   } else {
     bullet('Primary Diagnosis: —');
   }
-  // Show all additional diagnoses with descriptions (ranked order)
-  const allDiags = Array.isArray(clinical.diagnosesDetailed) ? clinical.diagnosesDetailed : [];
-  if (allDiags.length > 1) {
-    const additionalDiags = allDiags.slice(1).map(d => {
-      const parts = [d.code];
-      if (d.description) parts.push(d.description);
-      return parts.join(' — ');
-    }).slice(0, 5); // Show up to 5 additional diagnoses
-    if (additionalDiags.length) {
-      bullet(`Additional Diagnoses: ${additionalDiags.join(' | ')}`);
-    }
-  }
   if (Array.isArray(clinical.symptoms) && clinical.symptoms.length) {
-    bullet(`Symptoms Present: ${clinical.symptoms.join(', ')}`);
+    // Map symptoms to ICD codes for better clinical context
+    const symptomIcdMap = {
+      'snoring': 'R06.83',
+      'mood_changes': 'F33.0',
+      'fatigue': 'R53.83',
+      'morning_symptoms': 'G47.33',
+      'cognitive_issues': 'F33.0',
+      'daytime_sleepiness': 'G47.33',
+      'headache': 'R51.9',
+      'witnessed_apnea': 'G47.33',
+      'gasping': 'R06.89',
+      'restless_sleep': 'G47.63'
+    };
+    
+    const symptomsWithIcd = clinical.symptoms.map(symptom => {
+      const icd = symptomIcdMap[symptom];
+      return icd ? `${symptom} (${icd})` : symptom;
+    }).join(', ');
+    
+    bullet(`Symptoms Present: ${symptomsWithIcd}`);
   }
   const vitalsParts = [];
   if (vitals.bmi) vitalsParts.push('BMI ' + vitals.bmi);
-  if (vitals.bp) vitalsParts.push('BP ' + vitals.bp);
-  if (vitals.weightLbs) vitalsParts.push('Wt ' + vitals.weightLbs + ' lbs');
-  if (vitals.height) vitalsParts.push('Ht ' + vitals.height);
-  if (vitalsParts.length) bullet('Vitals: ' + vitalsParts.join(' | '));
+  if (vitals.height && vitals.weightLbs) vitalsParts.push(`Height: ${vitals.height} | Weight: ${vitals.weightLbs} lbs`);
+  else if (vitals.height) vitalsParts.push(`Height: ${vitals.height}`);
+  else if (vitals.weightLbs) vitalsParts.push(`Weight: ${vitals.weightLbs} lbs`);
+  if (vitals.bp) vitalsParts.push('BP: ' + vitals.bp);
+  if (vitalsParts.length) bullet(vitalsParts.join(' | '));
 
   // Information Alerts
   section('INFORMATION ALERTS');
@@ -431,6 +441,28 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   if (medicationNote) bullet(`Medication Alerts: ${medicationNote}`);
   const testNote = joinList(info.testResults);
   if (testNote) bullet(`Referenced Test Results: ${testNote}`);
+
+  // Clinical Notes (narrative content from LLM extraction)
+  const narrative = r.narrative || {};
+  const hasNarrativeContent = narrative.clinicalHistory || narrative.clinicalNotes || 
+                              narrative.reasonForReferral || narrative.presentIllness ||
+                              (Array.isArray(clinical.problemsList) && clinical.problemsList.length > 0);
+  if (hasNarrativeContent) {
+    section('CLINICAL NOTES');
+    if (narrative.reasonForReferral) bullet(`Reason for Referral: ${narrative.reasonForReferral}`);
+    if (narrative.presentIllness) bullet(`Present Illness: ${narrative.presentIllness}`);
+    if (narrative.clinicalHistory) bullet(`Clinical History: ${narrative.clinicalHistory}`);
+    if (narrative.clinicalNotes) bullet(`Clinical Notes: ${narrative.clinicalNotes}`);
+    // Display problems list in clinical notes section
+    if (Array.isArray(clinical.problemsList) && clinical.problemsList.length > 0) {
+      const problemsFormatted = clinical.problemsList.map(p => {
+        const parts = [p.condition];
+        if (p.onset) parts.push(`onset: ${p.onset}`);
+        return parts.join(' (') + (p.onset ? ')' : '');
+      }).join(' | ');
+      bullet(`Problems List: ${problemsFormatted}`);
+    }
+  }
 
   // Problem Flags
   section('PROBLEM FLAGS');

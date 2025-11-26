@@ -1,6 +1,6 @@
 {
   "counters": {
-    "docsQueued": 2,
+    "docsQueued": 4,
     "docsProcessed": 0,
     "docsErrored": 0,
     "ocrTimeouts": 0,
@@ -9,8 +9,8 @@
     "apiErrorsExternal": 0,
     "apiErrorsSystem": 0,
     "pdfModelsBuilt": 0,
-    "ocrQueueWaitSamples": 2,
-    "ocrQueueWait_lt1s": 2
+    "ocrQueueWaitSamples": 4,
+    "ocrQueueWait_lt1s": 4
   },
   "extractionLatencyMs": [],
   "confidenceSamples": [],

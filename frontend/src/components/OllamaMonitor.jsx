@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Group, Stack, Text, Badge, Button, Paper } from '../ui/primitives.jsx';
+import React, { useState, useEffect, useRef } from 'react';
+import { Group, Stack, Text, Badge, Button, Paper, ScrollArea, Tooltip } from '../ui/primitives.jsx';
 import { IconRefresh, IconCircleCheck, IconAlertCircle, IconClock } from '@tabler/icons-react';
 
 export default function OllamaMonitor() {
@@ -8,6 +8,12 @@ export default function OllamaMonitor() {
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [lastCompletionTime, setLastCompletionTime] = useState(null);
+  const logsScrollRef = useRef(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -56,6 +62,79 @@ export default function OllamaMonitor() {
       return () => clearInterval(interval);
     }
   }, [autoRefresh]);
+
+  // Fetch Ollama logs
+  useEffect(() => {
+    if (!showLogs) return;
+    
+    let interval;
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('/api/logs/ollama?lines=100');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.logs)) {
+            setLogs(data.logs);
+            
+            // Detect processing state
+            const hasStart = data.logs.some(line => 
+              line.includes('dual_engine_start') || 
+              line.includes('llm_validation_mode') ||
+              line.includes('ollama_validation_start')
+            );
+            const hasComplete = data.logs.some(line => 
+              line.includes('dual_engine_complete')
+            );
+            
+            // Track completion
+            if (hasStart && !hasComplete) {
+              setIsProcessing(true);
+            } else if (hasComplete) {
+              if (isProcessing) {
+                // Just completed - record time
+                setLastCompletionTime(new Date());
+              }
+              setIsProcessing(false);
+            }
+            
+            // Auto-scroll to bottom if enabled
+            if (autoScroll && logsScrollRef.current) {
+              setTimeout(() => {
+                const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                if (viewport) {
+                  viewport.scrollTop = viewport.scrollHeight;
+                }
+              }, 50);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch Ollama logs:', err);
+      }
+    };
+    
+    fetchLogs(); // Initial fetch
+    interval = setInterval(fetchLogs, 2000); // Poll every 2 seconds
+    
+    return () => clearInterval(interval);
+  }, [showLogs, autoScroll, isProcessing]);
+
+  // Detect manual scroll to pause auto-scroll
+  useEffect(() => {
+    if (!logsScrollRef.current) return;
+    
+    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const isAtBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 10;
+      setAutoScroll(isAtBottom);
+    };
+    
+    viewport.addEventListener('scroll', handleScroll);
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, [showLogs]);
 
   const getStatusColor = () => {
     if (!health) return 'gray';
@@ -256,6 +335,139 @@ export default function OllamaMonitor() {
           </Stack>
         </Paper>
       )}
+
+      {/* Live Processing Logs */}
+      <Paper withBorder p="md" radius="md">
+        <Stack gap="xs">
+          <Group justify="space-between" align="center">
+            <Group gap="xs">
+              <Text size="sm" fw={600} c="dimmed" tt="uppercase">
+                Ollama Processing Logs
+              </Text>
+              {showLogs && (
+                <>
+                  {isProcessing ? (
+                    <Badge size="sm" variant="light" color="blue" leftSection="🔄">
+                      Processing
+                    </Badge>
+                  ) : lastCompletionTime ? (
+                    <Badge size="sm" variant="light" color="green" leftSection="✅">
+                      Done {new Date(lastCompletionTime).toLocaleTimeString()}
+                    </Badge>
+                  ) : (
+                    <Badge size="sm" variant="light" color="purple">
+                      Live
+                    </Badge>
+                  )}
+                  <Tooltip label="Shows Ollama LLM inference events, page selection, and dual-engine processing">
+                    <Badge size="xs" variant="outline" color="purple">
+                      Filtered
+                    </Badge>
+                  </Tooltip>
+                </>
+              )}
+            </Group>
+            <Button
+              size="xs"
+              variant={showLogs ? 'filled' : 'light'}
+              color="purple"
+              onClick={() => setShowLogs(v => !v)}
+            >
+              {showLogs ? 'Hide Logs' : 'Show Live Logs'}
+            </Button>
+          </Group>
+          
+          {showLogs && (
+            <Paper p="sm" withBorder style={{ background: '#0a0e13', fontFamily: 'monospace' }}>
+              <Stack gap="xs" mb="xs">
+                <Group gap="xs" align="center">
+                  <Text size="xs" c="dimmed">
+                    {autoScroll ? '📌 Auto-scrolling' : '⏸️ Scroll paused (scroll to bottom to resume)'}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    onClick={() => {
+                      setAutoScroll(true);
+                      if (logsScrollRef.current) {
+                        const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                        if (viewport) {
+                          viewport.scrollTop = viewport.scrollHeight;
+                        }
+                      }
+                    }}
+                  >
+                    Jump to Bottom
+                  </Button>
+                </Group>
+              </Stack>
+              <ScrollArea 
+                h={300} 
+                offsetScrollbars
+                ref={logsScrollRef}
+              >
+                <Stack gap={2}>
+                  {logs.length === 0 && (
+                    <Text size="xs" c="dimmed">
+                      Waiting for Ollama processing logs...
+                    </Text>
+                  )}
+                  {logs.map((line, i) => {
+                    // Color-code important log lines
+                    const isError = line.includes('error') || line.includes('failed');
+                    const isWarning = line.includes('warn');
+                    const isProcessingDone = line.includes('PROCESSING COMPLETE') || line.includes('✅') || line.includes('dual_engine_processing_complete');
+                    const isProcessingStart = line.includes('STARTING VALIDATION') || line.includes('🔄') || line.includes('dual_engine_validation_start');
+                    const isStart = line.includes('ollama_extract_start') || line.includes('page_selection');
+                    const isComplete = line.includes('ollama_extract_complete') || line.includes('dual_engine_merge');
+                    const isTiming = line.includes('took ') || line.includes('ms') || line.includes('processingTime');
+                    
+                    let color = '#9ca3af'; // default gray
+                    let fontWeight = 'normal';
+                    let fontSize = 'xs';
+                    
+                    if (isProcessingDone) {
+                      color = '#10b981'; // bright green
+                      fontWeight = 'bold';
+                      fontSize = 'sm';
+                    } else if (isProcessingStart) {
+                      color = '#3b82f6'; // bright blue
+                      fontWeight = 'bold';
+                      fontSize = 'sm';
+                    } else if (isError) {
+                      color = '#ef4444'; // red
+                    } else if (isWarning) {
+                      color = '#f59e0b'; // orange
+                    } else if (isComplete) {
+                      color = '#10b981'; // green (success)
+                    } else if (isStart) {
+                      color = '#3b82f6'; // blue (starting)
+                    } else if (isTiming) {
+                      color = '#a78bfa'; // purple (timing info)
+                    }
+                    
+                    return (
+                      <Text
+                        key={i}
+                        size={fontSize}
+                        style={{
+                          color,
+                          fontWeight,
+                          lineHeight: 1.4,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word'
+                        }}
+                      >
+                        {line}
+                      </Text>
+                    );
+                  })}
+                </Stack>
+              </ScrollArea>
+            </Paper>
+          )}
+        </Stack>
+      </Paper>
 
       {lastUpdate && (
         <Text size="xs" c="dimmed" ta="right">

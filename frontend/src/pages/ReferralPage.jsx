@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Badge, Group, Stack, Text, Code, Paper, ScrollArea, Title, JsonInput, Tooltip, ActionIcon, Checkbox } from '../ui/primitives.jsx';
 import { notifications } from '../ui/primitives.jsx';
-import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize, IconEdit, IconDeviceFloppy, IconX } from '@tabler/icons-react';
+import { IconBug, IconUpload, IconPlayerPlay, IconFileArrowRight, IconFileImport, IconArrowsMaximize, IconArrowsMinimize, IconEdit, IconDeviceFloppy, IconX, IconTrash } from '@tabler/icons-react';
 import { getStatusBadgeColor } from '../ui/utils.js';
 import Section from '../components/Section.jsx';
 import PlaceholderPanel from '../components/PlaceholderPanel.jsx';
 import OllamaMonitor from '../components/OllamaMonitor.jsx';
+import ValidationIssuesDrawer from '../components/ValidationIssuesDrawer.jsx';
 
 const apiBase = '/api';
 
@@ -55,6 +56,14 @@ export default function ReferralPage() {
   const [editedFields, setEditedFields] = useState({});
   const [savingCorrection, setSavingCorrection] = useState(false);
   
+  // Validation issues drawer state
+  const [showValidationDrawer, setShowValidationDrawer] = useState(false);
+  
+  // Debug: Track drawer state changes
+  useEffect(() => {
+    console.log('🔵 showValidationDrawer changed to:', showValidationDrawer);
+  }, [showValidationDrawer]);
+  
   // Live logs state
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
@@ -81,6 +90,36 @@ export default function ReferralPage() {
       localStorage.setItem('exportSelection', JSON.stringify(Array.from(selectedExportIds)));
     } catch {}
   }, [selectedExportIds]);
+
+  // Restore processed documents from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedResults = localStorage.getItem('processedDocuments');
+      const savedOrder = localStorage.getItem('processedOrder');
+      if (savedResults && savedOrder) {
+        const parsedResults = JSON.parse(savedResults);
+        const parsedOrder = JSON.parse(savedOrder);
+        setResultsMap(parsedResults);
+        setProcessedOrder(parsedOrder);
+        console.log('📂 Restored', parsedOrder.length, 'processed documents from localStorage');
+      }
+    } catch (err) {
+      console.error('Failed to restore processed documents:', err);
+    }
+  }, []);
+
+  // Persist processed documents whenever resultsMap changes
+  useEffect(() => {
+    if (Object.keys(resultsMap).length > 0) {
+      try {
+        localStorage.setItem('processedDocuments', JSON.stringify(resultsMap));
+        localStorage.setItem('processedOrder', JSON.stringify(processedOrder));
+        console.log('💾 Saved', Object.keys(resultsMap).length, 'documents to localStorage');
+      } catch (err) {
+        console.error('Failed to save processed documents:', err);
+      }
+    }
+  }, [resultsMap, processedOrder]);
 
   // Prune any selected IDs that are no longer present (e.g., after refresh before data arrives)
   useEffect(() => {
@@ -261,6 +300,71 @@ export default function ReferralPage() {
     const level = selectedDoc.confidence;
     const color = level === 'High' ? 'green' : level === 'Medium' ? 'yellow' : 'red';
     return <Badge color={color}>Confidence: {level}</Badge>;
+  }, [selectedDoc]);
+
+  const dualEngineBadge = useMemo(() => {
+    if (!selectedDoc?.dualEngine) return null;
+    return (
+      <Tooltip label={`OCR + LLM processing (${selectedDoc.dualEngine.llm?.pagesProcessed || 0} pages)`}>
+        <Badge color="purple" variant="light">Dual-Engine</Badge>
+      </Tooltip>
+    );
+  }, [selectedDoc]);
+
+  const validationIssuesBadge = useMemo(() => {
+    // Debug: Check what data we have
+    const conflicts = selectedDoc?.dualEngine?.conflicts;
+    const conflictCount = selectedDoc?.dualEngine?.conflictCount;
+    
+    console.log('[ValidationBadge] Debug:', {
+      hasDualEngine: !!selectedDoc?.dualEngine,
+      conflictsArray: conflicts,
+      conflictCount: conflictCount,
+      conflictsLength: conflicts?.length
+    });
+    
+    if (!conflicts || conflicts.length === 0) return null;
+    const issueCount = conflicts.length;
+    const criticalCount = selectedDoc.dualEngine.conflicts.filter(c => 
+      c.toLowerCase().includes('patient name') || 
+      c.toLowerCase().includes('dob') || 
+      c.toLowerCase().includes('insurance')
+    ).length;
+    
+    return (
+      <Tooltip label={`${issueCount} validation issues found (${criticalCount} critical) - Click to review`}>
+        <Badge 
+          color={criticalCount > 0 ? "red" : "orange"} 
+          variant="light" 
+          style={{ cursor: 'pointer' }}
+          onClick={() => {
+            console.log('🟠 Top validation badge clicked! Setting drawer to true');
+            setShowValidationDrawer(true);
+            console.log('🟠 showValidationDrawer should now be:', true);
+          }}
+        >
+          ⚠️ {issueCount} Issues
+        </Badge>
+      </Tooltip>
+    );
+  }, [selectedDoc]);
+
+  const routingBadge = useMemo(() => {
+    if (!selectedDoc?.routing?.route) return null;
+    const action = selectedDoc.routing.route.action;
+    const color = 
+      action === 'READY_TO_SCHEDULE' ? 'green' :
+      action === 'MANUAL_REVIEW' ? 'red' :
+      action === 'INSURANCE_VERIFICATION' ? 'yellow' :
+      action === 'PRIOR_AUTH' ? 'orange' :
+      'blue';
+    return (
+      <Tooltip label={selectedDoc.routing.route.description || ''}>
+        <Badge color={color} variant="light">
+          {selectedDoc.routing.route.label || action}
+        </Badge>
+      </Tooltip>
+    );
   }, [selectedDoc]);
 
   async function uploadSingle(fileObj, updateList = true) {
@@ -460,6 +564,35 @@ export default function ReferralPage() {
         color: 'red'
       });
     }
+  }
+
+  function clearAll() {
+    if (!confirm('Clear all processed documents? This will remove all results from memory.')) {
+      return;
+    }
+    
+    // Clear all state
+    setResultsMap({});
+    setProcessedOrder([]);
+    setSelectedId('');
+    setFiles([]);
+    setStatus(null);
+    setError('');
+    setBatchProgress([]);
+    setSelectedExportIds(new Set());
+    
+    // Clear localStorage
+    localStorage.removeItem('processedDocuments');
+    localStorage.removeItem('processedOrder');
+    localStorage.removeItem('exportSelection');
+    
+    console.log('🗑️ Cleared all processed documents');
+    
+    notifications.show({
+      title: 'Cleared',
+      message: 'All processed documents removed',
+      color: 'blue'
+    });
   }
 
   async function loadSample() {
@@ -726,6 +859,87 @@ export default function ReferralPage() {
     }
   }
 
+  // Handler for field updates from ValidationIssuesDrawer
+  async function handleUpdateField(fieldPath, newValue) {
+    if (!selectedId) return;
+
+    console.log(`[ValidationDrawer] Update ${fieldPath} -> "${newValue}" (persisting to backend)`);
+
+    // Optimistic local update for snappy UI
+    setResultsMap(prev => {
+      const doc = prev[selectedId];
+      if (!doc) return prev;
+      const updated = structuredClone ? structuredClone(doc) : JSON.parse(JSON.stringify(doc));
+      const setLocal = (obj, path, val) => {
+        const tokens = [];
+        path.split('.').forEach(part => {
+          const re = /(\w+)(\[(\d+)\])?/g;
+          let m;
+          while ((m = re.exec(part)) !== null) {
+            tokens.push(m[1]);
+            if (m[3] !== undefined) tokens.push(Number(m[3]));
+          }
+        });
+        let cur = obj;
+        for (let i = 0; i < tokens.length - 1; i++) {
+          const key = tokens[i];
+          if (key === 'insurance' && Array.isArray(cur[key])) {
+            const next = tokens[i + 1];
+            if (typeof next !== 'number') {
+              cur[key][0] = cur[key][0] || {};
+              cur = cur[key][0];
+              continue;
+            }
+          }
+          if (typeof tokens[i + 1] === 'number') {
+            if (!Array.isArray(cur[key])) cur[key] = [];
+            const idx = tokens[i + 1];
+            cur[key][idx] = cur[key][idx] || {};
+            cur = cur[key][idx];
+            i++;
+          } else {
+            cur[key] = cur[key] && typeof cur[key] === 'object' ? cur[key] : {};
+            cur = cur[key];
+          }
+        }
+        const last = tokens[tokens.length - 1];
+        cur[last] = val;
+      };
+      setLocal(updated, fieldPath, newValue);
+      return { ...prev, [selectedId]: updated };
+    });
+
+    try {
+      const res = await fetch(`${apiBase}/documents/${selectedId}/update-field`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: fieldPath, value: newValue })
+      });
+      const js = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(js?.error?.message || 'update_failed');
+
+      // Sync with authoritative server copy
+      if (js?.result) {
+        setResultsMap(prev => ({ ...prev, [selectedId]: { ...prev[selectedId], ...js.result } }));
+      }
+
+      notifications.show({
+        title: 'Field Updated',
+        message: `${fieldPath} has been corrected to: ${newValue}`,
+        color: 'green',
+        autoClose: 2500
+      });
+    } catch (err) {
+      console.error('Persist edit failed', err);
+      notifications.show({
+        title: 'Save Failed',
+        message: 'Could not persist change. It will remain local for now.',
+        color: 'red',
+        autoClose: 3500
+      });
+    }
+  }
+
   function Details({ docId, doc }) {
     if (!doc) return null;
     const showRaw = !!showRawMap[docId];
@@ -966,6 +1180,19 @@ export default function ReferralPage() {
                   {doc.clinical.primaryDiagnosis.description && ` — ${doc.clinical.primaryDiagnosis.description}`}
                 </Text>
               )}
+              {Array.isArray(doc.clinical?.problemsList) && doc.clinical.problemsList.length > 0 && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Problems List:</Text>
+                  <Stack gap={2}>
+                    {doc.clinical.problemsList.map((problem, idx) => (
+                      <Text key={idx} size="xs" c="dimmed">
+                        • {problem.condition}
+                        {problem.onset && ` (onset: ${problem.onset})`}
+                      </Text>
+                    ))}
+                  </Stack>
+                </div>
+              )}
               {Array.isArray(doc.clinical?.symptoms) && doc.clinical.symptoms.length > 0 && (
                 <Text size="xs" c="dimmed">
                   Symptoms Present: {doc.clinical.symptoms.join(', ')}
@@ -1173,6 +1400,63 @@ export default function ReferralPage() {
           </Section>
         )}
 
+        {/* Narrative Content (LLM-extracted free text) */}
+        {doc?.narrative?.hasNarrativeContent && (
+          <Section
+            title="📝 Narrative Content (LLM-Extracted)"
+            actions={
+              <Badge size="sm" color="purple" variant="light">Extract Mode</Badge>
+            }
+          >
+            <Stack gap="md">
+              {doc.narrative.reasonForReferral && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Reason for Referral:</Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {doc.narrative.reasonForReferral}
+                  </Text>
+                </div>
+              )}
+              
+              {doc.narrative.clinicalHistory && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Clinical History:</Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {doc.narrative.clinicalHistory}
+                  </Text>
+                </div>
+              )}
+              
+              {doc.narrative.currentMedications && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Current Medications:</Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {doc.narrative.currentMedications}
+                  </Text>
+                </div>
+              )}
+              
+              {doc.narrative.clinicalNotes && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Clinical Notes:</Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {doc.narrative.clinicalNotes}
+                  </Text>
+                </div>
+              )}
+              
+              {doc.narrative.additionalComments && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Additional Comments:</Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {doc.narrative.additionalComments}
+                  </Text>
+                </div>
+              )}
+            </Stack>
+          </Section>
+        )}
+
         <Section
           title="Raw JSON"
           actions={
@@ -1263,6 +1547,9 @@ export default function ReferralPage() {
               </Badge>
             )}
             {confidenceBadge}
+            {dualEngineBadge}
+            {validationIssuesBadge}
+            {routingBadge}
           </Group>
         </Group>
       </Paper>
@@ -1315,6 +1602,18 @@ export default function ReferralPage() {
                     Sample
                   </Button>
                 </Group>
+                {Object.keys(resultsMap).length > 0 && (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={clearAll}
+                    leftSection={<IconTrash size={14} />}
+                    fullWidth
+                  >
+                    Clear All ({Object.keys(resultsMap).length})
+                  </Button>
+                )}
                 {error && <Badge color="red" variant="light">{error}</Badge>}
                 {batchProgress.length > 0 && (
                   <Stack gap={2}>
@@ -1566,6 +1865,27 @@ export default function ReferralPage() {
                                     )}
                                   </Group>
                                 )}
+                                {/* Validation Issues Badge */}
+                                {r?.dualEngine?.conflicts?.length > 0 && (
+                                  <Badge 
+                                    size="xs" 
+                                    color="red" 
+                                    variant="light"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      console.log('🔴 Validation badge clicked!', { pid, conflicts: r.dualEngine.conflicts.length });
+                                      // First select the document, then open drawer in next tick
+                                      setSelectedId(pid);
+                                      setTimeout(() => {
+                                        setShowValidationDrawer(true);
+                                        console.log('🔴 Drawer opened after selection');
+                                      }, 50);
+                                    }}
+                                  >
+                                    ⚠️ {r.dualEngine.conflicts.length}
+                                  </Badge>
+                                )}
                               </Stack>
                               <Group gap={4} align="flex-start">
                                 <Tooltip label="Fetch debug trace">
@@ -1609,9 +1929,16 @@ export default function ReferralPage() {
                 OCR Service Logs
               </Text>
               {showLogs && (
-                <Badge size="sm" variant="light" color="blue">
-                  Live
-                </Badge>
+                <>
+                  <Badge size="sm" variant="light" color="blue">
+                    Live
+                  </Badge>
+                  <Tooltip label="Purple = Dual-Engine/Ollama events, Pink = Routing/Decision-tree">
+                    <Badge size="xs" variant="outline" color="purple">
+                      Color-coded
+                    </Badge>
+                  </Tooltip>
+                </>
               )}
             </Group>
             <Button
@@ -1664,10 +1991,14 @@ export default function ReferralPage() {
                     const isWarning = line.includes('WARN') || line.includes('warning');
                     const isInfo = line.includes('INFO') || line.includes('page=');
                     const isTiming = line.includes('took ') || line.includes('confidence=');
+                    const isDualEngine = line.includes('dual_engine') || line.includes('ollama') || line.includes('page_selection') || line.includes('multi_page');
+                    const isRouting = line.includes('routing') || line.includes('decision_tree');
                     
                     let color = '#9ca3af'; // default gray
                     if (isError) color = '#ef4444'; // red
                     else if (isWarning) color = '#f59e0b'; // orange
+                    else if (isDualEngine) color = '#a78bfa'; // purple (dual-engine events)
+                    else if (isRouting) color = '#f472b6'; // pink (routing events)
                     else if (isInfo) color = '#3b82f6'; // blue
                     else if (isTiming) color = '#10b981'; // green
                     
@@ -1696,6 +2027,22 @@ export default function ReferralPage() {
 
       {/* Ollama LLM Monitor */}
       <OllamaMonitor />
+
+      {/* Validation Issues Drawer */}
+      {showValidationDrawer && console.log('🔷 Drawer opening with selectedDoc:', {
+        hasSelectedDoc: !!selectedDoc,
+        selectedId,
+        conflictsCount: selectedDoc?.dualEngine?.conflicts?.length,
+        firstConflict: selectedDoc?.dualEngine?.conflicts?.[0],
+        extractedKeys: selectedDoc ? Object.keys(selectedDoc) : []
+      })}
+      <ValidationIssuesDrawer
+        isOpen={showValidationDrawer}
+        onClose={() => setShowValidationDrawer(false)}
+        conflicts={selectedDoc?.dualEngine?.conflicts || []}
+        extractedData={selectedDoc?.dualEngine?.llm?.extracted || selectedDoc || {}}
+        onUpdateField={handleUpdateField}
+      />
 
     </Stack>
   );

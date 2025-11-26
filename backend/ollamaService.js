@@ -22,50 +22,136 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llava:13b';
 const OLLAMA_TIMEOUT = parseInt(process.env.OLLAMA_TIMEOUT || '60000', 10);
 
+// Default medical extraction prompt (used in legacy extraction mode)
+// Note: Validation mode avoids PHI extraction; this prompt is only used
+// when explicitly running full extraction via extractWithOllama without a custom prompt.
+const MEDICAL_EXTRACTION_PROMPT = `You are extracting structured data from a medical referral form image.
+Return ONLY strict JSON. Use null when a field is not clearly visible.
+
+Fields:
+{
+  "patient": {
+    "name": "Last, First Middle" | null,
+    "dob": "MM/DD/YYYY" | null,
+    "phone": "(XXX) XXX-XXXX" | null
+  },
+  "insurance": {
+    "carrier": string | null,
+    "memberId": string | null,
+    "groupId": string | null
+  },
+  "provider": {
+    "name": string | null,
+    "npi": string | null,
+    "phone": "(XXX) XXX-XXXX" | null,
+    "fax": "(XXX) XXX-XXXX" | null
+  },
+  "clinical": {
+    "diagnosis": string | null,
+    "icd10": string | null,
+    "procedure": string | null,
+    "cpt": string | null
+  },
+  "confidence": 0.0-1.0
+}
+
+Rules:
+- Output JSON only, no markdown.
+- Preserve exact spelling seen in the document.
+- If illegible or ambiguous, use null.
+`;
+
 /**
  * Medical extraction prompt template
  */
-const MEDICAL_EXTRACTION_PROMPT = `You are a medical document extraction assistant. Extract the following information from this medical referral form image. Be precise and only extract what you can clearly see.
-
-Extract these fields:
-- Patient full name (Last, First)
-- Date of birth (MM/DD/YYYY)
-- Phone number
-- Insurance carrier name
-- Member/Policy ID
-- Referring provider name
-- Provider NPI (if visible)
-- Primary diagnosis or referral reason
-- Requested procedure/test
-
-Return ONLY valid JSON in this exact format (use null for missing fields):
+/**
+ * Generate dynamic validation prompt based on OCR extracted data
+ * @param {Object} ocrData - OCR extraction results
+ * @returns {string} Generated validation prompt
+ */
+function generateValidationPrompt(ocrData) {
+  const fields = [];
+  
+  // Only extract from the 'extracted' section (patient, insurance, provider, etc.)
+  const relevantData = ocrData.extracted || ocrData;
+  
+  // Dynamically extract fields from structured data only
+  const extractFields = (obj, prefix = '', depth = 0) => {
+    // Prevent infinite recursion
+    if (depth > 3) return;
+    
+    for (const [key, value] of Object.entries(obj || {})) {
+      // Skip non-relevant sections
+      if (['rawOCR', 'rawTextCombined', 'ruleTrace', 'highlightSpans', 'ocr', 'documentMeta'].includes(key)) {
+        continue;
+      }
+      
+      if (value === null || value === undefined || value === '') continue;
+      
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        // Nested object - recurse with depth limit
+        extractFields(value, prefix ? `${prefix}.${key}` : key, depth + 1);
+      } else if (typeof value === 'string' || typeof value === 'number') {
+        // Leaf value - add to fields list
+        const fieldPath = prefix ? `${prefix}.${key}` : key;
+        const fieldLabel = fieldPath.replace(/\./g, ' ').replace(/([A-Z])/g, ' $1').trim();
+        const valueStr = String(value).substring(0, 100); // Limit value length
+        fields.push({ path: fieldPath, label: fieldLabel, value: valueStr });
+      }
+    }
+  };
+  
+  extractFields(relevantData);
+  
+  // Build field list for prompt
+  const fieldsList = fields.map(f => `  ${f.label}: "${f.value}"`).join('\n');
+  
+  if (fields.length === 0) {
+    return `You are validating a medical document image. No OCR data was extracted. 
+Analyze the document and return:
 {
-  "patient": {
-    "name": "Last, First" or null,
-    "dob": "MM/DD/YYYY" or null,
-    "phone": "(XXX) XXX-XXXX" or null
-  },
-  "insurance": {
-    "carrier": "Carrier Name" or null,
-    "memberId": "ID" or null
-  },
-  "provider": {
-    "name": "Provider Name" or null,
-    "npi": "NPI" or null
-  },
-  "clinical": {
-    "diagnosis": "Diagnosis text" or null,
-    "procedure": "Procedure name" or null
-  },
-  "confidence": 0.0 to 1.0,
-  "notes": "Any concerns or unclear fields"
-}
+  "documentQuality": "readable|poor|unreadable",
+  "hasText": true/false,
+  "notes": "Brief description of what you see"
+}`;
+  }
+  
+  return `You are validating OCR extraction accuracy for a medical referral document.
 
-Important:
-- Return ONLY the JSON, no other text
-- Use null for missing fields, not empty strings
-- Format phone numbers as (XXX) XXX-XXXX
-- Format dates as MM/DD/YYYY`;
+OCR EXTRACTED THESE ${fields.length} FIELDS:
+${fieldsList}
+
+YOUR TASK - For each field above, validate by describing what you visually observe:
+1. Is text present in that field location? (yes/no)
+2. Visual quality of that text area (clear/blurry/smudged/damaged)
+3. Character/word count without reading actual content
+4. Any visual anomalies (mixed numbers/letters, unusual spacing, etc.)
+
+CRITICAL RULES:
+- DO NOT extract new PHI (names, dates, IDs)
+- DO NOT read or repeat sensitive data
+- ONLY describe visual characteristics
+- Use terms like "text visible", "appears clear", "2 words present"
+
+Return JSON (create one entry per field above):
+{
+  "fieldValidations": {
+    "patient name": {
+      "extracted": "value OCR found",
+      "hasText": true/false,
+      "visualQuality": "clear|blurry|damaged|unreadable",
+      "characterCount": number,
+      "wordCount": number,
+      "appearsCorrect": true/false,
+      "confidence": "high|medium|low",
+      "concerns": "visual issues or null"
+    }
+  },
+  "overallAccuracy": 0.0-1.0,
+  "issuesFound": ["list concerns"],
+  "notes": "brief assessment"
+}`;
+}
 
 /**
  * Check if Ollama service is available
@@ -218,24 +304,62 @@ export async function validateWithOllama(imagePath, ocrData) {
 }
 
 /**
- * Parse JSON from Ollama response (handles markdown code blocks)
+ * Parse JSON from Ollama response (handles markdown code blocks and malformed JSON)
  */
 function parseJsonResponse(text) {
+  // Log raw response for debugging
+  if (process.env.LOG_LEVEL === 'debug') {
+    log('debug', 'ollama_raw_response', { 
+      length: text.length, 
+      preview: text.substring(0, 200) 
+    });
+  }
+  
   try {
     // Try direct parse first
     return JSON.parse(text);
-  } catch {
+  } catch (firstError) {
     // Look for JSON in markdown code blocks
     const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[1]);
+      try {
+        return JSON.parse(jsonMatch[1]);
+      } catch (e) {
+        log('warn', 'ollama_json_parse_markdown_failed', { error: String(e) });
+      }
     }
     
-    // Try to find JSON object in text
+    // Try to find JSON object in text (greedy match)
     const objectMatch = text.match(/\{[\s\S]*\}/);
     if (objectMatch) {
-      return JSON.parse(objectMatch[0]);
+      let jsonStr = objectMatch[0];
+      
+      // Clean up common issues:
+      // 1. Remove trailing commas before }
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+      
+      // 2. Fix unquoted keys (heuristic)
+      jsonStr = jsonStr.replace(/(\w+):/g, '"$1":');
+      
+      // 3. Remove comments (// or /* */)
+      jsonStr = jsonStr.replace(/\/\/.*$/gm, '');
+      jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\//g, '');
+      
+      try {
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        log('error', 'ollama_json_parse_failed_after_cleanup', { 
+          error: String(e),
+          cleanedJson: jsonStr.substring(0, 500)
+        });
+      }
     }
+    
+    // If all else fails, log the raw response and throw
+    log('error', 'ollama_no_valid_json', { 
+      rawResponse: text.substring(0, 1000),
+      originalError: String(firstError)
+    });
     
     throw new Error('No valid JSON found in response');
   }
@@ -516,10 +640,336 @@ export async function listOllamaModels() {
   }
 }
 
+/**
+ * Validate OCR extraction by having LLM check if data exists in correct locations
+ * @param {string} imagePath - Path to image file
+ * @param {Object} ocrData - OCR-extracted data to validate
+ * @returns {Promise<Object>} Validation results
+ */
+export async function validateOcrWithVision(imagePath, ocrData) {
+  const startTime = Date.now();
+  
+  try {
+    // Read image and convert to base64
+    const imageBuffer = await fs.promises.readFile(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+    
+    // Generate dynamic validation prompt based on OCR data
+    const validationPrompt = generateValidationPrompt(ocrData);
+    
+    const fieldCount = countFields(ocrData);
+    
+    log('debug', 'ollama_validation_start', { 
+      imagePath, 
+      model: OLLAMA_MODEL,
+      ocrFieldCount: fieldCount
+    });
+    
+    // Call Ollama API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
+    
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: validationPrompt,
+        images: [base64Image],
+        stream: false,
+        options: {
+          temperature: 0.1,
+          num_predict: 4096 // Increased for 55+ field validations (was 2048)
+        }
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Ollama validation error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const duration = Date.now() - startTime;
+    
+    log('debug', 'ollama_validation_complete', { 
+      duration, 
+      responseLength: result.response?.length || 0 
+    });
+    
+    log('debug', 'ollama_raw_validation_response', {
+      length: result.response?.length || 0,
+      preview: result.response?.substring(0, 300)
+    });
+    
+    // Parse validation response with robust error handling
+    const validation = parseOllamaValidationResponse(result.response);
+    
+    ollamaMonitor.recordRequest(true, duration);
+    
+    return {
+      validation,
+      rawResponse: result.response,
+      duration,
+      success: true
+    };
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    log('error', 'ollama_validation_failed', { 
+      error: error.message,
+      duration 
+    });
+    ollamaMonitor.recordRequest(false, duration);
+    
+    return {
+      validation: null,
+      error: error.message,
+      duration,
+      success: false
+    };
+  }
+}
+
+/**
+ * Parse Ollama validation response with robust error handling
+ */
+function parseOllamaValidationResponse(response) {
+  try {
+    // Remove markdown code blocks
+    let cleaned = response.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    
+    // Extract JSON if surrounded by other text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[0];
+    }
+    
+    // Try parsing
+    const parsed = JSON.parse(cleaned);
+    
+    // Ensure expected structure
+    return {
+      fieldValidations: parsed.fieldValidations || parsed.validations || {},
+      overallAccuracy: parsed.overallAccuracy || parsed.accuracy || 0.85,
+      issuesFound: parsed.issuesFound || parsed.issues || [],
+      notes: parsed.notes || 'Validation complete'
+    };
+    
+  } catch (error) {
+    log('warn', 'ollama_validation_parse_failed', { 
+      error: error.message,
+      responsePreview: response?.substring(0, 200)
+    });
+    
+    // Return default structure on parse failure
+    return {
+      fieldValidations: {},
+      overallAccuracy: 0.5,
+      issuesFound: ['Failed to parse validation response'],
+      notes: 'Validation parsing error',
+      rawResponse: response
+    };
+  }
+}
+
+/**
+ * Count populated fields in OCR data
+ */
+function countFields(data) {
+  let count = 0;
+  
+  // Only count fields in the extracted section (patient, insurance, provider, etc.)
+  const relevantData = data?.extracted || data;
+  
+  const traverse = (obj, depth = 0) => {
+    // Depth limit to prevent infinite recursion
+    if (depth > 3) return;
+    
+    for (const key in obj) {
+      // Skip non-field sections (raw OCR data)
+      if (['rawOCR', 'rawTextCombined', 'ruleTrace', 'highlightSpans', 'ocr', 'documentMeta'].includes(key)) {
+        continue;
+      }
+      
+      if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+        traverse(obj[key], depth + 1);
+      } else if (obj[key] !== null && obj[key] !== '') {
+        count++;
+      }
+    }
+  };
+  
+  traverse(relevantData);
+  return count;
+}
+
+/**
+ * Extract ONLY narrative/free-text fields from medical document
+ * OCR handles structured fields - this focuses on unstructured text
+ * @param {string} imagePath - Path to document image
+ * @returns {Promise<Object>} Extracted narrative content
+ */
+export async function extractNarrativeFields(ocrText) {
+  const narrativePrompt = `You are extracting narrative/free-text content AND problem lists from OCR-extracted text of a medical referral form.
+
+DO NOT extract structured fields like:
+- Patient name, DOB, ID numbers
+- Insurance carrier, member ID
+- Provider names, phone numbers, fax numbers
+- CPT codes (unless part of procedure description)
+- Dates, addresses
+
+EXTRACT these sections from the text:
+1. **Reason for Referral**: Why is the patient being referred? (clinical justification, symptoms, complaints)
+2. **Clinical History**: Past medical history, relevant background
+3. **Current Medications**: List of medications if present in narrative form
+4. **Clinical Notes**: Any physician notes, observations, or special instructions
+5. **Additional Comments**: Any other free-text physician commentary
+6. **Problems List**: IMPORTANT - Look for ANY of these section headers and extract ALL conditions with onset dates:
+   - "Problems", "Problem List", "Active Problems", "Medical Problems"
+   - "Reviewed Problems", "Current Problems" 
+   - "Past Medical History", "PMH", "Medical History"
+   - "Diagnoses", "Diagnosis List", "Active Diagnoses", "Current Diagnoses"
+   - "Conditions", "Medical Conditions", "Chronic Conditions"
+   
+   Extract format: array of objects with condition and onset date (if present)
+
+Example Problems format:
+[
+  {"condition": "Recurrent major depressive episodes, mild", "onset": "08/20/2025"},
+  {"condition": "Obstructive sleep apnea syndrome", "onset": "09/02/2025"},
+  {"condition": "Snoring", "onset": "08/20/2025"}
+]
+
+Return ONLY valid JSON in this exact format:
+{
+  "reasonForReferral": "extracted text or null",
+  "clinicalHistory": "extracted text or null",
+  "currentMedications": "extracted text or null",
+  "clinicalNotes": "extracted text or null",
+  "additionalComments": "extracted text or null",
+  "problemsList": [array of problem objects] or null,
+  "hasNarrativeContent": true/false
+}
+
+If there is NO narrative content AND NO problems list, return all fields as null and hasNarrativeContent: false.
+
+Here is the OCR text to analyze:
+
+${ocrText}`;
+
+  try {
+    const startTime = Date.now();
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: narrativePrompt,
+        stream: false,
+        options: {
+          temperature: 0.1, // Low temperature for consistency
+          num_predict: 1000  // Increased for potential longer responses with problems
+        }
+      }),
+      signal: AbortSignal.timeout(OLLAMA_TIMEOUT)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama narrative extraction failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.response || '';
+    const duration = Date.now() - startTime;
+
+    // Parse JSON from response
+    let narrativeData;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        narrativeData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseErr) {
+      log('warn', 'ollama_narrative_parse_failed', { error: parseErr.message, response: responseText.substring(0, 200) });
+      narrativeData = {
+        reasonForReferral: null,
+        clinicalHistory: null,
+        currentMedications: null,
+        clinicalNotes: null,
+        additionalComments: null,
+        problemsList: null,
+        hasNarrativeContent: false,
+        parseError: true
+      };
+    }
+
+    // Log with more detail about what was extracted
+    const problemsCount = Array.isArray(narrativeData.problemsList) ? narrativeData.problemsList.length : 0;
+    
+    log('info', 'ollama_narrative_extracted', {
+      hasContent: narrativeData.hasNarrativeContent,
+      duration,
+      fieldsFound: Object.values(narrativeData).filter(v => v && v !== null).length,
+      problemsCount,
+      hasProblems: problemsCount > 0
+    });
+    
+    if (problemsCount > 0) {
+      log('info', 'problems_extracted_from_text', {
+        count: problemsCount,
+        conditions: narrativeData.problemsList.map(p => p.condition).join(', ')
+      });
+    }
+
+    // Record successful request in monitor
+    ollamaMonitor.recordRequest(true, duration);
+
+    return {
+      narrative: narrativeData,
+      metadata: {
+        model: OLLAMA_MODEL,
+        duration,
+        hasContent: narrativeData.hasNarrativeContent
+      }
+    };
+
+  } catch (err) {
+    log('error', 'ollama_narrative_extraction_failed', { error: err.message });
+    
+    // Record failed request in monitor
+    ollamaMonitor.recordRequest(false, 0, err.message);
+    
+    return {
+      narrative: {
+        reasonForReferral: null,
+        clinicalHistory: null,
+        currentMedications: null,
+        clinicalNotes: null,
+        additionalComments: null,
+        hasNarrativeContent: false,
+        error: err.message
+      },
+      metadata: {
+        model: OLLAMA_MODEL,
+        duration: 0,
+        error: err.message
+      }
+    };
+  }
+}
+
 export default {
   checkOllamaHealth,
   extractWithOllama,
   extractMultiplePages,
   validateWithOllama,
+  validateOcrWithVision,
+  extractNarrativeFields,
   listOllamaModels
 };
