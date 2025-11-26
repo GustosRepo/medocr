@@ -1,5 +1,6 @@
 import { normalizePages } from './normalize.js';
 import { detectName, detectDob, detectPhones } from './patient.js';
+import { detectAddress } from './address.js';
 import { detectCpt } from './cpt.js';
 import { detectICDs } from './icd.js';
 import { detectCarrier } from './carriers.js';
@@ -541,6 +542,26 @@ export async function runExtraction(ocrPages) {
     for (const ev of phones.trace) trace.push(ev);
   }
   logRerankToTrace('patient_phone', phones);
+  
+  // Address detection
+  const addressData = detectAddress(fullText, lines);
+  console.log('[DEBUG] detectAddress returned:', JSON.stringify(addressData, null, 2));
+  if (addressData && (addressData.address || addressData.city || addressData.state || addressData.zip)) {
+    if (addressData.address) result.patient.address = addressData.address;
+    if (addressData.city) result.patient.city = addressData.city;
+    if (addressData.state) result.patient.state = addressData.state;
+    if (addressData.zip) result.patient.zip = addressData.zip;
+    trace.push({ 
+      rule: 'patient_address_detect', 
+      address: addressData.address,
+      city: addressData.city,
+      state: addressData.state,
+      zip: addressData.zip
+    });
+  } else {
+    console.log('[DEBUG] detectAddress returned no data, fullText length:', fullText?.length, 'lines count:', lines?.length);
+  }
+  
   // Email (contextual & filtered)
   {
     const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -2134,11 +2155,20 @@ export async function runExtraction(ocrPages) {
   }
   
   // Missing Chart Notes
-  if (!/(chart\s*notes?|progress\s*note|consult|H&P|history\s*&\s*physical|history\s+and\s+physical)/i.test(fullText || '')) {
+  // Check both for chart note terminology AND whether clinical data was actually extracted
+  const hasChartNoteTerminology = /(chart\s*notes?|progress\s*note|consult|H&P|history\s*&\s*physical|history\s+and\s+physical)/i.test(fullText || '');
+  const hasProblemsList = Array.isArray(result.clinical?.problemsList) && result.clinical.problemsList.length > 0;
+  const hasNarrativeFields = !!(result.clinical?.reasonForReferral || result.clinical?.clinicalHistory || result.clinical?.currentMedications);
+  const hasClinicalData = hasProblemsList || hasNarrativeFields;
+  
+  // Only flag if BOTH conditions are false: no terminology AND no extracted clinical data
+  if (!hasChartNoteTerminology && !hasClinicalData) {
     result.flags.verifyManually = true;
     result.flags.reasons.push('missing_chart_notes');
     result.alerts.actions = Array.from(new Set([...(result.alerts.actions || []), 'missing_chart_notes']));
     trace.push({ rule: 'problem_missing_chart_notes' });
+  } else if (hasClinicalData && !hasChartNoteTerminology) {
+    trace.push({ rule: 'chart_notes_flag_skipped_due_to_extracted_clinical_data', hasProblemsList, hasNarrativeFields });
   }
   // Insurance issues (non-accepted handled earlier); also look for inactive/expired
   if (/(inactive|expired|termination|coverage\s+ended)/i.test(fullText || '')) {
@@ -2731,15 +2761,23 @@ export async function runExtractionWithDates(ocrPages) {
     const dates = detectDates(fullText);
     if (dates.length) {
       // Promote likely order/referral date
-      const order = dates.find(d => d.type === 'order') || dates.find(d => d.type === 'referral');
+      const referral = dates.find(d => d.type === 'referral');
+      const order = dates.find(d => d.type === 'order');
       const study = dates.find(d => d.type === 'study');
       result.documentMeta = {
         ...(result.documentMeta||{}),
         dates,
+        referralDate: referral?.value,
         orderDate: order?.value,
         studyDate: study?.value
       };
-      trace.push({ rule: 'dates_detect', count: dates.length, order: order?.value || null, study: study?.value || null });
+      trace.push({ 
+        rule: 'dates_detect', 
+        count: dates.length, 
+        referral: referral?.value || null,
+        order: order?.value || null, 
+        study: study?.value || null 
+      });
     }
   } catch (e) {
     trace.push({ rule: 'dates_detect_error', error: e.message });

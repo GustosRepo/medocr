@@ -274,6 +274,23 @@ export function mergeExtractions(ocrData, llmData, options = {}) {
   let matchCount = 0;
   let totalFields = 0;
   
+  // DEBUG: Log structure comparison
+  console.log('\n========== MERGE DEBUG START ==========');
+  console.log('[OCR] Top-level keys:', Object.keys(ocrData || {}).join(', '));
+  console.log('[LLM] Top-level keys:', Object.keys(llmData || {}).join(', '));
+  
+  // Show nested structure for common fields
+  if (ocrData?.patient) {
+    console.log('[OCR] patient keys:', Object.keys(ocrData.patient).join(', '));
+  }
+  if (llmData?.patient) {
+    console.log('[LLM] patient keys:', Object.keys(llmData.patient).join(', '));
+  }
+  
+  console.log('\n[OCR] Full structure (first 600 chars):', JSON.stringify(ocrData, null, 2).substring(0, 600));
+  console.log('\n[LLM] Full structure (first 600 chars):', JSON.stringify(llmData, null, 2).substring(0, 600));
+  console.log('========== MERGE DEBUG END ==========\n');
+  
   // Field-specific rules for medical data
   const fieldSpecificRules = {
     'patient.dob': (ocr, llm) => {

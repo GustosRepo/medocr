@@ -7,6 +7,7 @@ import fetch from 'node-fetch';
 import { log } from './logging/logger.js';
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llava:13b';
 
 /**
  * Get Ollama service health and model information
@@ -32,7 +33,13 @@ export async function getOllamaHealth() {
 
     const data = await response.json();
     const models = data.models || [];
-    const llavaModel = models.find(m => m.name.includes('llava-phi3'));
+    // Find the configured model (without :latest suffix if present)
+    const modelBaseName = OLLAMA_MODEL.split(':')[0];
+    const llavaModel = models.find(m => 
+      m.name === OLLAMA_MODEL || 
+      m.name.startsWith(modelBaseName + ':') ||
+      m.name === modelBaseName
+    );
 
     return {
       status: 'healthy',

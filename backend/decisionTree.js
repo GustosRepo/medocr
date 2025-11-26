@@ -9,12 +9,16 @@
  * 5. Demographics Check - Are patient demographics complete?
  * 
  * Routes documents to appropriate workflow based on validation results.
+ * 
+ * DYNAMIC VALIDATION: Supports flexible field paths to handle different document layouts
  */
 
+import { getNestedValue, isPlaceholder } from './utils/fieldNormalizer.js';
+
 class DecisionTreeEngine {
-  constructor() {
-    // Field requirements by category
-    this.requiredFields = {
+  constructor(options = {}) {
+    // Configurable field requirements by category
+    this.requiredFields = options.requiredFields || {
       patient: ['firstName', 'lastName', 'dob', 'phone'],
       insurance: ['insuranceName', 'memberId'],
       clinical: ['diagnosis', 'referralReason'],
@@ -92,19 +96,80 @@ class DecisionTreeEngine {
   }
 
   /**
+   * Helper: Get field value from multiple possible paths
+   */
+  _getFieldValue(data, fieldName) {
+    const possiblePaths = [
+      fieldName, // Direct access
+      `patient.${fieldName}`, // Nested in patient
+      `patient${fieldName.charAt(0).toUpperCase()}${fieldName.slice(1)}`, // patientFirstName
+      fieldName.replace('patient', '').charAt(0).toLowerCase() + fieldName.replace('patient', '').slice(1) // Remove patient prefix
+    ];
+    
+    for (const path of possiblePaths) {
+      const value = getNestedValue(data, path);
+      if (value !== undefined && value !== null && !isPlaceholder(value)) {
+        return value;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Helper: Check if any field value exists from multiple paths
+   * Also handles array format (e.g., insurance[0].memberId)
+   */
+  _hasFieldValue(data, ...fieldNames) {
+    return fieldNames.some(fieldName => {
+      const value = this._getFieldValue(data, fieldName);
+      if (value !== null && value !== undefined && !isPlaceholder(value)) {
+        return true;
+      }
+      
+      // Check array format: e.g., insurance[0].fieldName
+      const arrayMatch = fieldName.match(/^([^.]+)\.(.+)$/);
+      if (arrayMatch) {
+        const [, baseField, subField] = arrayMatch;
+        const arrayData = data[baseField];
+        if (Array.isArray(arrayData) && arrayData.length > 0) {
+          const val = arrayData[0][subField];
+          if (val !== null && val !== undefined && !isPlaceholder(val)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    });
+  }
+
+  /**
    * Level 1: Completeness Check
    * Validates that essential fields are present
+   * DYNAMIC: Checks multiple possible field paths
    */
   checkCompleteness(data) {
     const missingFields = [];
     
-    // Check patient basics
-    if (!data.firstName || data.firstName.trim() === '') missingFields.push('firstName');
-    if (!data.lastName || data.lastName.trim() === '') missingFields.push('lastName');
-    if (!data.dob) missingFields.push('dob');
+    // Check patient basics - try multiple field paths
+    if (!this._hasFieldValue(data, 'firstName', 'patient.firstName', 'patientFirstName')) {
+      missingFields.push('firstName');
+    }
+    if (!this._hasFieldValue(data, 'lastName', 'patient.lastName', 'patientLastName')) {
+      missingFields.push('lastName');
+    }
+    if (!this._hasFieldValue(data, 'dob', 'patient.dob', 'dateOfBirth', 'patient.dateOfBirth')) {
+      missingFields.push('dob');
+    }
     
-    // Check contact info
-    if (!data.phone && !data.email) missingFields.push('phone or email');
+    // Check contact info - at least one method required
+    const hasPhone = this._hasFieldValue(data, 'phone', 'patient.phone', 'patientPhone', 'phoneNumber');
+    const hasEmail = this._hasFieldValue(data, 'email', 'patient.email', 'patientEmail');
+    
+    if (!hasPhone && !hasEmail) {
+      missingFields.push('phone or email');
+    }
     
     const passed = missingFields.length === 0;
 
@@ -124,15 +189,20 @@ class DecisionTreeEngine {
   /**
    * Level 2: Insurance Check
    * Validates insurance information completeness
+   * DYNAMIC: Checks multiple possible field paths
    */
   checkInsurance(data) {
     const issues = [];
     
-    if (!data.insuranceName || data.insuranceName.trim() === '') {
+    // Check insurance name/carrier (extraction uses 'carrier' field)
+    if (!this._hasFieldValue(data, 'insuranceName', 'insurance.insuranceName', 'insurance.name', 'insurance.carrier', 'insuranceCompany')) {
       issues.push('Insurance name missing');
     }
     
-    if (!data.memberId || data.memberId.trim() === '') {
+    // Check member ID (handle array format from extraction)
+    const hasDirectMemberId = this._hasFieldValue(data, 'memberId', 'insurance.memberId', 'insuranceMemberId', 'policyNumber', 'insurance.policyNumber');
+    const hasArrayMemberId = Array.isArray(data.insurance) && data.insurance[0]?.memberId;
+    if (!hasDirectMemberId && !hasArrayMemberId) {
       issues.push('Member ID missing');
     }
     
@@ -162,15 +232,27 @@ class DecisionTreeEngine {
   /**
    * Level 3: Clinical Check
    * Validates clinical information and requirements
+   * DYNAMIC: Checks multiple possible field paths
    */
   checkClinical(data) {
     const issues = [];
     
-    if (!data.diagnosis || data.diagnosis.trim() === '') {
+    // Check diagnosis (handle object format: clinical.primaryDiagnosis.code)
+    const hasDiagnosisCode = this._hasFieldValue(data, 'diagnosis', 'clinical.diagnosis', 'primaryDiagnosis', 'diagnosisCode', 'clinical.primaryDiagnosis.code');
+    const hasDiagnosisObj = data.clinical?.primaryDiagnosis?.code;
+    const hasDiagnosesArray = Array.isArray(data.diagnoses) && data.diagnoses.length > 0;
+    
+    if (!hasDiagnosisCode && !hasDiagnosisObj && !hasDiagnosesArray) {
       issues.push('Diagnosis missing');
     }
     
-    if (!data.referralReason && !data.chiefComplaint) {
+    // Check referral reason or chief complaint (also check symptoms as they often contain clinical context)
+    const hasReason = this._hasFieldValue(data, 'referralReason', 'clinical.referralReason', 'reasonForReferral');
+    const hasComplaint = this._hasFieldValue(data, 'chiefComplaint', 'clinical.chiefComplaint', 'complaint');
+    const hasSymptoms = this._hasFieldValue(data, 'symptoms', 'clinical.symptoms', 'symptomsPresent');
+    const hasSymptomsArray = Array.isArray(data.symptoms) && data.symptoms.length > 0;
+    
+    if (!hasReason && !hasComplaint && !hasSymptoms && !hasSymptomsArray) {
       issues.push('Referral reason or chief complaint missing');
     }
     
@@ -199,23 +281,34 @@ class DecisionTreeEngine {
   /**
    * Level 4: Provider Check
    * Validates referring provider information
+   * DYNAMIC: Checks multiple possible field paths, more lenient on NPI
    */
   checkProvider(data) {
     const issues = [];
     
-    if (!data.referringProvider || data.referringProvider.trim() === '') {
+    // Check provider name
+    if (!this._hasFieldValue(data, 'referringProvider', 'provider.referringProvider', 'provider.name', 'providerName', 'referringPhysician')) {
       issues.push('Referring provider name missing');
     }
     
-    if (!data.providerNPI) {
-      issues.push('Provider NPI missing');
+    // Check NPI - not required if provider name present
+    const hasNPI = this._hasFieldValue(data, 'providerNPI', 'provider.npi', 'provider.providerNPI', 'npi');
+    if (!hasNPI) {
+      // NPI can be looked up if we have provider name, so this is a warning not blocker
+      issues.push('Provider NPI missing (can be looked up)');
     }
     
-    if (!data.providerPhone && !data.providerFax) {
+    // Check contact info
+    const hasPhone = this._hasFieldValue(data, 'providerPhone', 'provider.phone', 'provider.providerPhone', 'referringProviderPhone');
+    const hasFax = this._hasFieldValue(data, 'providerFax', 'provider.fax', 'provider.providerFax', 'referringProviderFax');
+    
+    if (!hasPhone && !hasFax) {
       issues.push('Provider contact information missing');
     }
 
-    const passed = issues.length === 0;
+    // Pass if only NPI is missing (can be looked up)
+    const criticalIssues = issues.filter(i => !i.includes('can be looked up'));
+    const passed = criticalIssues.length === 0;
 
     return {
       level: 4,
@@ -226,35 +319,41 @@ class DecisionTreeEngine {
       message: passed 
         ? 'Provider information complete'
         : `Provider issues: ${issues.join(', ')}`,
-      requiredAction: issues.length > 0 ? 'PROVIDER_FOLLOWUP' : null
+      requiredAction: criticalIssues.length > 0 ? 'PROVIDER_FOLLOWUP' : null
     };
   }
 
   /**
    * Level 5: Demographics Check
    * Validates patient demographic information
+   * DYNAMIC: Checks multiple possible field paths
    */
   checkDemographics(data) {
     const issues = [];
     
-    if (!data.address || data.address.trim() === '') {
+    // Check address
+    if (!this._hasFieldValue(data, 'address', 'patient.address', 'patientAddress', 'streetAddress')) {
       issues.push('Address missing');
     }
     
-    if (!data.city || data.city.trim() === '') {
+    // Check city
+    if (!this._hasFieldValue(data, 'city', 'patient.city', 'patientCity')) {
       issues.push('City missing');
     }
     
-    if (!data.state || data.state.trim() === '') {
+    // Check state
+    if (!this._hasFieldValue(data, 'state', 'patient.state', 'patientState')) {
       issues.push('State missing');
     }
     
-    if (!data.zip || data.zip.trim() === '') {
+    // Check ZIP
+    if (!this._hasFieldValue(data, 'zip', 'patient.zip', 'zipCode', 'patient.zipCode', 'postalCode')) {
       issues.push('ZIP code missing');
     }
     
     // Validate DOB format
-    if (data.dob && !this._isValidDate(data.dob)) {
+    const dobValue = this._getFieldValue(data, 'dob') || this._getFieldValue(data, 'dateOfBirth');
+    if (dobValue && !this._isValidDate(dobValue)) {
       issues.push('Date of birth format invalid');
     }
 
@@ -445,6 +544,7 @@ class DecisionTreeEngine {
 
   /**
    * Check if authorization is likely required
+   * DYNAMIC: Checks multiple field paths
    */
   _checkAuthorizationRequired(data) {
     const authKeywords = [
@@ -452,8 +552,8 @@ class DecisionTreeEngine {
       'dme', 'durable medical equipment', 'home sleep test'
     ];
 
-    const diagnosisText = (data.diagnosis || '').toLowerCase();
-    const reasonText = (data.referralReason || '').toLowerCase();
+    const diagnosisText = (this._getFieldValue(data, 'diagnosis') || '').toLowerCase();
+    const reasonText = (this._getFieldValue(data, 'referralReason') || '').toLowerCase();
     const combinedText = `${diagnosisText} ${reasonText}`;
 
     return authKeywords.some(keyword => combinedText.includes(keyword));
@@ -461,6 +561,7 @@ class DecisionTreeEngine {
 
   /**
    * Check for urgent clinical keywords
+   * DYNAMIC: Checks multiple field paths
    */
   _checkUrgentKeywords(data) {
     const urgentKeywords = [
@@ -468,9 +569,9 @@ class DecisionTreeEngine {
       'critical', 'immediate', 'asap'
     ];
 
-    const diagnosisText = (data.diagnosis || '').toLowerCase();
-    const reasonText = (data.referralReason || '').toLowerCase();
-    const notesText = (data.clinicalNotes || '').toLowerCase();
+    const diagnosisText = (this._getFieldValue(data, 'diagnosis') || '').toLowerCase();
+    const reasonText = (this._getFieldValue(data, 'referralReason') || '').toLowerCase();
+    const notesText = (this._getFieldValue(data, 'clinicalNotes') || '').toLowerCase();
     const combinedText = `${diagnosisText} ${reasonText} ${notesText}`;
 
     return urgentKeywords.some(keyword => combinedText.includes(keyword));

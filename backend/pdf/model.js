@@ -12,6 +12,7 @@ export function buildPdfModel(result){
   const proc = r.procedure||{}; const prov = r.provider||{};
   const clinical = r.clinical||{}; const vitals = clinical.vitals||{};
   const info = r.infoAlerts||{}; const qc = r.qc||{};
+  const narrative = r.narrative||{};
   const authNotes = r.documentMeta?.authorizationNotes||[];
   const reasons = r.flags?.reasons||[]; const actions = r.alerts?.actions||[];
   const missing = [];
@@ -28,7 +29,8 @@ export function buildPdfModel(result){
     insurance: { primary: { carrier: s(primary.carrier)||null, memberId: s(primary.memberId)||null, groupId: s(primary.groupId)||null, status: s(primary.status)||null }, secondary: secondary?{ carrier: s(secondary.carrier)||null, memberId: s(secondary.memberId)||null, groupId: s(secondary.groupId)||null, status: s(secondary.status)||null }: null },
     procedure: { cpt: s(proc.cpt)||null, description: s(proc.description)||null, providerNotes: arr(proc.providerNotes).map(s).filter(Boolean), cptCandidates: arr(proc.cptCandidates).map(s).filter(Boolean) },
     provider: { name: s(prov.name)||null, npi: s(prov.npi)||null, practice: s(prov.practice)||null, supervising: s(prov.supervising)||null, phone: s(prov.phone)||null, fax: s(prov.fax)||null },
-    clinical: { primaryDiagnosis: clinical.primaryDiagnosis?{ code: s(clinical.primaryDiagnosis.code)||null, description: s(clinical.primaryDiagnosis.description)||null }: null, symptoms: arr(clinical.symptoms).map(s).filter(Boolean), vitals: { bmi: s(vitals.bmi)||null, bp: s(vitals.bp)||null, weightLbs: vitals.weightLbs||null, height: s(vitals.height)||null } },
+    clinical: { primaryDiagnosis: clinical.primaryDiagnosis?{ code: s(clinical.primaryDiagnosis.code)||null, description: s(clinical.primaryDiagnosis.description)||null }: null, symptoms: arr(clinical.symptoms).map(s).filter(Boolean), vitals: { bmi: s(vitals.bmi)||null, bp: s(vitals.bp)||null, weightLbs: vitals.weightLbs||null, height: s(vitals.height)||null }, problemsList: arr(clinical.problemsList), diagnosesDetailed: arr(clinical.diagnosesDetailed) },
+    narrative: { reasonForReferral: s(narrative.reasonForReferral)||null, presentIllness: s(narrative.presentIllness)||null, clinicalHistory: s(narrative.clinicalHistory)||null, clinicalNotes: s(narrative.clinicalNotes)||null },
     infoAlerts: {
       ppeRequired: info.ppeRequired===true?true:info.ppeRequired===false?false:null,
       safety: arr(info.safety).map(s).filter(Boolean),

@@ -215,6 +215,30 @@ export default function OcrDebugPage() {
         missingFields: coverage.missingList
       },
       
+      // Dual-Engine Processing
+      dualEngine: selectedDoc.dualEngine ? {
+        enabled: true,
+        llmBackend: selectedDoc.dualEngine.llmBackend || 'ollama',
+        pagesProcessed: selectedDoc.dualEngine.llm?.pagesProcessed || 0,
+        processingTime: selectedDoc.dualEngine.llm?.processingTime,
+        agreementScore: selectedDoc.dualEngine.agreementScore,
+        conflicts: selectedDoc.dualEngine.conflicts || [],
+        dataQuality: selectedDoc.dualEngine.dataQuality
+      } : { enabled: false },
+      
+      // Decision Tree Routing
+      routing: selectedDoc.routing ? {
+        action: selectedDoc.routing.route?.action,
+        priority: selectedDoc.routing.route?.priority,
+        route: selectedDoc.routing.route?.label,
+        description: selectedDoc.routing.route?.description,
+        estimatedTime: selectedDoc.routing.route?.estimatedTime,
+        nextSteps: selectedDoc.routing.route?.nextSteps || [],
+        validationSummary: selectedDoc.routing.route?.validationSummary,
+        validationSteps: selectedDoc.routing.validationSteps || [],
+        dataQuality: selectedDoc.routing.processingMetadata?.dataQuality
+      } : null,
+      
       // Extracted fields
       extracted: {
         patient: {
@@ -645,11 +669,95 @@ export default function OcrDebugPage() {
                       📋 Copy All Debug Info
                     </Button>
                     <Text size="xs" c="dimmed">
-                      (Copies stats + extracted fields + rule trace + raw OCR)
+                      (Includes dual-engine & routing data)
                     </Text>
                   </Group>
                 </Stack>
               </Paper>
+
+              {/* Dual-Engine & Routing Info */}
+              {(selectedDoc.dualEngine || selectedDoc.routing) && (
+                <Paper withBorder radius="md" p="md">
+                  <Stack gap="sm">
+                    <Text size="sm" fw={600}>Dual-Engine Processing</Text>
+                    {selectedDoc.dualEngine ? (
+                      <>
+                        <Group gap="sm" wrap="wrap">
+                          <Badge size="sm" color="purple" variant="light">OCR + LLM</Badge>
+                          <Badge size="sm" color="blue" variant="light">
+                            Backend: {selectedDoc.dualEngine.llmBackend || 'ollama'}
+                          </Badge>
+                          {selectedDoc.dualEngine.llm?.pagesProcessed && (
+                            <Badge size="sm" color="teal" variant="light">
+                              {selectedDoc.dualEngine.llm.pagesProcessed} pages processed
+                            </Badge>
+                          )}
+                          {selectedDoc.dualEngine.llm?.processingTime && (
+                            <Badge size="sm" color="cyan" variant="light">
+                              {Math.round(selectedDoc.dualEngine.llm.processingTime / 1000)}s
+                            </Badge>
+                          )}
+                        </Group>
+                        {selectedDoc.dualEngine.dataQuality && (
+                          <Group gap="xs" align="center">
+                            <Text size="xs" fw={500}>Quality:</Text>
+                            <Badge size="xs" color={selectedDoc.dualEngine.dataQuality.grade === 'A' ? 'green' : selectedDoc.dualEngine.dataQuality.grade === 'F' ? 'red' : 'yellow'}>
+                              Grade {selectedDoc.dualEngine.dataQuality.grade} ({selectedDoc.dualEngine.dataQuality.score}/100)
+                            </Badge>
+                          </Group>
+                        )}
+                        {selectedDoc.dualEngine.conflicts && selectedDoc.dualEngine.conflicts.length > 0 && (
+                          <Text size="xs" c="orange">⚠️ {selectedDoc.dualEngine.conflicts.length} conflict(s) detected</Text>
+                        )}
+                      </>
+                    ) : (
+                      <Text size="xs" c="dimmed">OCR-only processing (LLM not enabled)</Text>
+                    )}
+                    
+                    {selectedDoc.routing && (
+                      <>
+                        <Text size="sm" fw={600} mt="sm">Decision Tree Routing</Text>
+                        <Group gap="sm" wrap="wrap">
+                          <Badge size="sm" color={
+                            selectedDoc.routing.route?.action === 'READY_TO_SCHEDULE' ? 'green' :
+                            selectedDoc.routing.route?.action === 'MANUAL_REVIEW' ? 'red' :
+                            'yellow'
+                          }>
+                            {selectedDoc.routing.route?.label || selectedDoc.routing.route?.action}
+                          </Badge>
+                          {selectedDoc.routing.route?.priority && (
+                            <Badge size="sm" color="orange" variant="light">
+                              Priority: {selectedDoc.routing.route.priority}
+                            </Badge>
+                          )}
+                          {selectedDoc.routing.route?.estimatedTime && (
+                            <Text size="xs" c="dimmed">Est. time: {selectedDoc.routing.route.estimatedTime}</Text>
+                          )}
+                        </Group>
+                        {selectedDoc.routing.route?.validationSummary && (
+                          <Group gap="xs" align="center">
+                            <Text size="xs" fw={500}>Validation:</Text>
+                            <Badge size="xs" color="green" variant="light">{selectedDoc.routing.route.validationSummary.passed} passed</Badge>
+                            {selectedDoc.routing.route.validationSummary.failed > 0 && (
+                              <Badge size="xs" color="red" variant="light">{selectedDoc.routing.route.validationSummary.failed} failed</Badge>
+                            )}
+                          </Group>
+                        )}
+                        {selectedDoc.routing.route?.nextSteps && selectedDoc.routing.route.nextSteps.length > 0 && (
+                          <div className="mt-1">
+                            <Text size="xs" fw={500} mb={4}>Next Steps:</Text>
+                            <Stack gap={2}>
+                              {selectedDoc.routing.route.nextSteps.map((step, i) => (
+                                <Text key={i} size="xs" c="dimmed">• {step}</Text>
+                              ))}
+                            </Stack>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
 
               {selectedDoc.pdfModel && (
                 <Paper withBorder radius="md" p="md">

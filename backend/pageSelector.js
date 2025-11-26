@@ -212,13 +212,17 @@ export function selectInformationRichPages(ocrResult, options = {}) {
   // 2. ocrResult.ocr (array of page objects with .text)
   // 3. ocrResult.pages (array of page objects with .text)
   let pageTexts = null;
+  let pageSource = 'unknown';
   
   if (ocrResult.pageTexts && Array.isArray(ocrResult.pageTexts)) {
     pageTexts = ocrResult.pageTexts;
+    pageSource = 'pageTexts';
   } else if (ocrResult.ocr && Array.isArray(ocrResult.ocr)) {
     pageTexts = ocrResult.ocr.map(page => page.text || '');
+    pageSource = 'ocr';
   } else if (ocrResult.pages && Array.isArray(ocrResult.pages)) {
     pageTexts = ocrResult.pages.map(page => page.text || '');
+    pageSource = 'pages';
   }
   
   // Handle case where we can't extract page texts
@@ -227,7 +231,8 @@ export function selectInformationRichPages(ocrResult, options = {}) {
       reason: 'No page texts found in OCR result',
       hasOcr: !!ocrResult.ocr,
       hasPages: !!ocrResult.pages,
-      hasPageTexts: !!ocrResult.pageTexts
+      hasPageTexts: !!ocrResult.pageTexts,
+      source: pageSource
     });
     return {
       selectedPages: [0], // Fallback to first page
@@ -258,12 +263,13 @@ export function selectInformationRichPages(ocrResult, options = {}) {
   const duration = Date.now() - startTime;
 
   log('info', 'page_selection_complete', {
-    totalPages: ocrResult.pageTexts.length,
+    totalPages: pageTexts.length,
     analyzedPages: analyses.length,
     validPages: validPages.length,
     selectedPages: selectedPages.length,
     pageIndices: selectedPages,
-    duration: `${duration}ms`
+    duration: `${duration}ms`,
+    source: pageSource
   });
 
   // Log top page scores for debugging
