@@ -22,6 +22,9 @@ const routeConfig = {
   manual_review: { color: 'red', label: 'Manual Review', icon: IconAlertTriangle, priority: 'high' }
 };
 
+// Normalize backend route action (e.g., "READY_TO_SCHEDULE") to our config keys (lowercase)
+const normalizeRouteKey = (action) => String(action || '').toLowerCase();
+
 function categoryMeta(r, overrideCat) {
   const map = {
     error: { label: 'Error', color: 'red', tone: 'rgba(255,0,0,0.15)', border: '#ff6b6b' },
@@ -198,8 +201,9 @@ export default function ChecklistPage() {
   {/* Removed ScrollArea to allow full-height giant list */}
   <div style={{ display:'flex', flexWrap:'wrap', gap:18, alignItems:'stretch', minWidth: 0 }}>
             {rows.filter(r => {
-              // Client-side route filter
-              if (routeFilter && r.routing?.route?.action !== routeFilter) return false;
+              // Client-side route filter (normalize backend route action to lowercase)
+              const actionKey = normalizeRouteKey(r.routing?.route?.action);
+              if (routeFilter && actionKey !== routeFilter) return false;
               return true;
             }).map(r=>{
               const name = [r.last, r.first].filter(Boolean).join(', ') || '—';
@@ -214,7 +218,7 @@ export default function ChecklistPage() {
               // Decision tree routing info
               const routing = r.routing?.route;
               const routeAction = routing?.action;
-              const routeMeta = routeAction ? routeConfig[routeAction] : null;
+              const routeMeta = routeAction ? routeConfig[normalizeRouteKey(routeAction)] : null;
               const validationSteps = r.routing?.validationSteps || [];
               const passedSteps = validationSteps.filter(s => s.passed).length;
               const totalSteps = validationSteps.length;
@@ -338,8 +342,10 @@ export default function ChecklistPage() {
                         {routing.nextSteps.map((step, i) => (
                           <Group key={i} gap={4} wrap="nowrap">
                             <Text size="xs" c="dimmed">•</Text>
-                            <Text size="xs">{step.action}</Text>
-                            {step.estimatedTime && <Text size="xs" c="dimmed">({step.estimatedTime})</Text>}
+                            <Text size="xs">{typeof step === 'string' ? step : step?.action}</Text>
+                            {typeof step !== 'string' && step?.estimatedTime && (
+                              <Text size="xs" c="dimmed">({step.estimatedTime})</Text>
+                            )}
                           </Group>
                         ))}
                       </Stack>

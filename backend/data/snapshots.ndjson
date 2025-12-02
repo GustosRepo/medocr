@@ -1,1 +1,0 @@
-{"id":"1761870264196_t5vb","ts":"2025-10-31T00:24:24.196Z","docId":"doc_1761870071689_c2ye1h","summary":{"patient":{"dob":"04/08/1982","hasPhones":true,"insuranceCount":0},"procedure":{"cpt":"95806","ambiguous":false},"flags":{"verifyManually":true,"reasons":["missing_chart_notes","ocr_low_confidence_critical","mixed_signals_snoring"]},"confidence":4}}
