@@ -11,6 +11,9 @@
  * - Comprehensive audit trail
  */
 
+// Setup canvas polyfills FIRST before any pdfjs usage
+import './canvasSetup.js';
+
 // Try Ollama first (simpler), fallback to Python LLM service
 import { extractWithOllama, checkOllamaHealth, extractMultiplePages, validateOcrWithVision, extractNarrativeFields } from '../ollamaService.js';
 import { extractWithLocalLLM, checkLLMHealth } from '../llmService.js';

@@ -10,7 +10,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import fs from 'fs/promises';
-import { createCanvas, loadImage } from 'canvas';
+// Removed canvas import - not needed for current PDF handling
 import { performance } from 'perf_hooks';
 
 /**

@@ -1317,6 +1317,176 @@ app.get('/api/logs/ollama', (req, res) => {
   }
 });
 
+// Live streaming logs: SSE endpoint for OCR logs
+app.get('/api/logs/ocr/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const isDocker = process.env.NODE_ENV === 'production' || fs.existsSync('/.dockerenv');
+  let tailProcess = null;
+  let stopped = false;
+
+  try {
+    if (isDocker) {
+      // In Docker: tail the OCR container logs via docker logs
+      const { spawn } = await import('child_process');
+      tailProcess = spawn('docker', ['logs', '-f', '--tail', '50', 'medocr-ocr-test'], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      tailProcess.stdout.on('data', (data) => {
+        if (!stopped) {
+          const lines = data.toString().split('\n').filter(l => l.trim());
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+
+      tailProcess.stderr.on('data', (data) => {
+        if (!stopped) {
+          const lines = data.toString().split('\n').filter(l => l.trim());
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+    } else {
+      // Local development: tail the log file
+      const logPath = path.join(process.cwd(), 'data/logs/ocr-8000.log');
+      
+      // Send initial content
+      if (fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, 'utf8');
+        const lines = content.split('\n').filter(l => l.trim()).slice(-50);
+        lines.forEach(line => {
+          res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+        });
+      }
+
+      // Watch for new content
+      const watcher = fs.watch(logPath, (eventType) => {
+        if (eventType === 'change' && !stopped) {
+          const content = fs.readFileSync(logPath, 'utf8');
+          const lines = content.split('\n').filter(l => l.trim()).slice(-10);
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+
+      req.on('close', () => {
+        stopped = true;
+        watcher.close();
+      });
+    }
+  } catch (err) {
+    log.error({ msg: 'ocr_log_stream_error', err: String(err) });
+  }
+
+  req.on('close', () => {
+    stopped = true;
+    if (tailProcess) {
+      tailProcess.kill();
+    }
+  });
+});
+
+// Live streaming logs: SSE endpoint for Ollama logs
+app.get('/api/logs/ollama/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const isDocker = process.env.NODE_ENV === 'production' || fs.existsSync('/.dockerenv');
+  let tailProcess = null;
+  let stopped = false;
+
+  try {
+    if (isDocker) {
+      // In Docker: tail the backend container logs and filter for Ollama
+      const { spawn } = await import('child_process');
+      tailProcess = spawn('docker', ['logs', '-f', '--tail', '50', 'medocr-backend-test'], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      const filterOllama = (line) => {
+        const lower = line.toLowerCase();
+        return lower.includes('ollama') || 
+               lower.includes('llm_') || 
+               lower.includes('dual_engine') ||
+               lower.includes('page_selection');
+      };
+
+      tailProcess.stdout.on('data', (data) => {
+        if (!stopped) {
+          const lines = data.toString().split('\n').filter(l => l.trim() && filterOllama(l));
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+
+      tailProcess.stderr.on('data', (data) => {
+        if (!stopped) {
+          const lines = data.toString().split('\n').filter(l => l.trim() && filterOllama(l));
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+    } else {
+      // Local development: tail the backend log file
+      const logPath = path.join(process.cwd(), 'data/logs/backend.log');
+      
+      const filterOllama = (line) => {
+        const lower = line.toLowerCase();
+        return lower.includes('ollama') || 
+               lower.includes('llm_') || 
+               lower.includes('dual_engine') ||
+               lower.includes('page_selection');
+      };
+
+      // Send initial content
+      if (fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, 'utf8');
+        const lines = content.split('\n').filter(l => l.trim() && filterOllama(l)).slice(-50);
+        lines.forEach(line => {
+          res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+        });
+      }
+
+      // Watch for new content
+      const watcher = fs.watch(logPath, (eventType) => {
+        if (eventType === 'change' && !stopped) {
+          const content = fs.readFileSync(logPath, 'utf8');
+          const lines = content.split('\n').filter(l => l.trim() && filterOllama(l)).slice(-10);
+          lines.forEach(line => {
+            res.write(`data: ${JSON.stringify({ log: line })}\n\n`);
+          });
+        }
+      });
+
+      req.on('close', () => {
+        stopped = true;
+        watcher.close();
+      });
+    }
+  } catch (err) {
+    log.error({ msg: 'ollama_log_stream_error', err: String(err) });
+  }
+
+  req.on('close', () => {
+    stopped = true;
+    if (tailProcess) {
+      tailProcess.kill();
+    }
+  });
+});
+
 // Serve fixtures directly for UI testing
 app.get('/api/fixtures/:name', (req, res) => {
   const name = req.params.name.replace(/[^a-zA-Z0-9_\-]/g, '');

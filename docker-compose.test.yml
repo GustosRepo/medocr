@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  ocr:
+    image: medocr-ocr:v1.2.3-local
+    container_name: medocr-ocr-test
+    ports:
+      - "8000:8000"
+    environment:
+      - OCR_AUTO_DPI=1
+      - OCR_DPI_BASE=300
+      - OCR_DPI_BUMP=450
+      - OCR_DPI_MAX=600
+      - OCR_ENABLE_TABLES=1
+      - OCR_MAX_CELLS_PER_TABLE=15
+      - MEDOCR_RENDER_DPI=300
+      - MEDOCR_USE_CLAHE=true
+      - MEDOCR_CLAHE_CLIP_LIMIT=2.5
+      - MEDOCR_CLAHE_TILE_SIZE=8
+      - MEDOCR_PREPROCESS_MODE=enhanced
+      - MEDOCR_ENABLE_CONFIDENCE_RETRY=true
+      - MEDOCR_CONFIDENCE_THRESHOLD=0.70
+      - MEDOCR_ENABLE_EARLY_EXIT=true
+      - MEDOCR_EARLY_EXIT_TIME_THRESHOLD=60
+      - MEDOCR_EARLY_EXIT_MIN_PAGES=3
+      - MEDOCR_EARLY_EXIT_MIN_ITEMS=10
+      - MEDOCR_EARLY_EXIT_MIN_CONF=0.70
+      - MEDOCR_PAGE_TIMEOUT_SECONDS=90
+      - LOG_LEVEL=debug
+    volumes:
+      - ./data/ocr:/app/data
+    restart: unless-stopped
+
+  api:
+    image: medocr-backend:v1.2.3-local
+    container_name: medocr-backend-test
+    ports:
+      - "4387:4387"
+    environment:
+      - NODE_ENV=production
+      - OCR_SERVICE_URL=http://ocr:8000
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OCR_TIMEOUT_MS=10800000
+      - FETCH_BODY_TIMEOUT_MS=10800000
+      - FETCH_HEADERS_TIMEOUT_MS=10800000
+      - DOC_MAX_CONCURRENCY=1
+      - ENABLE_LLM=true
+      - LLM_MODE=extract
+      - OLLAMA_MODEL=llava:7b
+      - OLLAMA_TIMEOUT=90000
+      - LLM_TIMEOUT=300000
+      - LOG_LEVEL=debug
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - ocr
+    restart: unless-stopped
+
+  frontend:
+    image: medocr-frontend:v1.2.3-local
+    container_name: medocr-frontend-test
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_URL=http://localhost:4387
+    depends_on:
+      - api
+    restart: unless-stopped
