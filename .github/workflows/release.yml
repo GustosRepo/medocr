@@ -43,66 +43,74 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           docker system prune -af --volumes
           df -h
 
-      - name: Prepare output folders
-        run: mkdir -p out
+      - name: Extract tag name
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Build OCR - amd64
+      - name: Build and push OCR - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f ocr_service/Dockerfile \
-            -t medocr-ocr:amd64 \
-            --load \
+            -t ghcr.io/gustosrepo/medocr-ocr:${{ steps.tag.outputs.TAG }} \
+            -t ghcr.io/gustosrepo/medocr-ocr:latest \
+            --push \
             ./ocr_service
-          docker save -o out/medocr-ocr-amd64.tar medocr-ocr:amd64
           docker system prune -af
 
-      - name: Build Backend - amd64
+      - name: Build and push Backend - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f backend/Dockerfile \
-            -t medocr-backend:amd64 \
-            --load \
+            -t ghcr.io/gustosrepo/medocr-backend:${{ steps.tag.outputs.TAG }} \
+            -t ghcr.io/gustosrepo/medocr-backend:latest \
+            --push \
             .
-          docker save -o out/medocr-backend-amd64.tar medocr-backend:amd64
           docker system prune -af
 
-      - name: Build Frontend - amd64
+      - name: Build and push Frontend - amd64
         run: |
           docker buildx build \
             --platform linux/amd64 \
             -f frontend/Dockerfile \
-            -t medocr-frontend:amd64 \
-            --load \
+            -t ghcr.io/gustosrepo/medocr-frontend:${{ steps.tag.outputs.TAG }} \
+            -t ghcr.io/gustosrepo/medocr-frontend:latest \
+            --push \
             ./frontend
-          docker save -o out/medocr-frontend-amd64.tar medocr-frontend:amd64
 
-      - name: Upload amd64 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: medocr-amd64-images
-          path: out/*.tar
-
-      - name: Create GitHub Release and attach tars (on tag)
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: out/*.tar
           body: |
             ## MEDOCR Release ${{ github.ref_name }}
             
-            amd64 Docker images for Windows/Linux x86_64.
+            Docker images are available at GitHub Container Registry:
             
-            **Load images:**
+            **Pull images:**
             ```bash
-            docker load -i medocr-ocr-amd64.tar
-            docker load -i medocr-backend-amd64.tar
-            docker load -i medocr-frontend-amd64.tar
+            docker pull ghcr.io/gustosrepo/medocr-ocr:${{ steps.tag.outputs.TAG }}
+            docker pull ghcr.io/gustosrepo/medocr-backend:${{ steps.tag.outputs.TAG }}
+            docker pull ghcr.io/gustosrepo/medocr-frontend:${{ steps.tag.outputs.TAG }}
+            ```
+            
+            **Or use latest:**
+            ```bash
+            docker pull ghcr.io/gustosrepo/medocr-ocr:latest
+            docker pull ghcr.io/gustosrepo/medocr-backend:latest
+            docker pull ghcr.io/gustosrepo/medocr-frontend:latest
             ```
