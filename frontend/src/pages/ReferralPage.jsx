@@ -242,16 +242,22 @@ export default function ReferralPage() {
 
   async function exportIndividual(ids) {
     if (!ids.length) return;
+    // If attempting many separate downloads, suggest using ZIP instead
+    if (ids.length > 30) {
+      const proceed = window.confirm(`This will trigger ${ids.length} separate downloads. For large batches, use Export ZIP for better reliability. Continue with individual PDFs?`);
+      if (!proceed) return;
+    }
     for (const id of ids) {
       const a = document.createElement('a');
-      a.href = `/api/documents/${id}/summary.pdf`;
+      // Download the full packet (includes Patient Report and documents)
+      a.href = `/api/documents/${id}/packet.pdf`;
   const doc = resultsMap[id];
   const base = doc?.documentMeta?.suggestedFilename?.replace(/\.pdf$/i, '') || id;
   a.download = `${base}.pdf`;
       document.body.appendChild(a); a.click(); a.remove();
       // small throttle so browser queues sanely
       // eslint-disable-next-line no-await-in-loop
-      await new Promise(r => setTimeout(r, 140));
+      await new Promise(r => setTimeout(r, 200));
     }
     notifications.show({ title: 'Downloads started', message: `${ids.length} PDFs`, color: 'blue', autoClose: 1400 });
   }
@@ -268,9 +274,40 @@ export default function ReferralPage() {
       });
       const js = await res.json();
       if (!res.ok) throw new Error(js?.error?.message || 'purge_failed');
-      notifications.show({ title: 'Purge complete', message: `Removed ${js.removed} records`, color: 'blue' });
-      // reload to refresh UI state (backend in-memory map may still show items until server reset)
-      setTimeout(() => window.location.reload(), 600);
+      notifications.show({ 
+        title: 'Purge complete', 
+        message: `Removed ${js.removed} records, deleted ${js.filesDeleted} files, ${js.resultsDeleted} results. Reloading...`, 
+        color: 'green',
+        autoClose: 3000
+      });
+      // Remove only the selected IDs from local state
+      const purgedIds = Array.from(selectedExportIds);
+      setProcessedOrder(prev => prev.filter(id => !purgedIds.includes(id)));
+      setResultsMap(prev => {
+        const updated = { ...prev };
+        purgedIds.forEach(id => delete updated[id]);
+        return updated;
+      });
+      setSelectedExportIds(new Set());
+      
+      // Update localStorage to remove only purged IDs
+      try {
+        const savedResults = localStorage.getItem('processedDocuments');
+        const savedOrder = localStorage.getItem('processedOrder');
+        if (savedResults && savedOrder) {
+          const results = JSON.parse(savedResults);
+          const order = JSON.parse(savedOrder);
+          purgedIds.forEach(id => delete results[id]);
+          const newOrder = order.filter(id => !purgedIds.includes(id));
+          localStorage.setItem('processedDocuments', JSON.stringify(results));
+          localStorage.setItem('processedOrder', JSON.stringify(newOrder));
+        }
+      } catch (e) {
+        console.error('Failed to update localStorage:', e);
+      }
+      
+      // reload to refresh UI state
+      setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       notifications.show({ title: 'Purge failed', message: String(e.message || e), color: 'red' });
     }
@@ -287,8 +324,20 @@ export default function ReferralPage() {
       });
       const js = await res.json();
       if (!res.ok) throw new Error(js?.error?.message || 'purge_failed');
-      notifications.show({ title: 'Purge complete', message: `Removed ${js.removed} records`, color: 'blue' });
-      setTimeout(() => window.location.reload(), 600);
+      notifications.show({ 
+        title: 'Purge ALL complete', 
+        message: `Removed ${js.removed} records, deleted ${js.filesDeleted} files, ${js.resultsDeleted} results. Reloading...`, 
+        color: 'green',
+        autoClose: 3000
+      });
+      // Clear local state AND localStorage immediately before reload
+      setSelectedExportIds(new Set());
+      setProcessedOrder([]);
+      setResultsMap({});
+      localStorage.removeItem('processedDocuments');
+      localStorage.removeItem('processedOrder');
+      localStorage.removeItem('exportSelection');
+      setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       notifications.show({ title: 'Purge failed', message: String(e.message || e), color: 'red' });
     }
@@ -356,7 +405,7 @@ export default function ReferralPage() {
       action === 'READY_TO_SCHEDULE' ? 'green' :
       action === 'MANUAL_REVIEW' ? 'red' :
       action === 'INSURANCE_VERIFICATION' ? 'yellow' :
-      action === 'PRIOR_AUTH' ? 'orange' :
+      (action === 'PRIOR_AUTH' || action === 'AUTHORIZATION_REQUEST') ? 'orange' :
       'blue';
     return (
       <Tooltip label={selectedDoc.routing.route.description || ''}>
@@ -1726,14 +1775,14 @@ export default function ReferralPage() {
                           >Select</button>
                       </div>
                         <div className="md:hidden">
-                          <Tooltip label="Export all packets as ZIP" position="bottom">
+                          <Tooltip label="Export all packets as a single ZIP (one folder per patient)" position="bottom">
                             <Button
                               size="compact-xs"
                               variant="default"
                               disabled={doneIds.length === 0}
                               onClick={() => exportZip(doneIds)}
                             >
-                              Export Packets
+                              Export ZIP
                             </Button>
                           </Tooltip>
                           <Tooltip label="Select specific docs to export">
@@ -1756,9 +1805,11 @@ export default function ReferralPage() {
                         <Badge size="sm" variant="outline" color={selectedExportIds.size ? 'blue' : 'gray'}>
                           {selectedExportIds.size}/{doneIds.length}
                         </Badge>
-                        <Button size="compact-xs" variant="light" disabled={!selectedExportIds.size} onClick={() => exportZip(Array.from(selectedExportIds))}>Packets</Button>
+                        <Tooltip label="Export selected packets as a single ZIP (one folder per patient)">
+                          <Button size="compact-xs" variant="light" disabled={!selectedExportIds.size} onClick={() => exportZip(Array.from(selectedExportIds))}>ZIP</Button>
+                        </Tooltip>
                         <Button size="compact-xs" variant="subtle" color="red" disabled={!selectedExportIds.size} onClick={() => purgeSelected()}>Purge selected</Button>
-                        <Tooltip label="Download each PDF (no ZIP)">
+                        <Tooltip label="Download each patient's packet.pdf as separate files (may be blocked in large batches)">
                           <Button size="compact-xs" variant="subtle" disabled={!selectedExportIds.size} onClick={() => exportIndividual(Array.from(selectedExportIds))}>PDFs</Button>
                         </Tooltip>
                         {/* Reports bulk button removed: use Packets ZIP (includes Patient Report) */}

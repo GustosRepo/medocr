@@ -332,13 +332,31 @@ function scheduleDocumentProcessing(id) {
 
 // In-memory doc store for dev
 const docs = new Map(); // id -> { filePath, status, result, error, ocrParams? }
+const RESULTS_DIR = path.join(__dirname, '..', 'data', 'results');
+
+// Helper: find original upload bytes by matching SHA-256 hash against data/uploads
+async function findOriginalByHash(fileHash) {
+  if (!fileHash) return null;
+  const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+  try {
+    const names = await fsPromises.readdir(uploadsDir);
+    for (const name of names) {
+      const abs = path.join(uploadsDir, name);
+      try {
+        const buf = await fsPromises.readFile(abs);
+        const h = crypto.createHash('sha256').update(buf).digest('hex');
+        if (h === fileHash) return buf;
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
 
 function buildSummaryFileStem(result) {
   // Use intelligent filename generator for exports
   try {
-    const filename = generateExportFilename(result);
-    // Remove .pdf extension to get stem
-    return filename.replace(/\.pdf$/i, '');
+    const filename = generateDisplayFilename(result, { includeExtension: false });
+    return filename;
   } catch (err) {
     // Fallback to safe default if generation fails
     const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -380,10 +398,23 @@ async function buildPacketPdf(docId, entry, logoPath) {
     // generatePatientPdf not available; continue without Patient Report
     patientReportBuffer = null;
   }
+  // Try to get original PDF bytes from filePath or fallback buffer
+  let originalBytes = null;
   const filePath = entry.filePath;
   if (filePath && fs.existsSync(filePath)) {
     try {
-      const originalBytes = await fsPromises.readFile(filePath);
+      originalBytes = await fsPromises.readFile(filePath);
+    } catch (err) {
+      log('warn', 'packet_original_read_failed', { id: docId, filePath, err: String(err?.message || err) });
+    }
+  }
+  // If filePath missing or read failed, try fallback buffer (from hash recovery)
+  if (!originalBytes && entry._originalBytes) {
+    originalBytes = entry._originalBytes;
+  }
+  
+  if (originalBytes) {
+    try {
       const summaryDoc = await PDFDocument.load(summaryBuffer);
       // If Patient Report available, insert its pages after the one-page summary
       if (patientReportBuffer) {
@@ -505,6 +536,44 @@ async function addProcessedRecord(id, entry) {
 
 // Load processed.json on startup
 loadProcessedRecords().catch(() => {});
+
+// Hydrate in-memory docs map from disk so exports and UI work after restarts
+async function hydrateDocsFromDisk(limit = 300) {
+  try {
+    // Scan data/results directory directly to find all persisted result files
+    if (!fs.existsSync(RESULTS_DIR)) {
+      log('info', 'hydrate_skip', { reason: 'results_dir_missing' });
+      return;
+    }
+    const files = await fsPromises.readdir(RESULTS_DIR);
+    const jsonFiles = files.filter(f => f.endsWith('.json')).sort().reverse(); // newest first by timestamp in filename
+    let loaded = 0;
+    for (const file of jsonFiles) {
+      if (loaded >= limit) break;
+      const id = file.replace('.json', '');
+      if (docs.has(id)) continue; // skip if already in memory
+      try {
+        const p = path.join(RESULTS_DIR, file);
+        const raw = await fsPromises.readFile(p, 'utf8');
+        const result = JSON.parse(raw);
+        const entry = { status: 'done', result, filePath: null };
+        // Attempt to recover original PDF bytes by fileHash for downstream needs
+        const fileHash = result?.documentMeta?.fileHash;
+        const originalBuf = await findOriginalByHash(fileHash);
+        if (originalBuf) entry._originalBytes = originalBuf;
+        docs.set(id, entry);
+        loaded++;
+      } catch (e) {
+        log('warn', 'hydrate_failed', { id, err: String(e?.message || e) });
+      }
+    }
+    if (loaded > 0) log('info', 'hydrate_complete', { loaded });
+  } catch (e) {
+    log('warn', 'hydrate_error', { err: String(e?.message || e) });
+  }
+}
+
+hydrateDocsFromDisk().catch(()=>{});
 
 // List recent documents (simple in-memory enumeration) for checklist dashboard
 app.get('/api/documents', (req, res) => {
@@ -1695,7 +1764,8 @@ async function processDocument(id) {
       });
       
       // Merge core extracted data from dualResult (preserves problemsList)
-      const dataFields = ['patient', 'insurance', 'provider', 'procedure', 'diagnoses', 
+      // LLM supplements narratives only - never overwrites structured OCR data
+      const dataFields = ['insurance', 'provider', 'procedure', 'diagnoses', 
                           'clinical', 'flags', 'alerts', 'infoAlerts', 'confidence', 
                           'qc', 'confidenceDetail', 'risk', 'vitals'];
       
@@ -1704,6 +1774,15 @@ async function processDocument(id) {
           mappedResult[field] = dualResult[field];
         }
       }
+      
+      // IMPORTANT: Never overwrite patient demographics from OCR with LLM data
+      // OCR rules engine is authoritative for structured fields (name, DOB, phones)
+      // LLM is only used for narrative fields (clinical notes, history, problemsList, etc.)
+      // Keep the original OCR patient data completely unchanged
+      log('info', 'dual_engine_patient_preserved_from_ocr', { 
+        id, 
+        patient: mappedResult.patient 
+      });
     } catch (err) {
       log('warn', 'dual_engine_failed', { id, err: String(err.message || err) });
       // Continue with OCR-only results
@@ -1712,16 +1791,11 @@ async function processDocument(id) {
 
   // Defensive post-process: re-apply learned corrections
   applyCorrectionsPostprocess(mappedResult, trace, { id });
-  // Build suggested filename per client requirement: LastName_FirstName_DOB_ReferralDate.pdf
-    const first = mappedResult?.patient?.first || '';
-    const last = mappedResult?.patient?.last || '';
-    const dob = mappedResult?.patient?.dob || '';
-    // Use extracted referralDate if available, otherwise fall back to today's date
-    const intakeDate = mappedResult?.documentMeta?.referralDate || new Date().toISOString().slice(0, 10);
-    const safe = (s) => String(s).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const suggestedFilename = (last && first && dob)
-      ? `${safe(last)}_${safe(first)}_${safe(dob)}_${safe(intakeDate)}`
-      : undefined;
+  
+  // Set meta.documentDate from priority date fields
+  const meta = mappedResult?.documentMeta || {};
+  const intakeDate = meta.orderDate || meta.referralDate || meta.studyDate || meta.documentDate || meta.intakeDate || new Date().toISOString().slice(0, 10);
+  meta.documentDate = intakeDate;
   const result = {
       ...mappedResult,
       ocr: ocrPages,
@@ -1730,8 +1804,7 @@ async function processDocument(id) {
         filename: entry.originalName || path.basename(entry.filePath),
         pages: Array.isArray(ocrPages) ? ocrPages.length : 0,
         intakeDate,
-    suggestedFilename: suggestedFilename ? `${suggestedFilename}.pdf` : undefined,
-    fileHash
+        fileHash
       },
       // Add dual-engine results if available
       ...(dualEngineData && {
@@ -1805,6 +1878,8 @@ async function processDocument(id) {
       entry.displayFilename = displayFilename;
       if (result.documentMeta) {
         result.documentMeta.displayFilename = displayFilename;
+        // Use displayFilename as suggestedFilename for consistent naming
+        result.documentMeta.suggestedFilename = displayFilename;
       }
       log('info', 'display_filename_generated', { id, displayFilename });
     }
@@ -1813,6 +1888,13 @@ async function processDocument(id) {
   }
   
   entry.result = result; entry._trace = trace; entry.status = 'done'; entry.error = null; docs.set(id, entry);
+  // Persist full result for recovery (bulk export after restart)
+  try {
+    await fsPromises.mkdir(RESULTS_DIR, { recursive: true });
+    await fsPromises.writeFile(path.join(RESULTS_DIR, `${id}.json`), JSON.stringify(result, null, 2), 'utf8');
+  } catch (e) {
+    log('warn','result_persist_failed',{ id, err: String(e?.message || e) });
+  }
   incCounter('docsProcessed');
   recordLatency(performance.now() - t0);
   try { addSnapshot(id, result); } catch {}
@@ -2061,15 +2143,58 @@ app.post('/api/documents/processed/purge', express.json({ limit: '64kb' }), asyn
       const d = new Date(olderThan);
       if (!isNaN(d)) beforeTs = d.getTime();
     }
+    
+    // Track which IDs to remove
+    const idsToRemove = new Set();
+    
     const keep = processedRecords.filter(r => {
-      if (Array.isArray(ids) && ids.includes(r.id)) return false;
-      if (beforeTs && new Date(r.processedAt).getTime() < beforeTs) return false;
+      if (Array.isArray(ids) && ids.includes(r.id)) {
+        idsToRemove.add(r.id);
+        return false;
+      }
+      if (beforeTs && new Date(r.processedAt).getTime() < beforeTs) {
+        idsToRemove.add(r.id);
+        return false;
+      }
       return true;
     });
+    
     const removed = processedRecords.length - keep.length;
     processedRecords = keep;
     await saveProcessedRecords();
-    res.json({ ok: true, removed });
+    
+    // Also delete from in-memory docs map, uploaded files, and persisted results
+    let filesDeleted = 0;
+    let resultsDeleted = 0;
+    for (const id of idsToRemove) {
+      // Remove from in-memory map
+      const entry = docs.get(id);
+      docs.delete(id);
+      
+      // Delete uploaded PDF if exists
+      if (entry?.filePath && fs.existsSync(entry.filePath)) {
+        try {
+          await fsPromises.unlink(entry.filePath);
+          filesDeleted++;
+        } catch (err) {
+          log('warn', 'purge_file_delete_failed', { id, filePath: entry.filePath, err: String(err) });
+        }
+      }
+      
+      // Delete persisted result JSON
+      const resultPath = path.join(RESULTS_DIR, `${id}.json`);
+      if (fs.existsSync(resultPath)) {
+        try {
+          await fsPromises.unlink(resultPath);
+          resultsDeleted++;
+        } catch (err) {
+          log('warn', 'purge_result_delete_failed', { id, resultPath, err: String(err) });
+        }
+      }
+    }
+    
+    log('info', 'purge_complete', { removed, filesDeleted, resultsDeleted });
+    res.json({ ok: true, removed, filesDeleted, resultsDeleted });
   } catch (e) {
     res.status(500).json({ error: { code: 'purge_failed', message: String(e?.message || e) } });
   }
@@ -2099,11 +2224,41 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
     if (!ids.length) return res.status(400).json({ error: { code: 'bad_request', message: 'ids required' } });
 
     const items = [];
+    // Helper: find original upload by file hash
+    async function findOriginalByHash(fileHash) {
+      if (!fileHash) return null;
+      const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+      try {
+        const names = await fsPromises.readdir(uploadsDir);
+        for (const name of names) {
+          const abs = path.join(uploadsDir, name);
+          try {
+            const buf = await fsPromises.readFile(abs);
+            const h = crypto.createHash('sha256').update(buf).digest('hex');
+            if (h === fileHash) return buf;
+          } catch {}
+        }
+      } catch {}
+      return null;
+    }
     for (const id of ids) {
-      const entry = docs.get(id);
+      let entry = docs.get(id);
+      // Recovery: load persisted result if in-memory missing
+      if (!entry || entry.status !== 'done' || !entry.result) {
+        try {
+          const raw = await fsPromises.readFile(path.join(RESULTS_DIR, `${id}.json`), 'utf8');
+          const result = JSON.parse(raw);
+          entry = { status: 'done', result, filePath: null };
+          // Attempt to recover original PDF bytes by fileHash
+          const fileHash = result?.documentMeta?.fileHash;
+          const originalBuf = await findOriginalByHash(fileHash);
+          if (originalBuf) entry._originalBytes = originalBuf; // as a buffer fallback
+        } catch {}
+      }
       if (!entry || entry.status !== 'done' || !entry.result) continue;
       try {
         const stem = buildSummaryFileStem(entry.result);
+        // Build packet.pdf (summary + original merged)
         const packetBuffer = await buildPacketPdf(id, entry, process.env.BATCH_LOGO_PATH);
         items.push({ stem, packetBuffer });
       } catch (err) {
@@ -2129,7 +2284,8 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
     archive.pipe(res);
 
     for (const item of items) {
-      archive.append(item.packetBuffer, { name: `${item.stem}_packet.pdf` });
+      // Each packet is a separate PDF file: LastName_FirstName_CPT_Date.pdf
+      if (item.packetBuffer) archive.append(item.packetBuffer, { name: `${item.stem}.pdf` });
     }
 
   archive.finalize();
