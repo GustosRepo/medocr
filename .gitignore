@@ -30,11 +30,22 @@ htmlcov/
 
 # Runtime data files
 data/uploads/
+backend/data/uploads/
 data/pids/
 data/feedback.ndjson
 data/metrics.json
 data/snapshots.ndjson
 data/processed.json
+data/temp/
+data/results/
+backend/data/results/
+backend/data/npi_cache.json
+backend/data/metrics.json
+backend/data/processed.json
+backend/data/snapshots.ndjson
+
+# Frontend build output
+frontend/dist/
 
 # Release artifacts and wheelhouse (large binaries)
 release/

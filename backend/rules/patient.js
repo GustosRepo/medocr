@@ -41,6 +41,11 @@ function normalizePart(raw) {
 }
 
 const DISCLAIMER_HINTS = /(fax|sensitive|confidential|destroy|unauthorized|disclosure|records|recipient|notify|error|intended)/i;
+const TIMESTAMP_HINTS = /\d{1,2}[:\-]\d{2}\s*(am|pm|et|pt|ct|mt|utc|gmt)|^\d{2}-\d{2}-\d{4}\s+\d{1,2}:\d{2}/i;
+// Address keywords + state abbreviations + zip codes + city patterns
+const ADDRESS_HINTS = /\b(rd|road|st|street|ave|avenue|blvd|boulevard|dr|drive|ln|lane|ct|court|way|pkwy|parkway|pl|place|ste|suite|apt|unit|floor|#\d+)\b|,\s*[A-Z]{2}\s+\d{5}|,\s*(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/i;
+// Medical appointment types and common OCR errors
+const APPOINTMENT_HINTS = /\b(dis\s*ease|disease|chronic|mgnt|management|appointment|visit|consultation|referral|follow.?up|wellness|physical|exam|screening|procedure)\b/i;
 
 export function looksPlausibleName(raw) {
   const plain = String(raw || '').replace(/[^A-Za-z\p{L}]/gu, '');
@@ -76,7 +81,7 @@ export function detectName(fullText, structLinesInput) {
     return { last: normLast, first: normFirst };
   }
 
-  const PATIENT_LABEL_RE = /(patient\s*(?:name)?|pt\s*name)\s*[:\-]\s*(.*)$/i;
+  const PATIENT_LABEL_RE = /^\s*(patient\s*(?:name|information)?|pt\s*name)\s*[:\-]?\s*(.*)$/i;
   const GENERIC_NAME_LABEL_RE = /(name)\s*[:\-]\s*(.*)$/i;
   const NON_PATIENT_LABEL_HINTS = /(from|to|subject|company|facility|provider|attention|attn|fax|cc|re:|regarding)/i;
 
@@ -102,6 +107,9 @@ export function detectName(fullText, structLinesInput) {
         if (!cand) continue;
         if (isHeaderLine(cand) || isNonPatientLine(cand)) continue;
         if (DISCLAIMER_HINTS.test(cand)) continue;
+        if (TIMESTAMP_HINTS.test(cand)) continue;
+        if (ADDRESS_HINTS.test(cand)) continue;
+        if (APPOINTMENT_HINTS.test(cand)) continue;
         if (contextScore(cand).score >= 2) continue;
         const lf = cand.match(reLastFirst);
         if (lf) {
@@ -141,6 +149,9 @@ export function detectName(fullText, structLinesInput) {
     // Centralized header/non-patient guards
     if (isHeaderLine(line) || isNonPatientLine(line)) continue;
     if (DISCLAIMER_HINTS.test(line)) continue;
+    if (TIMESTAMP_HINTS.test(line)) continue; // Skip timestamp lines like "09-02-2025 7:05 PM ET"
+    if (ADDRESS_HINTS.test(line)) continue; // Skip address lines like "1651 EFLAMINGO RD STE 4B"
+    if (APPOINTMENT_HINTS.test(line)) continue; // Skip appointment types like "Dis ease Mgnt"
     if (contextScore(line).score >= 2) continue;
     const lf = line.match(reLastFirst);
     if (lf) {
@@ -162,7 +173,21 @@ export function detectName(fullText, structLinesInput) {
     }
   }
   const best = pickBest(candidates, 'patient_name');
-  if (best) return { hit: true, value: best.value, why: 'name_select_best', candidates };
+  if (best) {
+    // Final validation: reject if the selected name contains address/appointment keywords
+    const fullName = `${best.value.last}, ${best.value.first}`;
+    if (ADDRESS_HINTS.test(fullName) || APPOINTMENT_HINTS.test(fullName)) {
+      // Remove this candidate and try again
+      const filtered = candidates.filter(c => {
+        const fn = `${c.value.last}, ${c.value.first}`;
+        return !ADDRESS_HINTS.test(fn) && !APPOINTMENT_HINTS.test(fn);
+      });
+      const nextBest = pickBest(filtered, 'patient_name');
+      if (nextBest) return { hit: true, value: nextBest.value, why: 'name_select_best', candidates: filtered };
+      return { hit: false, why: 'name_none_after_filters', candidates };
+    }
+    return { hit: true, value: best.value, why: 'name_select_best', candidates };
+  }
   return { hit: false, why: 'name_none', candidates };
 }
 
