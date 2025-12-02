@@ -169,30 +169,55 @@ export default function ReferralPage() {
     return () => viewport.removeEventListener('scroll', handleLogsScroll);
   }, [showLogs, logsScrollRef.current]);
   
-  // Poll logs from backend
+  // Real-time log streaming from backend
   useEffect(() => {
     if (!showLogs) return;
     
-    let interval;
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch(`${apiBase}/logs/ocr?lines=100`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.logs)) {
-            setLogs(data.logs);
+    let eventSource = null;
+    
+    try {
+      // Use EventSource for real-time log streaming
+      eventSource = new EventSource(`${apiBase}/logs/ocr/stream`);
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.log) {
+            setLogs(prev => {
+              const newLogs = [...prev, data.log];
+              // Keep last 100 lines
+              return newLogs.slice(-100);
+            });
+            
+            // Auto-scroll to bottom if enabled
+            if (autoScroll && logsScrollRef.current) {
+              setTimeout(() => {
+                const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                if (viewport) {
+                  viewport.scrollTop = viewport.scrollHeight;
+                }
+              }, 50);
+            }
           }
+        } catch (err) {
+          console.error('Failed to parse log event:', err);
         }
-      } catch (err) {
-        console.error('Failed to fetch logs:', err);
+      };
+      
+      eventSource.onerror = (err) => {
+        console.error('OCR log stream error:', err);
+        eventSource.close();
+      };
+    } catch (err) {
+      console.error('Failed to setup OCR log stream:', err);
+    }
+    
+    return () => {
+      if (eventSource) {
+        eventSource.close();
       }
     };
-    
-    fetchLogs(); // Initial fetch
-    interval = setInterval(fetchLogs, 2000); // Poll every 2 seconds
-    
-    return () => clearInterval(interval);
-  }, [showLogs]);
+  }, [showLogs, autoScroll]);
 
   function pushResult(id, data) {
     setResultsMap(m => ({ ...m, [id]: data }));

@@ -63,35 +63,37 @@ export default function OllamaMonitor() {
     }
   }, [autoRefresh]);
 
-  // Fetch Ollama logs
+  // Fetch Ollama logs with real-time streaming
   useEffect(() => {
     if (!showLogs) return;
     
-    let interval;
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch('/api/logs/ollama?lines=100');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.logs)) {
-            setLogs(data.logs);
+    let eventSource = null;
+    
+    try {
+      // Use EventSource for real-time log streaming
+      eventSource = new EventSource('/api/logs/ollama/stream');
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.log) {
+            setLogs(prev => {
+              const newLogs = [...prev, data.log];
+              // Keep last 100 lines
+              return newLogs.slice(-100);
+            });
             
             // Detect processing state
-            const hasStart = data.logs.some(line => 
-              line.includes('dual_engine_start') || 
-              line.includes('llm_validation_mode') ||
-              line.includes('ollama_validation_start')
-            );
-            const hasComplete = data.logs.some(line => 
-              line.includes('dual_engine_complete')
-            );
+            const hasStart = data.log.includes('dual_engine_start') || 
+                           data.log.includes('llm_validation_mode') ||
+                           data.log.includes('ollama_validation_start');
+            const hasComplete = data.log.includes('dual_engine_complete');
             
             // Track completion
-            if (hasStart && !hasComplete) {
+            if (hasStart) {
               setIsProcessing(true);
             } else if (hasComplete) {
               if (isProcessing) {
-                // Just completed - record time
                 setLastCompletionTime(new Date());
               }
               setIsProcessing(false);
@@ -107,16 +109,24 @@ export default function OllamaMonitor() {
               }, 50);
             }
           }
+        } catch (err) {
+          console.error('Failed to parse log event:', err);
         }
-      } catch (err) {
-        console.error('Failed to fetch Ollama logs:', err);
+      };
+      
+      eventSource.onerror = (err) => {
+        console.error('Ollama log stream error:', err);
+        eventSource.close();
+      };
+    } catch (err) {
+      console.error('Failed to setup Ollama log stream:', err);
+    }
+    
+    return () => {
+      if (eventSource) {
+        eventSource.close();
       }
     };
-    
-    fetchLogs(); // Initial fetch
-    interval = setInterval(fetchLogs, 2000); // Poll every 2 seconds
-    
-    return () => clearInterval(interval);
   }, [showLogs, autoScroll, isProcessing]);
 
   // Detect manual scroll to pause auto-scroll

@@ -3,6 +3,9 @@
  * Reduces memory usage and prevents Ollama crashes while maintaining readability
  */
 
+// MUST import canvas setup first to polyfill browser APIs before pdfjs loads
+import './canvasSetup.js';
+
 import sharp from 'sharp';
 import { pdfToPng } from 'pdf-to-png-converter';
 import fs from 'fs/promises';
