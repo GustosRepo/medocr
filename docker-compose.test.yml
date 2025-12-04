@@ -13,6 +13,7 @@ services:
       - OCR_DPI_MAX=600
       - OCR_ENABLE_TABLES=1
       - OCR_MAX_CELLS_PER_TABLE=15
+      - MEDOCR_ENABLE_AUTOROTATE=true
       - MEDOCR_RENDER_DPI=300
       - MEDOCR_USE_CLAHE=true
       - MEDOCR_CLAHE_CLIP_LIMIT=2.5
@@ -46,7 +47,7 @@ services:
       - DOC_MAX_CONCURRENCY=1
       - ENABLE_LLM=true
       - LLM_MODE=extract
-      - OLLAMA_MODEL=llava:7b
+      - OLLAMA_MODEL=llama3.2:latest
       - OLLAMA_TIMEOUT=90000
       - LLM_TIMEOUT=300000
       - LOG_LEVEL=debug

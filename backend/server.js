@@ -35,6 +35,7 @@ import { DecisionTreeEngine } from './decisionTree.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
 import { getOllamaHealth, ollamaMonitor } from './ollamaMonitor.js';
 import { normalizeFields, getClientConfig } from './utils/fieldNormalizer.js';
+import aiAnalysisRoutes from './routes/aiAnalysis.js';
 
 // Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
 try {
@@ -53,6 +54,18 @@ try {
 }
 
 const app = express();
+
+// CORS middleware - allow frontend to call backend
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: process.env.BODY_SIZE_LIMIT || '256kb' }));
 // Static dashboard assets
 const __filename = fileURLToPath(import.meta.url);
@@ -507,6 +520,10 @@ async function saveProcessedRecords() {
 function makeProcessedSummary(id, entry) {
   const r = entry?.result || {};
   const patient = r.patient || {};
+  const clinical = r.clinical || {};
+  const problemsList = clinical.problemsList || [];
+  const alerts = r.alerts || {};
+  
   return {
     id,
     processedAt: new Date().toISOString(),
@@ -517,7 +534,10 @@ function makeProcessedSummary(id, entry) {
     fileHash: r.documentMeta?.fileHash || null,
     patient: { first: patient.first || null, last: patient.last || null, dob: patient.dob || null },
     confidence: r.confidenceLevel || r.confidence || null,
-    actionsCount: (r.alerts?.actions || []).length
+    problems: problemsList,
+    actions: alerts.actions || [],
+    warnings: alerts.warnings || [],
+    actionsCount: (alerts.actions || []).length
   };
 }
 
@@ -697,6 +717,9 @@ app.patch('/api/checklist/:id', (req, res) => {
 
 // Already added JSON parser with limit above
 app.use((req, _res, next) => { req.logger = withReq(req); next(); });
+
+// AI Analysis routes (isolated feature - doesn't interfere with existing functionality)
+app.use('/api/ai-analysis', aiAnalysisRoutes);
 
 // Health
 app.get('/api/health', (req, res) => { req.logger?.debug('health'); res.json({ status: 'ok' }); });
@@ -1962,10 +1985,12 @@ async function processDocument(id) {
   // Defensive post-process: re-apply learned corrections
   applyCorrectionsPostprocess(mappedResult, trace, { id });
   
-  // Set meta.documentDate from priority date fields
+  // Set meta.documentDate from priority date fields (no fallback to today's date)
   const meta = mappedResult?.documentMeta || {};
-  const intakeDate = meta.orderDate || meta.referralDate || meta.studyDate || meta.documentDate || meta.intakeDate || new Date().toISOString().slice(0, 10);
-  meta.documentDate = intakeDate;
+  const intakeDate = meta.orderDate || meta.referralDate || meta.studyDate || meta.documentDate || meta.intakeDate || '';
+  if (intakeDate) {
+    meta.documentDate = intakeDate;
+  }
   const result = {
       ...mappedResult,
       ocr: ocrPages,
