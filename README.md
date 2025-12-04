@@ -48,6 +48,51 @@ Directories:
 			- `npm run stop:all`
 		- Logs: `data/logs`; PIDs: `data/pids`
 
+## Run (Docker - Production)
+
+**Prerequisites:**
+- Docker Desktop installed and running
+- Ollama installed (optional, for LLM features): `brew install ollama` or download from https://ollama.com
+- For LLM: Pull the llava model: `ollama pull llava:7b`
+
+**Quick Start:**
+```bash
+# 1. Build all images
+docker-compose -f docker-compose.test.yml build
+
+# 2. Start all services
+docker-compose -f docker-compose.test.yml up -d
+
+# 3. Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:4387
+# OCR Service: http://localhost:8000
+
+# 4. View logs (real-time streaming)
+docker-compose -f docker-compose.test.yml logs -f
+
+# 5. Stop all services
+docker-compose -f docker-compose.test.yml down
+```
+
+**Services:**
+- **ocr**: RapidOCR service (port 8000)
+- **api**: Node.js backend with dual-engine processing (port 4387)
+- **frontend**: React UI with nginx (port 5173)
+
+**Configuration:**
+Edit `docker-compose.test.yml` to customize:
+- `OCR_TIMEOUT_MS`: Timeout for OCR processing (default: 3 hours)
+- `LLM_MODE`: Set to `extract` for LLM processing or `off` to disable
+- `OLLAMA_MODEL`: LLM model to use (default: `llava:7b`)
+- `LOG_LEVEL`: Set to `debug` for verbose logging
+
+**Features:**
+- ✅ Real-time log streaming (OCR and Ollama logs visible in UI)
+- ✅ Dual-engine processing (OCR + Ollama LLM for enhanced extraction)
+- ✅ Auto-restart on failure
+- ✅ Volume persistence for data and uploads
+
 ## Feature Highlights
 
 ### OCR & Extraction
@@ -135,7 +180,7 @@ PDFs (pdfkit) include headers, optional logo (`BATCH_LOGO_PATH`), pagination, an
 |----------|---------|---------|
 | `OCR_SERVICE_URL` | `http://127.0.0.1:8000` | OCR service base URL |
 | `OCR_SERVICE_URLS` | (unset) | Comma-separated OCR service URLs (round-robin load balancing); overrides `OCR_SERVICE_URL` |
-| `OCR_TIMEOUT_MS` | `420000` | Abort OCR request after this many ms (tune for large PDFs) |
+| `OCR_TIMEOUT_MS` | `420000` | Abort OCR request after this many ms (tune for large PDFs; Docker default: 10800000 = 3 hours) |
 | `OCR_MAX_CONCURRENCY` | `4` | Max simultaneous OCR calls allowed by API queue |
 | `DOC_MAX_CONCURRENCY` | `2` | Max documents processed concurrently (uploads queued beyond this) |
 | `MEDOCR_RENDER_DPI` | `300` | Base DPI used by OCR service when rasterizing pages |
@@ -145,6 +190,13 @@ PDFs (pdfkit) include headers, optional logo (`BATCH_LOGO_PATH`), pagination, an
 | `MEDOCR_DOWNSAMPLE_SCALE_HIGH` | `0.5` | Scaling factor for heavy downsampling |
 | `BATCH_LOGO_PATH` | (unset) | Optional PNG/JPG for PDF headers |
 | `METRICS_STORE_PATH` | data/metrics.json | Override metrics persistence path |
+| `ENABLE_LLM` | `false` | Enable dual-engine processing with LLM (requires Ollama) |
+| `LLM_MODE` | `off` | LLM processing mode: `extract` (narrative only), `validate` (cross-check OCR), or `off` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint (Docker: `http://host.docker.internal:11434`) |
+| `OLLAMA_MODEL` | `llava:7b` | Vision LLM model for document analysis |
+| `OLLAMA_TIMEOUT` | `90000` | Timeout per Ollama request (ms) |
+| `LLM_TIMEOUT` | `300000` | Overall LLM processing timeout (ms) |
+| `LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 
 Changes to the OCR tuning variables (`MEDOCR_*`) require restarting the OCR service process so the new settings take effect.
 

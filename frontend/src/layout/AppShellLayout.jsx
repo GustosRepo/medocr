@@ -17,6 +17,7 @@ export default function AppShellLayout({ children }) {
       { to: '/', label: 'Referral' },
       { to: '/checklist', label: 'Checklist' },
       { to: '/analytics', label: 'Analytics' },
+      { to: '/ai-analysis', label: 'AI Analysis' },
       { to: '/debug/ocr', label: 'OCR Debug' },
       { to: '/admin/rules', label: 'Rules Editor' }
     ];

@@ -185,18 +185,18 @@ def _extract_cells_from_table(img_bgr, table_bbox):
 
 def autorotate_with_cls(pil_img: Image.Image, det_engine, cls_engine) -> Image.Image:
     """
-    Auto-rotate page using classifier on detected text boxes.
+    Auto-rotate page by testing detection confidence at all 4 orientations.
     
     DISABLED BY DEFAULT - Set MEDOCR_ENABLE_AUTOROTATE=true to enable.
-    Only use if you have rotated scans. Adds ~5-15s per page overhead.
+    Adds ~5-10s per page overhead.
     
-    Detects top N high-confidence boxes on downscaled image, runs CLS per box,
-    majority-votes rotation angle {0, 90, 180, 270}, and rotates original page if needed.
+    Tries detecting text boxes at 0°, 90°, 180°, 270° rotations and picks
+    the orientation with best detection confidence (most boxes with high scores).
     
     Args:
         pil_img: PIL Image to potentially rotate
         det_engine: RapidOCR detection engine
-        cls_engine: RapidOCR classifier engine (or None)
+        cls_engine: Not used (kept for compatibility)
     
     Returns:
         Rotated PIL Image if rotation detected, else original
@@ -205,79 +205,55 @@ def autorotate_with_cls(pil_img: Image.Image, det_engine, cls_engine) -> Image.I
     if os.getenv("MEDOCR_ENABLE_AUTOROTATE", "false").lower() not in ("true", "1", "yes"):
         return pil_img
     
-    if cls_engine is None or det_engine is None:
+    if det_engine is None:
         return pil_img
     
-    # Aggressive downscale for speed (400px max dimension)
+    # Downscale for speed (600px max dimension - balance between speed and accuracy)
     w, h = pil_img.size
-    scale = 400 / max(w, h) if max(w, h) > 400 else 1.0
+    scale = 600 / max(w, h) if max(w, h) > 600 else 1.0
     if scale < 1.0:
         small = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
     else:
         small = pil_img
     
-    # Run detection only
+    # Convert PIL to numpy for detection
+    import numpy as np
+    
+    # Try all 4 rotations and pick the one with most detected boxes
     try:
-        result, _ = det_engine(small)
-        if not result or len(result) < 3:
-            return pil_img  # Too few boxes, assume correct orientation
+        rotation_scores = {}
         
-        # Get top N high-confidence boxes
-        boxes_with_conf = []
-        for item in result:
-            if isinstance(item, (list, tuple)) and len(item) >= 3:
-                # Format: [box, text, score] or [text, score, box]
-                first = item[0]
-                if isinstance(first, (list, tuple)) and len(first) >= 4:
-                    conf = _to_float(item[2], 0.0) if len(item) > 2 else 0.0
-                    boxes_with_conf.append((item[0], conf))
-                else:
-                    conf = _to_float(item[1], 0.0) if len(item) > 1 else 0.0
-                    boxes_with_conf.append((item[2] if len(item) > 2 else None, conf))
-        
-        # Take only top 5 boxes by confidence (reduced from 10 for speed)
-        boxes_with_conf.sort(key=lambda x: x[1], reverse=True)
-        top_boxes = [b[0] for b in boxes_with_conf[:5] if b[0] is not None]
-        
-        if len(top_boxes) < 3:
-            return pil_img
-        
-        # Run classifier on each box region
-        rotation_votes = []
-        for box_points in top_boxes:
-            try:
-                # Extract box region from small image
-                xs = [p[0] for p in box_points]
-                ys = [p[1] for p in box_points]
-                x1, x2 = max(0, int(min(xs)) - 2), min(small.width, int(max(xs)) + 2)
-                y1, y2 = max(0, int(min(ys)) - 2), min(small.height, int(max(ys)) + 2)
-                
-                if x2 <= x1 or y2 <= y1:
-                    continue
-                
-                crop = small.crop((x1, y1, x2, y2))
-                
-                # Run classifier (returns rotation angle needed)
-                cls_result = cls_engine(crop)
-                if cls_result and len(cls_result) > 0:
-                    angle = cls_result[0] if isinstance(cls_result, (list, tuple)) else cls_result
-                    if isinstance(angle, (int, float)):
-                        rotation_votes.append(int(angle))
-            except Exception:
+        for angle in [0, 90, 180, 270]:
+            # Rotate image
+            if angle == 0:
+                test_img = small
+            else:
+                test_img = small.rotate(-angle, expand=True)  # Negative for clockwise
+            
+            test_np = np.array(test_img)
+            
+            # Run detection
+            result, _ = det_engine(test_np)
+            
+            if result is None or len(result) == 0:
+                rotation_scores[angle] = 0
                 continue
+            
+            # Score = number of boxes detected (more boxes = better orientation)
+            rotation_scores[angle] = len(result)
         
-        if len(rotation_votes) < 2:
+        # Pick rotation with most detected boxes
+        if not rotation_scores or max(rotation_scores.values()) == 0:
+            print(f"[autorotate] skipped: no boxes detected at any rotation", flush=True)
             return pil_img
         
-        # Majority vote
-        from collections import Counter
-        vote_counts = Counter(rotation_votes)
-        winner, count = vote_counts.most_common(1)[0]
+        best_angle = max(rotation_scores, key=rotation_scores.get)
+        print(f"[autorotate] rotation_scores={rotation_scores} winner={best_angle}°", flush=True)
         
-        # Rotate if >50% agree on non-zero rotation
-        if winner != 0 and count > len(rotation_votes) * 0.5:
-            print(f"INFO: Auto-rotating page by {winner}° (votes: {vote_counts})", flush=True)
-            return pil_img.rotate(-winner, expand=True)  # Negative because PIL rotates CCW
+        # Rotate if not already at 0°
+        if best_angle != 0:
+            print(f"INFO: Auto-rotating page by {best_angle}° (detected {rotation_scores[best_angle]} boxes vs {rotation_scores[0]} at 0°)", flush=True)
+            return pil_img.rotate(-best_angle, expand=True)  # Negative because PIL rotates CCW
         
     except Exception as e:
         print(f"WARN: autorotate_with_cls failed: {e}", flush=True)
@@ -768,12 +744,14 @@ async def ocr(request: Request, file: UploadFile = File(...)):
             
             # Stage 1: Auto-rotate page if needed (using classifier on detected boxes)
             t1 = time.time()
-            img = autorotate_with_cls(img, engine, engine)
+            # Pass the sub-engines (text_det and text_cls) to autorotate function
+            img = autorotate_with_cls(img, engine.text_det, engine.text_cls)
             print(f"[ocr] {_timestamp()} page={i+1} autorotate took {time.time()-t1:.2f}s", flush=True)
             
             # Stage 2: Check if tiling needed for very large images
             t2 = time.time()
-            tiled_result, was_tiled = maybe_tile(img, engine, engine)
+            # Pass the sub-engines (text_det and text_rec) to tiling function
+            tiled_result, was_tiled = maybe_tile(img, engine.text_det, engine.text_rec)
             print(f"[ocr] {_timestamp()} page={i+1} tiling_check took {time.time()-t2:.2f}s (tiled={was_tiled})", flush=True)
             
             if was_tiled:
