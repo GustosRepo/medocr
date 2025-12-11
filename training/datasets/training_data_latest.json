@@ -1,0 +1,312 @@
+[
+  {
+    "ocrText": "Dr. Smith",
+    "correctedText": "Dr. John Smith",
+    "field": "providerNames",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "Dr. Jones",
+    "correctedText": "Dr. Jane Jones",
+    "field": "providerNames",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "Ingrid Leveille",
+    "correctedText": "INGRID LEVEILLE",
+    "field": "providerNames",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "npi": "1831482777",
+      "source": "npi_auto"
+    }
+  },
+  {
+    "ocrText": "Southern Highlends",
+    "correctedText": "BEHZAD KERMANI, MD",
+    "field": "providerNames",
+    "confidence": 0.8571428571428571,
+    "count": 6,
+    "occurrences": 7,
+    "metadata": {}
+  },
+  {
+    "ocrText": "KeRMANt, MD",
+    "correctedText": "BEHZAD KERMANI, MD",
+    "field": "providerNames",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761836218211_g1zhvh"
+    }
+  },
+  {
+    "ocrText": "LAS VEGAS",
+    "correctedText": "BEHZAD KERMANI, MD",
+    "field": "providerNames",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761865363078_g9nsp3"
+    }
+  },
+  {
+    "ocrText": "555-1234",
+    "correctedText": "555-123-4567",
+    "field": "phone",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "(702) 436-3530",
+    "correctedText": "(702) 435-1995",
+    "field": "phone",
+    "confidence": 1,
+    "count": 2,
+    "occurrences": 2,
+    "metadata": {
+      "documentId": "doc_1761723092932_j23t0a"
+    }
+  },
+  {
+    "ocrText": "(702) 260-0595",
+    "correctedText": "(702) 436-3530",
+    "field": "fax",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761788303193_34b9xn"
+    }
+  },
+  {
+    "ocrText": "Blue Cross",
+    "correctedText": "Blue Cross Blue Shield",
+    "field": "carrier",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "95810",
+    "correctedText": "95811",
+    "field": "cpt",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "In-lab PSG",
+    "correctedText": "In-Lab Polysomnography",
+    "field": "procedureDescription",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "Sleep Center",
+    "correctedText": "Comprehensive Sleep Disorders Center",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "Place ot Surgery",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761867628161_c9qaaz"
+    }
+  },
+  {
+    "ocrText": "Place of Surgery",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761867628161_c9qaaz"
+    }
+  },
+  {
+    "ocrText": "Piac",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761723092932_j23t0a"
+    }
+  },
+  {
+    "ocrText": "ot",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761723092932_j23t0a"
+    }
+  },
+  {
+    "ocrText": "This fax may contain sersitive and confdential persoral health",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 2,
+    "occurrences": 2,
+    "metadata": {
+      "documentId": "doc_1761865363078_g9nsp3"
+    }
+  },
+  {
+    "ocrText": "Pi血C电",
+    "correctedText": "Southern Highlands",
+    "field": "practiceName",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761867072030_q1dvs1"
+    }
+  },
+  {
+    "ocrText": "Dr. Smith",
+    "correctedText": "Dr. John Smith",
+    "field": "referringProvider",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "BEHZAD KERMANI, MD",
+    "correctedText": "(702) 435-1995",
+    "field": "referringPhone",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761797149465_qxu7ic"
+    }
+  },
+  {
+    "ocrText": "Southern Highlands",
+    "correctedText": "(702) 435-1995",
+    "field": "referringPhone",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761797149465_qxu7ic"
+    }
+  },
+  {
+    "ocrText": "LAS VEGAS",
+    "correctedText": "(702) 435-1995",
+    "field": "referringPhone",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761865363078_g9nsp3"
+    }
+  },
+  {
+    "ocrText": "This fax may contain sersitive and confdential persoral health",
+    "correctedText": "(702) 435-1995",
+    "field": "referringPhone",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {
+      "documentId": "doc_1761865363078_g9nsp3"
+    }
+  },
+  {
+    "ocrText": "OSA",
+    "correctedText": "Obstructive Sleep Apnea",
+    "field": "diagnosisDescription",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "eval treat",
+    "correctedText": "Eval & Treat",
+    "field": "providerNotes",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "seizure",
+    "correctedText": "Seizure Disorder",
+    "field": "safetyCategory",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "wheelchair",
+    "correctedText": "Wheelchair Access Required",
+    "field": "accommodationType",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "Dr. Jones",
+    "correctedText": "Dr. Sarah Jones, MD",
+    "field": "supervisingProvider",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "PPO",
+    "correctedText": "Preferred Provider Organization",
+    "field": "planType",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  },
+  {
+    "ocrText": "HSAT",
+    "correctedText": "Home Sleep Apnea Test",
+    "field": "studyType",
+    "confidence": 1,
+    "count": 1,
+    "occurrences": 1,
+    "metadata": {}
+  }
+]

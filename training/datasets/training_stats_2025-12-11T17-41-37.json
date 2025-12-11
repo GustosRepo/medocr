@@ -1,0 +1,33 @@
+{
+  "total": 31,
+  "byField": {
+    "providerNames": 6,
+    "phone": 2,
+    "fax": 1,
+    "carrier": 1,
+    "cpt": 1,
+    "procedureDescription": 1,
+    "practiceName": 7,
+    "referringProvider": 1,
+    "referringPhone": 4,
+    "diagnosisDescription": 1,
+    "providerNotes": 1,
+    "safetyCategory": 1,
+    "accommodationType": 1,
+    "supervisingProvider": 1,
+    "planType": 1,
+    "studyType": 1
+  },
+  "byConfidence": {
+    "high": 30,
+    "medium": 1,
+    "low": 0
+  },
+  "byCount": {
+    "frequent": 0,
+    "moderate": 1,
+    "rare": 30
+  },
+  "avgConfidence": "0.995",
+  "avgCount": "1.2"
+}

@@ -32,7 +32,8 @@ The system uses **Ollama** (not Python) for the LLM vision model. You need to in
 
 **Required models:** 
 - `llama3.2:latest` (2GB) - AI analysis engine
-- `llava:7b` (4.7GB) - OCR vision processing
+- `llava:7b` (4.7GB) - OCR vision processing (standard)
+- `llava-phi3` (2.9GB) - Faster OCR for CPU systems (recommended for Windows)
 
 ### Step 3: Start Services
 
