@@ -35,6 +35,9 @@ import { DecisionTreeEngine } from './decisionTree.js';
 import { invalidateConfigCache } from './rules/utils/configLoader.js';
 import { getOllamaHealth, ollamaMonitor } from './ollamaMonitor.js';
 import { normalizeFields, getClientConfig } from './utils/fieldNormalizer.js';
+import { extractDocument as vlmExtractDocument, crossValidate as vlmCrossValidate, checkVlmHealth } from './vlmExtractor.js';
+import { convertPdfPagesToImages, cleanupTempImages } from './utils/imageResizer.js';
+import { selectInformationRichPages } from './pageSelector.js';
 import aiAnalysisRoutes from './routes/aiAnalysis.js';
 
 // Increase Node fetch (undici) timeouts to avoid 5-minute body timeout
@@ -1900,12 +1903,79 @@ async function processDocument(id) {
   // Map from OCR using rules engine (no template seed)
   const { result: mappedResult, trace } = await runExtractionWithDates(ocrPages);
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // VLM PRIMARY EXTRACTION (new path — VLM sees document images directly)
+  // When VLM_PRIMARY=true, the Vision-Language Model is the primary extractor.
+  // The regex rules engine result is used for cross-validation and gap-filling.
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const vlmPrimary = process.env.VLM_PRIMARY === 'true';
+  let vlmResult = null;
+  
+  if (vlmPrimary) {
+    try {
+      log('info', 'vlm_primary_start', { id, filePath: entry.filePath });
+      
+      // Step 1: Use page selector to find information-rich pages
+      const pageSelection = selectInformationRichPages({ ocr: ocrPages });
+      const selectedPageIndices = (pageSelection.selectedPages || []).map(p => p.pageIndex);
+      const pagesToProcess = selectedPageIndices.length > 0 ? selectedPageIndices : [0];
+      
+      log('info', 'vlm_pages_selected', { id, pages: pagesToProcess });
+      
+      // Step 2: Convert selected PDF pages to images for VLM
+      const imageResults = await convertPdfPagesToImages(entry.filePath, pagesToProcess, {
+        targetDPI: 200,
+        maxWidth: 2400,
+        quality: 90,
+        outputDir: 'data/temp'
+      });
+      
+      const imagePaths = imageResults.map(r => r.imagePath);
+      
+      // Step 3: Run VLM extraction on the page images
+      vlmResult = await vlmExtractDocument(imagePaths, { priorityPages: pagesToProcess });
+      
+      // Step 4: Cross-validate VLM result against regex result
+      const crossValidated = vlmCrossValidate(vlmResult, mappedResult);
+      
+      log('info', 'vlm_primary_complete', { 
+        id, 
+        vlmConfidence: vlmResult.confidenceScore,
+        crossValidationConflicts: crossValidated._crossValidation?.conflictCount || 0,
+        regexFallbacks: crossValidated._crossValidation?.regexFieldsUsedAsFallback || 0
+      });
+      
+      // Step 5: Use cross-validated result as the primary output
+      // Copy VLM fields into mappedResult (preserving OCR-specific metadata)
+      const vlmFields = ['patient', 'insurance', 'provider', 'procedure', 'diagnoses', 
+                         'symptoms', 'clinical', 'confidence', 'confidenceScore', 'flags'];
+      for (const field of vlmFields) {
+        if (crossValidated[field] !== undefined) {
+          mappedResult[field] = crossValidated[field];
+        }
+      }
+      mappedResult.extractionMethod = 'vlm_primary';
+      mappedResult._vlm = vlmResult._vlm;
+      mappedResult._crossValidation = crossValidated._crossValidation;
+      
+      // Cleanup temp images
+      await cleanupTempImages(imageResults);
+      
+    } catch (err) {
+      log('warn', 'vlm_primary_failed', { id, err: String(err.message || err) });
+      log('info', 'vlm_fallback_to_regex', { id });
+      // Continue with regex-only results — the mappedResult is untouched
+      mappedResult.extractionMethod = 'regex_fallback';
+    }
+  }
+
   // Dual-engine processing: Run OCR + Ollama LLM in parallel if enabled
+  // (This is the LEGACY path — only runs if VLM_PRIMARY is NOT enabled)
   let dualEngineData = null;
   let decisionTreeResult = null;
   const enableLLM = process.env.ENABLE_LLM === 'true';
   
-  if (enableLLM) {
+  if (enableLLM && !vlmPrimary) {
     try {
       log('info', 'dual_engine_start', { id, filePath: entry.filePath });
       
@@ -2256,6 +2326,24 @@ app.get('/api/ollama/health', async (req, res) => {
       available: false,
       message: error.message
     });
+  }
+});
+
+// VLM extractor health check
+app.get('/api/vlm/health', async (req, res) => {
+  try {
+    const health = await checkVlmHealth();
+    res.json({
+      ...health,
+      vlmPrimary: process.env.VLM_PRIMARY === 'true',
+      config: {
+        model: process.env.VLM_MODEL || 'minicpm-v',
+        timeout: process.env.VLM_TIMEOUT || '120000',
+        maxPages: process.env.VLM_MAX_PAGES || '8'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ available: false, error: error.message });
   }
 });
 

@@ -187,8 +187,8 @@ def autorotate_with_cls(pil_img: Image.Image, det_engine, cls_engine) -> Image.I
     """
     Auto-rotate page by testing detection confidence at all 4 orientations.
     
-    DISABLED BY DEFAULT - Set MEDOCR_ENABLE_AUTOROTATE=true to enable.
-    Adds ~5-10s per page overhead.
+    ENABLED BY DEFAULT - Set MEDOCR_ENABLE_AUTOROTATE=false to disable.
+    Adds ~5-10s per page overhead but catches rotated faxes.
     
     Tries detecting text boxes at 0°, 90°, 180°, 270° rotations and picks
     the orientation with best detection confidence (most boxes with high scores).
@@ -201,8 +201,8 @@ def autorotate_with_cls(pil_img: Image.Image, det_engine, cls_engine) -> Image.I
     Returns:
         Rotated PIL Image if rotation detected, else original
     """
-    # Skip by default unless explicitly enabled
-    if os.getenv("MEDOCR_ENABLE_AUTOROTATE", "false").lower() not in ("true", "1", "yes"):
+    # Enabled by default — rotated faxes are common. Set MEDOCR_ENABLE_AUTOROTATE=false to disable.
+    if os.getenv("MEDOCR_ENABLE_AUTOROTATE", "true").lower() not in ("true", "1", "yes"):
         return pil_img
     
     if det_engine is None:
@@ -489,7 +489,7 @@ def preprocess_image(image: Image.Image, settings: Optional[Dict[str, Any]] = No
         np_img = clahe.apply(np_img)
     
     # Optional: Bilateral filter for edge-preserving noise reduction
-    use_bilateral = bool(settings.get("use_bilateral") if settings.get("use_bilateral") is not None else (os.getenv("MEDOCR_USE_BILATERAL", "false").lower() in ("true", "1", "yes")))
+    use_bilateral = bool(settings.get("use_bilateral") if settings.get("use_bilateral") is not None else (os.getenv("MEDOCR_USE_BILATERAL", "true").lower() in ("true", "1", "yes")))
     if use_bilateral:
         bilateral_d = _to_int(settings.get("bilateral_d") if settings.get("bilateral_d") is not None else os.getenv("MEDOCR_BILATERAL_D", "9"), 9)
         bilateral_sigma = _to_float(settings.get("bilateral_sigma") if settings.get("bilateral_sigma") is not None else os.getenv("MEDOCR_BILATERAL_SIGMA", "75"), 75.0)
@@ -661,16 +661,19 @@ async def ocr(request: Request, file: UploadFile = File(...)):
         page_count = len(images)
 
         # Downsample large faxes to keep OCR throughput reasonable
+        # BUT never below 250 DPI effective — that's the OCR quality floor
         if page_count:
-            threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES', '6'))
-            high_threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES_HIGH', '10'))
-            scale_primary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE', '0.6'))
-            scale_secondary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE_HIGH', '0.5'))
+            threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES', '10'))
+            high_threshold = int(os.getenv('MEDOCR_DOWNSAMPLE_PAGES_HIGH', '20'))
+            scale_primary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE', '0.85'))
+            scale_secondary = float(os.getenv('MEDOCR_DOWNSAMPLE_SCALE_HIGH', '0.75'))
+            min_effective_dpi = 250
+            min_scale = min_effective_dpi / base_dpi  # e.g., 250/300 = 0.83
             scale = None
             if page_count >= high_threshold:
-                scale = scale_secondary
+                scale = max(scale_secondary, min_scale)
             elif page_count >= threshold:
-                scale = scale_primary
+                scale = max(scale_primary, min_scale)
             if scale and scale < 1.0:
                 downsized = []
                 for img in images:
@@ -971,7 +974,7 @@ async def ocr(request: Request, file: UploadFile = File(...)):
             
             # Stage 5: Detect tables if enabled
             tables = []
-            if os.getenv("OCR_ENABLE_TABLES", "0") in ("1", "true", "yes"):
+            if os.getenv("OCR_ENABLE_TABLES", "1") in ("1", "true", "yes"):
                 print(f"[ocr] {_timestamp()} page={i+1} table_detection START", flush=True)
                 try:
                     t_table = time.time()
