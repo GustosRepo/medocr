@@ -7,6 +7,8 @@ import Section from '../components/Section.jsx';
 import PlaceholderPanel from '../components/PlaceholderPanel.jsx';
 import OllamaMonitor from '../components/OllamaMonitor.jsx';
 import ValidationIssuesDrawer from '../components/ValidationIssuesDrawer.jsx';
+// Bug 24 fix: import DualEngineResults (was built but never wired in)
+import DualEngineResults from '../components/DualEngineResults.jsx';
 
 const apiBase = '/api';
 
@@ -36,6 +38,9 @@ export default function ReferralPage() {
   console.log('[ReferralPage] build marker v1-dark-cards ' + new Date().toISOString());
   const [files, setFiles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
+  // Bug 18 fix: ref to avoid stale closure in pollStatus
+  const selectedIdRef = React.useRef('');
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   const [status, setStatus] = useState(null);
   const [resultsMap, setResultsMap] = useState({});
   const [processedOrder, setProcessedOrder] = useState([]);
@@ -109,12 +114,17 @@ export default function ReferralPage() {
   }, []);
 
   // Persist processed documents whenever resultsMap changes
+  // Bug 19 fix: write both keys atomically to avoid inconsistent snapshots
   useEffect(() => {
-    if (Object.keys(resultsMap).length > 0) {
+    const keys = Object.keys(resultsMap);
+    if (keys.length > 0) {
       try {
-        localStorage.setItem('processedDocuments', JSON.stringify(resultsMap));
-        localStorage.setItem('processedOrder', JSON.stringify(processedOrder));
-        console.log('💾 Saved', Object.keys(resultsMap).length, 'documents to localStorage');
+        const resultsJson = JSON.stringify(resultsMap);
+        const orderJson = JSON.stringify(processedOrder);
+        // Write both atomically — if one fails, neither is partially written
+        localStorage.setItem('processedDocuments', resultsJson);
+        localStorage.setItem('processedOrder', orderJson);
+        console.log('💾 Saved', keys.length, 'documents to localStorage');
       } catch (err) {
         console.error('Failed to save processed documents:', err);
       }
@@ -315,24 +325,9 @@ export default function ReferralPage() {
       });
       setSelectedExportIds(new Set());
       
-      // Update localStorage to remove only purged IDs
-      try {
-        const savedResults = localStorage.getItem('processedDocuments');
-        const savedOrder = localStorage.getItem('processedOrder');
-        if (savedResults && savedOrder) {
-          const results = JSON.parse(savedResults);
-          const order = JSON.parse(savedOrder);
-          purgedIds.forEach(id => delete results[id]);
-          const newOrder = order.filter(id => !purgedIds.includes(id));
-          localStorage.setItem('processedDocuments', JSON.stringify(results));
-          localStorage.setItem('processedOrder', JSON.stringify(newOrder));
-        }
-      } catch (e) {
-        console.error('Failed to update localStorage:', e);
-      }
-      
-      // reload to refresh UI state
-      setTimeout(() => window.location.reload(), 1000);
+      // Bug 20 fix: no reload needed — React state + useEffect persistence handles it
+      // The useEffect on [resultsMap, processedOrder] will persist to localStorage automatically
+      // Removed: setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       notifications.show({ title: 'Purge failed', message: String(e.message || e), color: 'red' });
     }
@@ -399,11 +394,13 @@ export default function ReferralPage() {
     
     if (!conflicts || conflicts.length === 0) return null;
     const issueCount = conflicts.length;
-    const criticalCount = selectedDoc.dualEngine.conflicts.filter(c => 
-      c.toLowerCase().includes('patient name') || 
-      c.toLowerCase().includes('dob') || 
-      c.toLowerCase().includes('insurance')
-    ).length;
+    // Bug 17 fix: handle both string and object conflict formats
+    const criticalCount = selectedDoc.dualEngine.conflicts.filter(c => {
+      const text = typeof c === 'string' ? c : (c.field || '');
+      return text.toLowerCase().includes('patient name') || 
+        text.toLowerCase().includes('dob') || 
+        text.toLowerCase().includes('insurance');
+    }).length;
     
     return (
       <Tooltip label={`${issueCount} validation issues found (${criticalCount} critical) - Click to review`}>
@@ -571,7 +568,8 @@ export default function ReferralPage() {
             if (rr.ok) {
               const data = await rr.json();
               pushResult(id, data);
-              if (!selectedId) setSelectedId(id);
+              // Bug 18 fix: use ref to avoid stale closure
+              if (!selectedIdRef.current) setSelectedId(id);
               notifications.show({
                 title: 'Extraction complete',
                 message: `Document ${id} processed`,
@@ -723,10 +721,14 @@ export default function ReferralPage() {
       patientFirst: doc.patient?.first || '',
       patientDob: doc.patient?.dob || '',
       patientPhone: doc.patient?.phones?.[0] || '',
+      // Bug 11 fix: include email in editable fields
+      patientEmail: doc.patient?.email || '',
       
       // Insurance (Carrier learned, Member ID is PHI)
       insuranceCarrier: doc.insurance?.[0]?.carrier || '',
       insuranceMemberId: doc.insurance?.[0]?.memberId || '',
+      // Bug 12 fix: include groupId in editable fields
+      insuranceGroupId: doc.insurance?.[0]?.groupId || '',
       
       // Procedure (Non-PHI - safe to learn)
       procedureCpt: doc.procedure?.cpt || '',
@@ -890,13 +892,25 @@ export default function ReferralPage() {
             last: editedFields.patientLast,
             first: editedFields.patientFirst,
             dob: editedFields.patientDob,
-            phones: [editedFields.patientPhone]
+            // Bug 10 fix: preserve all phones, only update first entry
+            phones: [
+              editedFields.patientPhone,
+              ...(prev[docId].patient?.phones?.slice(1) || [])
+            ],
+            // Bug 11 fix: include email
+            email: editedFields.patientEmail || prev[docId].patient?.email
           },
-          insurance: [{
-            ...prev[docId].insurance?.[0],
-            carrier: editedFields.insuranceCarrier,
-            memberId: editedFields.insuranceMemberId
-          }],
+          // Bug 9 fix: preserve all insurance entries, only update first
+          insurance: [
+            {
+              ...prev[docId].insurance?.[0],
+              carrier: editedFields.insuranceCarrier,
+              memberId: editedFields.insuranceMemberId,
+              // Bug 12 fix: include groupId
+              groupId: editedFields.insuranceGroupId || prev[docId].insurance?.[0]?.groupId
+            },
+            ...(prev[docId].insurance?.slice(1) || [])
+          ],
           procedure: {
             ...prev[docId].procedure,
             cpt: editedFields.procedureCpt,
@@ -909,6 +923,11 @@ export default function ReferralPage() {
               description: editedFields.diagnosisDescription
             }
           },
+          // Bug 13 fix: sync top-level diagnoses array with edited primary diagnosis
+          diagnoses: [
+            { code: editedFields.diagnosisCode, description: editedFields.diagnosisDescription },
+            ...(prev[docId].diagnoses?.slice(1) || [])
+          ],
           provider: {
             ...prev[docId].provider,
             name: editedFields.providerName,
@@ -1017,7 +1036,8 @@ export default function ReferralPage() {
   function Details({ docId, doc }) {
     if (!doc) return null;
     const showRaw = !!showRawMap[docId];
-    const conf = doc?.confidence || doc?.confidenceLevel;
+    // Bug 21 fix: prefer computed confidenceLevel over raw string
+    const conf = doc?.confidenceLevel || doc?.confidence;
     const isEditing = editingDocId === docId;
 
     return (
@@ -1146,6 +1166,16 @@ export default function ReferralPage() {
                   />
                 </div>
               </div>
+              {/* Bug 11 fix: email edit field */}
+              <div>
+                <Text size="xs" fw={500} c="dimmed" mb={4}>Email</Text>
+                <input
+                  type="email"
+                  value={editedFields.patientEmail}
+                  onChange={e => setEditedFields(f => ({ ...f, patientEmail: e.target.value }))}
+                  className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
             </Stack>
           )}
         </Section>
@@ -1156,6 +1186,12 @@ export default function ReferralPage() {
               <Text size="sm">
                 CPT: {doc.procedure?.cpt} {doc.procedure?.description && `— ${doc.procedure.description}`}
               </Text>
+              {/* Bug 8 fix: display procedure notes */}
+              {Array.isArray(doc.procedure?.notes) && doc.procedure.notes.length > 0 && (
+                <Text size="xs" c="dimmed" mt={2}>
+                  Notes: {doc.procedure.notes.join('; ')}
+                </Text>
+              )}
               {Array.isArray(doc.procedure?.cptDetails) && doc.procedure.cptDetails.length > 1 && (
                 <Stack gap="xs" mt="sm">
                   {doc.procedure.cptDetails.map(d => (
@@ -1205,11 +1241,24 @@ export default function ReferralPage() {
             Array.isArray(doc.insurance) && doc.insurance.length > 0 ? (
               <Stack gap="xs">
                 {doc.insurance.map((c, i) => (
-                  <Text size="sm" key={i}>
-                    {c.carrier}
-                    {c.memberId && ` • ID: ${c.memberId}`}
-                    {c.groupId && ` • Group: ${c.groupId}`}
-                  </Text>
+                  <div key={i}>
+                    <Text size="sm">
+                      {i === 0 ? '🏥 ' : '📋 '}
+                      {c.carrier}
+                      {c.memberId && ` • ID: ${c.memberId}`}
+                      {c.groupId && ` • Group: ${c.groupId}`}
+                      {/* Bug 7 fix: display insurance status */}
+                      {c.status && (
+                        <Badge size="xs" ml="xs" color={c.status === 'accepted' ? 'green' : 'yellow'} variant="light">
+                          {c.status}
+                        </Badge>
+                      )}
+                    </Text>
+                    {i === 0 && doc.insurance.length > 1 && (
+                      <Text size="xs" c="dimmed" ml="md">Primary</Text>
+                    )}
+                    {i === 1 && <Text size="xs" c="dimmed" ml="md">Secondary</Text>}
+                  </div>
                 ))}
               </Stack>
             ) : (
@@ -1241,6 +1290,16 @@ export default function ReferralPage() {
                   />
                 </div>
               </div>
+              {/* Bug 12 fix: groupId edit field */}
+              <div>
+                <Text size="xs" fw={500} c="dimmed" mb={4}>Group ID (PHI - Not Stored)</Text>
+                <input
+                  type="text"
+                  value={editedFields.insuranceGroupId}
+                  onChange={e => setEditedFields(f => ({ ...f, insuranceGroupId: e.target.value }))}
+                  className="w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
             </Stack>
           )}
         </Section>
@@ -1250,9 +1309,26 @@ export default function ReferralPage() {
             <Stack gap={4}>
               {doc.clinical?.primaryDiagnosis && (
                 <Text size="sm">
-                  Primary Diagnosis: {doc.clinical.primaryDiagnosis.code}
+                  Primary Dx: {doc.clinical.primaryDiagnosis.code}
                   {doc.clinical.primaryDiagnosis.description && ` — ${doc.clinical.primaryDiagnosis.description}`}
                 </Text>
+              )}
+              {/* Bug 1 fix: display full diagnoses array (secondary/tertiary) */}
+              {Array.isArray(doc.diagnoses) && doc.diagnoses.length > 1 && (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>All Diagnoses:</Text>
+                  <Stack gap={2}>
+                    {doc.diagnoses.map((dx, idx) => {
+                      const code = typeof dx === 'string' ? dx : dx?.code;
+                      const desc = typeof dx === 'object' ? dx?.description : '';
+                      return (
+                        <Text key={idx} size="xs" c="dimmed">
+                          • {code}{desc ? ` — ${desc}` : ''}
+                        </Text>
+                      );
+                    })}
+                  </Stack>
+                </div>
               )}
               {Array.isArray(doc.clinical?.problemsList) && doc.clinical.problemsList.length > 0 && (
                 <div>
@@ -1267,11 +1343,30 @@ export default function ReferralPage() {
                   </Stack>
                 </div>
               )}
-              {Array.isArray(doc.clinical?.symptoms) && doc.clinical.symptoms.length > 0 && (
+              {/* Bug 2 fix: display structured symptoms with status/context */}
+              {Array.isArray(doc.symptoms) && doc.symptoms.length > 0 ? (
+                <div>
+                  <Text size="xs" fw={600} c="dimmed" mb={4}>Symptoms:</Text>
+                  <Stack gap={2}>
+                    {doc.symptoms.map((s, idx) => {
+                      const name = typeof s === 'string' ? s : s?.name;
+                      const status = typeof s === 'object' ? s?.status : null;
+                      const context = typeof s === 'object' ? s?.context : null;
+                      return (
+                        <Text key={idx} size="xs" c="dimmed">
+                          • {name}
+                          {status && ` [${status}]`}
+                          {context && ` — ${context}`}
+                        </Text>
+                      );
+                    })}
+                  </Stack>
+                </div>
+              ) : Array.isArray(doc.clinical?.symptoms) && doc.clinical.symptoms.length > 0 ? (
                 <Text size="xs" c="dimmed">
-                  Symptoms Present: {doc.clinical.symptoms.join(', ')}
+                  Symptoms: {doc.clinical.symptoms.join(', ')}
                 </Text>
-              )}
+              ) : null}
               {(() => {
                 const v = doc.clinical?.vitals || {};
                 const parts = [];
@@ -1438,6 +1533,79 @@ export default function ReferralPage() {
                 </Stack>
               </div>
             )}
+            {/* Bug 6 fix: display alerts.info and alerts.review */}
+            {Array.isArray(doc.alerts?.info) && doc.alerts.info.length > 0 && (
+              <div>
+                <Text size="xs" fw={500} mb="xs">Info</Text>
+                <Stack gap={0}>
+                  {doc.alerts.info.map((a, i) => (
+                    <Text size="xs" key={i} c="dimmed">ℹ️ {a}</Text>
+                  ))}
+                </Stack>
+              </div>
+            )}
+            {Array.isArray(doc.alerts?.review) && doc.alerts.review.length > 0 && (
+              <div>
+                <Text size="xs" fw={500} mb="xs">Needs Review</Text>
+                <Stack gap={0}>
+                  {doc.alerts.review.map((a, i) => (
+                    <Text size="xs" key={i} c="yellow">⚠️ {a}</Text>
+                  ))}
+                </Stack>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* Bug 3 fix: display DME data */}
+        {doc.dme && (doc.dme.codes?.length > 0 || doc.dme.providers?.length > 0 || doc.dme.issues?.length > 0) && (
+          <Section title="Durable Medical Equipment">
+            <Stack gap={4}>
+              {Array.isArray(doc.dme.codes) && doc.dme.codes.length > 0 && (
+                <Text size="xs">Codes: {doc.dme.codes.join(', ')}</Text>
+              )}
+              {Array.isArray(doc.dme.providers) && doc.dme.providers.length > 0 && (
+                <Text size="xs">Providers: {doc.dme.providers.join(', ')}</Text>
+              )}
+              {Array.isArray(doc.dme.issues) && doc.dme.issues.length > 0 && (
+                <Text size="xs" c="yellow">Issues: {doc.dme.issues.join('; ')}</Text>
+              )}
+            </Stack>
+          </Section>
+        )}
+
+        {/* Bug 4 fix: display prior study */}
+        {doc.priorStudy?.present && (
+          <Section title="Prior Study">
+            <Text size="xs">Prior sleep study on file</Text>
+          </Section>
+        )}
+
+        {/* Bug 5 fix: display QC validation flags */}
+        {doc.qc && (
+          <Section title="Quality Control">
+            <Stack gap={2}>
+              {doc.qc.nameConsistency != null && (
+                <Text size="xs">
+                  Name Consistency: {doc.qc.nameConsistency ? '✅ Pass' : '❌ Mismatch detected'}
+                </Text>
+              )}
+              {doc.qc.dateValidity != null && (
+                <Text size="xs">
+                  Date Validity: {doc.qc.dateValidity ? '✅ Valid' : '❌ Invalid date detected'}
+                </Text>
+              )}
+              {doc.qc.phoneValidity != null && (
+                <Text size="xs">
+                  Phone Validity: {doc.qc.phoneValidity ? '✅ Valid' : '❌ Invalid phone detected'}
+                </Text>
+              )}
+              {doc.qc.cptValid != null && (
+                <Text size="xs">
+                  CPT Validity: {doc.qc.cptValid ? '✅ Valid' : '❌ Invalid CPT code'}
+                </Text>
+              )}
+            </Stack>
           </Section>
         )}
 
@@ -1472,6 +1640,11 @@ export default function ReferralPage() {
               </Stack>
             </ScrollArea>
           </Section>
+        )}
+
+        {/* Bug 24 fix: wire in DualEngineResults component */}
+        {doc?.dualEngine && (
+          <DualEngineResults result={doc} />
         )}
 
         {/* Narrative Content (LLM-extracted free text) */}

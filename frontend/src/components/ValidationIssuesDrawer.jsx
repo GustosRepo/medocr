@@ -34,18 +34,34 @@ export default function ValidationIssuesDrawer({
 
 
   // Parse conflicts into structured format
+  // Bug 17 fix: handle both string format ("Page 2 - patient name: ...") 
+  // and object format ({ field, ocrValue, llmValue, ... }) from different LLM modes
   const parseConflicts = () => {
     const byPage = {};
     
     conflicts.forEach((conflict, idx) => {
-      // Parse format: "Page 2 - patient name: Incorrect extraction of patient name"
-      const pageMatch = conflict.match(/Page (\d+)/);
-      const fieldMatch = conflict.match(/Page \d+ - ([^:]+):/);
-      const concernMatch = conflict.match(/: (.+)$/);
-      
-      const pageNum = pageMatch ? parseInt(pageMatch[1]) : 0;
-      const fieldName = fieldMatch ? fieldMatch[1].trim() : 'Unknown field';
-      const concern = concernMatch ? concernMatch[1].trim() : conflict;
+      let pageNum = 0;
+      let fieldName = 'Unknown field';
+      let concern = '';
+
+      if (typeof conflict === 'string') {
+        // Validation mode: "Page 2 - patient name: Incorrect extraction of patient name"
+        const pageMatch = conflict.match(/Page (\d+)/);
+        const fieldMatch = conflict.match(/Page \d+ - ([^:]+):/);
+        const concernMatch = conflict.match(/: (.+)$/);
+        
+        pageNum = pageMatch ? parseInt(pageMatch[1]) : 0;
+        fieldName = fieldMatch ? fieldMatch[1].trim() : 'Unknown field';
+        concern = concernMatch ? concernMatch[1].trim() : conflict;
+      } else if (typeof conflict === 'object' && conflict !== null) {
+        // Extraction mode: { field, ocrValue, llmValue, resolved, strategy, similarity, note, page }
+        pageNum = conflict.page || 0;
+        fieldName = conflict.field || 'Unknown field';
+        concern = conflict.note || 
+          (conflict.ocrValue && conflict.llmValue 
+            ? `OCR: "${conflict.ocrValue}" vs LLM: "${conflict.llmValue}" (${conflict.strategy || 'unresolved'})`
+            : 'Value mismatch detected');
+      }
       
       if (!byPage[pageNum]) {
         byPage[pageNum] = [];
@@ -60,7 +76,7 @@ export default function ValidationIssuesDrawer({
         concern,
         currentValue,
         severity: getSeverity(fieldName, concern),
-        isResolved: resolvedIssues.has(`issue-${idx}`)
+        isResolved: resolvedIssues.has(`issue-${idx}`) || (typeof conflict === 'object' && conflict.resolved)
       });
     });
     
@@ -81,14 +97,16 @@ export default function ValidationIssuesDrawer({
     if (normalized.includes('dob') || normalized.includes('date of birth')) {
       return extractedData?.patient?.dob || '—';
     }
+    // Bug 15 fix: field is patient.phones (plural, array), not patient.phone
     if (normalized.includes('phone')) {
-      return extractedData?.patient?.phone || '—';
+      return extractedData?.patient?.phones?.[0] || '—';
     }
+    // Bug 14 fix: insurance is an array, not an object
     if (normalized.includes('insurance') || normalized.includes('carrier')) {
-      return extractedData?.insurance?.carrier || '—';
+      return extractedData?.insurance?.[0]?.carrier || '—';
     }
     if (normalized.includes('member') || normalized.includes('member id')) {
-      return extractedData?.insurance?.memberId || '—';
+      return extractedData?.insurance?.[0]?.memberId || '—';
     }
     if (normalized.includes('provider name')) {
       return extractedData?.provider?.name || '—';
@@ -157,14 +175,16 @@ export default function ValidationIssuesDrawer({
     if (normalized.includes('dob')) {
       return 'patient.dob';
     }
+    // Bug 15 fix: correct path is patient.phones[0]
     if (normalized.includes('phone')) {
-      return 'patient.phone';
+      return 'patient.phones[0]';
     }
+    // Bug 14/16 fix: correct path includes array index
     if (normalized.includes('insurance') || normalized.includes('carrier')) {
-      return 'insurance.carrier';
+      return 'insurance[0].carrier';
     }
     if (normalized.includes('member')) {
-      return 'insurance.memberId';
+      return 'insurance[0].memberId';
     }
     if (normalized.includes('provider name')) {
       return 'provider.name';

@@ -1,6 +1,6 @@
 # Project Checklist & Roadmap
 
-Last Updated: 2025-10-01 (checklist collapsible cards + archive persistence + printable view collapse; tests: 66 passing)
+Last Updated: 2026-02-28 (VLM-primary architecture migration + frontend audit)
 
 ---
 ## 0. MVP Critical Focus (Due 2025-10-03 Friday)
@@ -46,6 +46,65 @@ Owner: (update when you take an item)
 
 Legend: 
 - [x] = Done  |  [~] = In Progress  |  [ ] = Todo  | (R) = Risk  | (QA) = Test-related  | (Spec) = Client requirement
+
+---
+## A. Architecture Overhaul — VLM Migration (Branch: vlm-experiment-2)
+**Problem Identified (2026-02-28):** Regex-over-linearized-text approach is fundamentally limited for diverse fax documents. 544 regex patterns can't handle multi-column layouts, tables, handwriting, or novel formats. LLM was being used as a rubber stamp validator instead of primary extractor. This architecture is ~5 years behind current best practice.
+
+**Decision:** Migrate to VLM-primary architecture (self-hosted, no cloud tokens). MiniCPM-V via Ollama on Apple M4 Pro (24GB unified RAM).
+
+### A1. OCR & Backend — VLM Migration
+- [x] Hardware check: M4 Pro, 16-core GPU, 24GB RAM confirmed
+- [x] P0: Enable auto-rotation default in OCR service
+- [x] P0: Enable table detection default in OCR service
+- [x] P0: Enable bilateral filter default in OCR service
+- [x] P0: Fix DPI downsampling (was destroying quality below 250 DPI on 6+ page docs)
+- [x] Pull & test minicpm-v model via Ollama
+- [x] Build VLM extraction prompt (14 rules tuned from real test failures)
+- [x] Create VLM extractor service (backend/vlmExtractor.js)
+- [x] Wire VLM as primary extractor in server.js (VLM_PRIMARY=true env var)
+- [x] Add cross-validation layer (VLM primary, regex fills gaps)
+- [x] Add normalizers: name order swap fix, NPI validation, phone formatting, CPT/ICD coercion
+- [x] Smoke test on real 15-page medical referral PDF — successful extraction
+- [x] Git commit on vlm-experiment-2 (437b4ce)
+- [ ] Refine VLM prompt for CPT codes (currently returns "OSA" instead of "95810")
+- [ ] Refine VLM prompt for name order (still occasionally swaps first/last)
+- [ ] Side-by-side accuracy test: run same documents through regex vs VLM, compare field-by-field
+- [ ] Full pipeline test through UI with VLM_PRIMARY=true
+- [ ] Evaluate Qwen2.5-VL as alternative to MiniCPM-V (better accuracy on tables)
+- [ ] Benchmark VLM extraction speed at scale (currently ~15s/page)
+- [ ] Standardize backend conflict format (Bug 17 — objects vs strings depending on LLM mode)
+- [ ] Unify confidence fields (Bug 21 — `confidence` string vs `confidenceLevel` computed score)
+
+### A2. Frontend — Critical Data-Loss Bugs (SHIP BLOCKERS)
+- [x] Fix: edit-save destroys secondary insurance (wraps array as single-element) (Bug 9)
+- [x] Fix: edit-save truncates phone list to single entry (Bug 10)
+- [x] Fix: validation drawer save corrupts insurance array structure (Bug 16)
+- [x] Fix: validation drawer reads `insurance.carrier` instead of `insurance[0].carrier` — always shows "—" (Bug 14)
+- [x] Fix: validation drawer reads `patient.phone` instead of `patient.phones` — always shows "—" (Bug 15)
+- [x] Fix: conflict format mismatch crashes DualEngineResults or ValidationIssuesDrawer depending on LLM mode (Bug 17)
+
+### A3. Frontend — Missing Data Display (~30-40% of extracted data invisible)
+- [x] Display full diagnoses array, not just primaryDiagnosis (Bug 1)
+- [x] Display structured symptoms with status/context (confirmed/denied) (Bug 2)
+- [x] Display DME data (codes, providers, issues) (Bug 3)
+- [x] Display prior study data (Bug 4)
+- [x] Display QC validation flags (bad phone, invalid date, etc.) (Bug 5)
+- [x] Display alerts.info and alerts.review categories (only alerts.actions shown) (Bug 6)
+- [x] Display insurance status ("accepted"/"pending") (Bug 7)
+- [x] Display procedure notes array (Bug 8)
+
+### A4. Frontend — Edit Flow & Consistency
+- [x] Fix: editing diagnosis doesn't update `diagnoses[]` array (Bug 13)
+- [x] Add edit field for patient email (Bug 11)
+- [x] Add edit field for insurance groupId (Bug 12)
+- [x] Fix: `confidence` string always overrides computed `confidenceLevel` (Bug 21)
+- [x] Wire in DualEngineResults component (built but never imported/rendered) (Bug 24)
+
+### A5. Frontend — Race Conditions & State
+- [x] Fix: localStorage persistence saves inconsistent snapshots (result/order mismatch) (Bug 19)
+- [x] Fix: `purgeSelected` reload races with state/storage writes (Bug 20)
+- [x] Fix: stale `selectedId` closure in `pollStatus` during parallel uploads (Bug 18)
 
 ---
 ## 1. Completed (Foundation & Recent Milestones)
