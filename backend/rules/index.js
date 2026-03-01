@@ -1702,17 +1702,29 @@ export async function runExtraction(ocrPages) {
     
     // Use async provider detection
     await (async () => {
-      // Priority 1: "Ordering Provider:" - highest priority for medical referrals
-      // Flexible pattern to handle OCR errors: "FroVder", "Orderlng" (i→l), etc.
-      let orderingLineIndex = providerLines.findIndex(line => 
-        /order[il1]ng\s*[fp]ro[vw]?[ild]*[de]+r\s*:/i.test(line || '')
+      // Priority 0: "Referring Provider:" - highest priority for VA/Medicare-style referrals
+      // Must have colon to indicate label:value format
+      let referringLineIndex = providerLines.findIndex(line => 
+        /referring\s*provider\s*:/i.test(line || '')
       );
-      if (orderingLineIndex === -1) {
-        orderingLineIndex = providerLines.findIndex(line => isOrderingProviderLine(line));
+      
+      if (referringLineIndex >= 0) {
+        providerDetected = await assignProviderFromLine(referringLineIndex);
       }
       
-      if (orderingLineIndex >= 0) {
-        providerDetected = await assignProviderFromLine(orderingLineIndex);
+      // Priority 1: "Ordering Provider:" - for medical referrals with this format
+      // Flexible pattern to handle OCR errors: "FroVder", "Orderlng" (i→l), etc.
+      if (!providerDetected) {
+        let orderingLineIndex = providerLines.findIndex(line => 
+          /order[il1]ng\s*[fp]ro[vw]?[ild]*[de]+r\s*:/i.test(line || '')
+        );
+        if (orderingLineIndex === -1) {
+          orderingLineIndex = providerLines.findIndex(line => isOrderingProviderLine(line));
+        }
+        
+        if (orderingLineIndex >= 0) {
+          providerDetected = await assignProviderFromLine(orderingLineIndex);
+        }
       }
       
       // Priority 2: "Refer from Provider/Physician"

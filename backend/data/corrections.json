@@ -99,12 +99,29 @@
       ],
       "confidence": 1,
       "count": 1
+    },
+    "jorgeperez": {
+      "ocrText": "Jorge Perez",
+      "corrections": [
+        {
+          "text": "JORGE PEREZ",
+          "count": 1,
+          "firstSeen": "2026-03-01T06:38:36.948Z",
+          "lastSeen": "2026-03-01T06:38:36.948Z",
+          "metadata": {
+            "npi": "1902190705",
+            "source": "npi_auto"
+          }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
     }
   },
   "facilities": {},
   "metadata": {
-    "totalCorrections": 37,
-    "lastUpdated": "2025-10-30T23:39:25.871Z",
+    "totalCorrections": 38,
+    "lastUpdated": "2026-03-01T06:38:36.948Z",
     "hipaaCompliant": true,
     "note": "Patient PHI (names, DOB, Member IDs) is NEVER stored per HIPAA compliance"
   },

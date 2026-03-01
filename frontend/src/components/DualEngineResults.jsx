@@ -11,14 +11,14 @@
 
 import React, { useState } from 'react';
 import { 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
-  ChevronDown, 
-  ChevronRight,
-  Eye,
-  Zap
-} from 'lucide-react';
+  IconCircleCheck as CheckCircle, 
+  IconCircleX as XCircle, 
+  IconAlertTriangle as AlertTriangle, 
+  IconChevronDown as ChevronDown, 
+  IconChevronRight as ChevronRight,
+  IconEye as Eye,
+  IconBolt as Zap
+} from '@tabler/icons-react';
 
 export default function DualEngineResults({ result }) {
   const [expandedSections, setExpandedSections] = useState({

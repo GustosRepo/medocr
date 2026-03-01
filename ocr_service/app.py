@@ -54,6 +54,13 @@ def time_limit(seconds):
         signal.alarm(0)  # Disable the alarm
 
 
+def _ensure_numpy(img):
+    """Convert PIL Image to numpy array if needed. RapidOCR 1.2.3+ requires numpy arrays."""
+    if isinstance(img, Image.Image):
+        return np.array(img)
+    return img
+
+
 def _bbox_to_xywh(quad: List[Tuple[float, float]]) -> Tuple[float, float, float, float]:
     """Convert quad points to (x, y, width, height) bounding box."""
     xs = [p[0] for p in quad]
@@ -747,14 +754,18 @@ async def ocr(request: Request, file: UploadFile = File(...)):
             
             # Stage 1: Auto-rotate page if needed (using classifier on detected boxes)
             t1 = time.time()
-            # Pass the sub-engines (text_det and text_cls) to autorotate function
-            img = autorotate_with_cls(img, engine.text_det, engine.text_cls)
+            # RapidOCR 1.2+ doesn't expose text_det/text_cls/text_rec as attributes
+            # Fall back gracefully when not available
+            det_engine = getattr(engine, 'text_det', None)
+            cls_engine = getattr(engine, 'text_cls', None)
+            rec_engine = getattr(engine, 'text_rec', None)
+            img = autorotate_with_cls(img, det_engine, cls_engine)
             print(f"[ocr] {_timestamp()} page={i+1} autorotate took {time.time()-t1:.2f}s", flush=True)
             
             # Stage 2: Check if tiling needed for very large images
             t2 = time.time()
             # Pass the sub-engines (text_det and text_rec) to tiling function
-            tiled_result, was_tiled = maybe_tile(img, engine.text_det, engine.text_rec)
+            tiled_result, was_tiled = maybe_tile(img, det_engine, rec_engine)
             print(f"[ocr] {_timestamp()} page={i+1} tiling_check took {time.time()-t2:.2f}s (tiled={was_tiled})", flush=True)
             
             if was_tiled:
@@ -768,7 +779,7 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                 # result is list of [text, score, boxPoints]
                 try:
                     # Note: signal.alarm timeout doesn't work reliably on macOS with FastAPI
-                    result, _ = engine(processed_img)
+                    result, _ = engine(_ensure_numpy(processed_img))
                     print(f"[ocr] {_timestamp()} page={i+1} standard_ocr took {time.time()-t3:.2f}s", flush=True)
                 except Exception as e:
                     print(f"[ocr] {_timestamp()} engine_error: {e}", flush=True)
@@ -803,7 +814,7 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                     for variant_idx, (variant_img, variant_name) in enumerate(variants):
                         t_var = time.time()
                         try:
-                            variant_result, _ = engine(variant_img)
+                            variant_result, _ = engine(_ensure_numpy(variant_img))
                             if variant_result:
                                 variant_scores = []
                                 for item in variant_result:
@@ -909,7 +920,7 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                         if high_dpi_images:
                             high_img = high_dpi_images[0]
                             high_processed = preprocess_image(high_img, preproc_settings)
-                            high_result, _ = engine(high_processed)
+                            high_result, _ = engine(_ensure_numpy(high_processed))
                             
                             # Rebuild boxes with high-DPI result
                             high_boxes = []
@@ -1017,7 +1028,7 @@ async def ocr(request: Request, file: UploadFile = File(...)):
                             
                             try:
                                 # No signal timeout - doesn't work on macOS
-                                cell_result, _ = engine(cell_img)
+                                cell_result, _ = engine(_ensure_numpy(cell_img))
                                 cell_text = ""
                                 cell_conf = 0.0
                                 
