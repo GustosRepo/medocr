@@ -1917,8 +1917,10 @@ async function processDocument(id) {
       
       // Step 1: Use page selector to find information-rich pages
       const pageSelection = selectInformationRichPages({ ocr: ocrPages });
-      const selectedPageIndices = (pageSelection.selectedPages || []).map(p => p.pageIndex);
-      const pagesToProcess = selectedPageIndices.length > 0 ? selectedPageIndices : [0];
+      // selectedPages is already an array of 0-indexed page numbers
+      const pagesToProcess = (pageSelection.selectedPages && pageSelection.selectedPages.length > 0) 
+        ? pageSelection.selectedPages 
+        : [0];
       
       log('info', 'vlm_pages_selected', { id, pages: pagesToProcess });
       
@@ -1933,7 +1935,9 @@ async function processDocument(id) {
       const imagePaths = imageResults.map(r => r.imagePath);
       
       // Step 3: Run VLM extraction on the page images
-      vlmResult = await vlmExtractDocument(imagePaths, { priorityPages: pagesToProcess });
+      // Note: imagePaths already contains only the selected pages, so don't pass priorityPages
+      // (priorityPages indices refer to original PDF, not the imagePaths array)
+      vlmResult = await vlmExtractDocument(imagePaths, {});
       
       // Step 4: Cross-validate VLM result against regex result
       const crossValidated = vlmCrossValidate(vlmResult, mappedResult);
