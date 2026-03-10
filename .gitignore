@@ -56,3 +56,17 @@ ocr_service/models/
 *.onnx
 *.pdiparams
 *.pdmodel
+# PID files (runtime)
+*.pid
+backend.pid
+backend/backend.pid
+
+# Runtime state
+data/checklist-overrides.json
+data/logs/
+
+# Release backups
+release_backup_*/
+
+# Backup files
+*.bak

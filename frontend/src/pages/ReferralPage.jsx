@@ -234,6 +234,9 @@ export default function ReferralPage() {
     setProcessedOrder(o => o.includes(id) ? o : [id, ...o]);
   }
 
+  // Sync documents from the backend (picks up batch-uploaded / externally-processed docs)
+
+
   // IDs that are fully processed (exclude placeholders/uploading)
   const doneIds = useMemo(
     () => processedOrder.filter(id => {
@@ -416,6 +419,28 @@ export default function ReferralPage() {
         >
           ⚠️ {issueCount} Issues
         </Badge>
+      </Tooltip>
+    );
+  }, [selectedDoc]);
+
+  const verificationBadge = useMemo(() => {
+    const vStatus = selectedDoc?._verification?.status;
+    if (!vStatus) return null;
+    const cfg = {
+      confirmed: { color: 'green', label: 'Verified', tip: 'All fields confirmed via string-match' },
+      vlm_confirmed: { color: 'teal', label: 'VLM Verified', tip: 'Fields confirmed by vision model cross-check' },
+      auto_corrected: { color: 'orange', label: 'Auto-Corrected', tip: 'Vision model detected and fixed field errors (e.g. phone swap)' },
+      flagged: { color: 'red', label: 'Flagged', tip: 'Potential issues detected — manual review recommended' },
+      unverified: { color: 'gray', label: 'Unverified', tip: 'Verification was not performed' },
+    };
+    const c = cfg[vStatus] || { color: 'gray', label: vStatus, tip: '' };
+    const corrections = selectedDoc._verification?.corrections || [];
+    const tip = corrections.length
+      ? `${c.tip}\n${corrections.map(cr => `${cr.field}: ${cr.old} → ${cr.new}`).join('\n')}`
+      : c.tip;
+    return (
+      <Tooltip label={tip} multiline w={320}>
+        <Badge color={c.color} variant="light">{c.label}</Badge>
       </Tooltip>
     );
   }, [selectedDoc]);
@@ -1794,6 +1819,7 @@ export default function ReferralPage() {
               </Badge>
             )}
             {confidenceBadge}
+            {verificationBadge}
             {dualEngineBadge}
             {validationIssuesBadge}
             {routingBadge}
@@ -1955,62 +1981,27 @@ export default function ReferralPage() {
                 {processedOrder.length > 0 && (
                   <Group gap={6} wrap="nowrap">
                     {!selectMode && (
-                      <>
+                      <Group gap={4} wrap="nowrap">
                         <Badge variant="light" size="sm">{processedOrder.length}</Badge>
-                        <div className="hidden md:flex items-center gap-1">
-                          <button
-                            type="button"
-                            className="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 border border-slate-500 disabled:opacity-40"
-                            disabled={doneIds.length === 0}
-                            onClick={() => exportZip(doneIds)}
-                            title="Export all done packets"
-                          >Packets</button>
-                          <button
-                            type="button"
-                            className="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-600"
-                            onClick={() => { setSelectMode(true); clearSelection(); }}
-                            title="Select subset"
-                          >Select</button>
-                      </div>
-                        <div className="md:hidden">
-                          <Tooltip label="Export all packets as a single ZIP (one folder per patient)" position="bottom">
-                            <Button
-                              size="compact-xs"
-                              variant="default"
-                              disabled={doneIds.length === 0}
-                              onClick={() => exportZip(doneIds)}
-                            >
-                              Export ZIP
-                            </Button>
-                          </Tooltip>
-                          <Tooltip label="Select specific docs to export">
-                            <Button
-                              size="compact-xs"
-                              variant="light"
-                              onClick={() => { setSelectMode(true); clearSelection(); }}
-                            >
-                              Select
-                            </Button>
-                          </Tooltip>
-                          <div className="hidden md:flex items-center gap-2">
-                            <Button size="compact-xs" variant="subtle" color="red" onClick={() => purgeAllProcessed()} disabled={doneIds.length===0}>Purge</Button>
-                          </div>
-                        </div>
-                      </>
+                        <Tooltip label="Export all packets as a single ZIP" position="bottom">
+                          <Button size="compact-xs" variant="default" disabled={doneIds.length === 0} onClick={() => exportZip(doneIds)}>
+                            Export ZIP
+                          </Button>
+                        </Tooltip>
+                        <Button size="compact-xs" variant="light" onClick={() => { setSelectMode(true); clearSelection(); }}>
+                          Select
+                        </Button>
+                      </Group>
                     )}
                     {selectMode && (
                       <Group gap={4} wrap="nowrap">
                         <Badge size="sm" variant="outline" color={selectedExportIds.size ? 'blue' : 'gray'}>
                           {selectedExportIds.size}/{doneIds.length}
                         </Badge>
-                        <Tooltip label="Export selected packets as a single ZIP (one folder per patient)">
+                        <Tooltip label="Export selected packets as ZIP">
                           <Button size="compact-xs" variant="light" disabled={!selectedExportIds.size} onClick={() => exportZip(Array.from(selectedExportIds))}>ZIP</Button>
                         </Tooltip>
-                        <Button size="compact-xs" variant="subtle" color="red" disabled={!selectedExportIds.size} onClick={() => purgeSelected()}>Purge selected</Button>
-                        <Tooltip label="Download each patient's packet.pdf as separate files (may be blocked in large batches)">
-                          <Button size="compact-xs" variant="subtle" disabled={!selectedExportIds.size} onClick={() => exportIndividual(Array.from(selectedExportIds))}>PDFs</Button>
-                        </Tooltip>
-                        {/* Reports bulk button removed: use Packets ZIP (includes Patient Report) */}
+                        <Button size="compact-xs" variant="subtle" color="red" disabled={!selectedExportIds.size} onClick={() => purgeSelected()}>Purge</Button>
                         <Button size="compact-xs" variant="subtle" onClick={() => { if (selectedExportIds.size === doneIds.length) clearSelection(); else selectAll(); }}>
                           {selectedExportIds.size === doneIds.length ? 'None' : 'All'}
                         </Button>
@@ -2135,6 +2126,20 @@ export default function ReferralPage() {
                                     ⚠️ {r.dualEngine.conflicts.length}
                                   </Badge>
                                 )}
+                                {/* Verification Status Badge */}
+                                {r?._verification?.status && (() => {
+                                  const vs = r._verification.status;
+                                  const cfg = {
+                                    confirmed: { color: 'green', label: '✓' },
+                                    vlm_confirmed: { color: 'teal', label: '✓ VLM' },
+                                    auto_corrected: { color: 'orange', label: '⚡ Fixed' },
+                                    flagged: { color: 'red', label: '⚑ Flag' },
+                                  };
+                                  const c = cfg[vs];
+                                  return c ? (
+                                    <Badge size="xs" variant="light" color={c.color}>{c.label}</Badge>
+                                  ) : null;
+                                })()}
                               </Stack>
                               <Group gap={4} align="flex-start">
                                 <Tooltip label="Fetch debug trace">

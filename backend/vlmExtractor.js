@@ -17,9 +17,39 @@ import { ollamaMonitor } from './ollamaMonitor.js';
 
 // Configuration
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
-const VLM_MODEL = process.env.VLM_MODEL || 'minicpm-v';
-const VLM_TIMEOUT = parseInt(process.env.VLM_TIMEOUT || '120000', 10); // 2min per page
+const VLM_MODEL = process.env.VLM_MODEL || process.env.OLLAMA_MODEL || 'qwen2.5vl:7b';
+const VLM_TIMEOUT = parseInt(process.env.VLM_TIMEOUT || '180000', 10); // 3min per page
 const VLM_TEMPERATURE = parseFloat(process.env.VLM_TEMPERATURE || '0.1'); // Low temp for deterministic extraction
+
+// ── SLEEP STUDY CPT LOOKUP ──
+// Maps CPT codes to their descriptions for validation
+const SLEEP_CPT_MAP = {
+  '95800': 'Portable sleep study (Type 3)',
+  '95801': 'Portable sleep study (Type 4)',
+  '95805': 'Multiple sleep latency test (MSLT)',
+  '95806': 'Unattended sleep study',
+  '95807': 'Attended sleep study with CPAP',
+  '95808': 'Polysomnography (PSG) - attended, 1-3 parameters',
+  '95810': 'Polysomnography (PSG) - attended, 4+ parameters',
+  '95811': 'PSG with PAP titration / split-night',
+  '95782': 'Pediatric polysomnography',
+  '95783': 'Pediatric PSG with PAP titration',
+  '95869': 'Maintenance of wakefulness test (MWT)'
+};
+
+// ── CPT INFERENCE RULES ──
+// Order matters: more specific matches first
+const CPT_INFERENCE_RULES = [
+  [['split-night', 'split night', 'splitnight'], '95811'],
+  [['titration', 'pap titration', 'cpap titration', 'bipap titration'], '95811'],
+  [['mslt', 'multiple sleep latency', 'latency test'], '95805'],
+  [['mwt', 'maintenance of wakefulness'], '95869'],
+  [['hsat', 'home sleep', 'portable sleep', 'type 3', 'type iii'], '95800'],
+  [['unattended', 'type 4', 'type iv'], '95806'],
+  [['polysomnography', 'polysomnogram', 'psg', 'sleep study', 'in-lab', 'in lab', 'inlab'], '95810'],
+  [['pediatric psg', 'pediatric sleep', 'pediatric polysomnography'], '95782'],
+  [['sleep test', 'sleep evaluation', 'sleep assessment', 'sleep medicine', 'sleep referral', 'sleep consult'], '95810']
+];
 
 /**
  * The structured extraction prompt.
@@ -32,13 +62,13 @@ Extract ALL structured data you can see into this EXACT JSON format. Use null fo
 
 {
   "patient": {
-    "first": "first name" or null,
-    "last": "last name" or null,
+    "first": "first/given name" or null,
+    "last": "last/family/surname" or null,
     "dob": "MM/DD/YYYY" or null,
-    "phones": ["10-digit numbers only"] or [],
-    "email": "email" or null,
+    "phones": ["patient's personal phone numbers — home, cell, mobile — digits only"] or [],
+    "email": "patient's personal email address" or null,
     "address": {
-      "street": "street address" or null,
+      "street": "patient's home/mailing street address" or null,
       "city": "city" or null,
       "state": "2-letter state code" or null,
       "zip": "5 or 9 digit zip" or null
@@ -49,30 +79,31 @@ Extract ALL structured data you can see into this EXACT JSON format. Use null fo
       "carrier": "insurance company name" or null,
       "memberId": "member/subscriber ID exactly as printed" or null,
       "groupId": "group number" or null,
-      "planType": "HMO/PPO/EPO/POS" or null
+      "planType": "HMO/PPO/EPO/POS/Medicare/Medicaid" or null
     }
   ],
-  "provider": {
-    "name": "ordering/referring physician full name with credentials" or null,
-    "npi": "10-digit NPI number (ONLY a 10-digit number starting with 1, NOT a phone number)" or null,
-    "practice": "practice or clinic name" or null,
-    "phone": "10-digit phone (different from NPI)" or null,
-    "fax": "10-digit fax" or null
+  "referringProvider": {
+    "name": "referring/ordering physician full name with credentials (MD, DO, NP, etc.)" or null,
+    "npi": "10-digit NPI number starting with 1 or 2 (NOT a phone or fax number)" or null,
+    "practice": "practice, clinic, or facility name" or null,
+    "phone": "the doctor's office phone number — digits only" or null,
+    "fax": "the doctor's office fax number — digits only (often labeled 'Fax' or 'F')" or null,
+    "email": "the doctor's or office email" or null
   },
   "procedure": {
-    "cpt": "CPT code as a single string like 95810 or 95811 (NOT an object or array)" or null,
-    "description": "procedure description as a string" or null,
-    "authNumber": "authorization number" or null
+    "cpt": "ONE CPT code as a 5-digit string like 95810 or 95811" or null,
+    "description": "procedure description" or null,
+    "authNumber": "authorization/auth number" or null
   },
   "diagnoses": [
     {
-      "code": "single ICD-10 code as a string like G47.33 (NOT an array)" or null,
-      "description": "diagnosis text as a string" or null
+      "code": "ONE ICD-10 code as a string like G47.33" or null,
+      "description": "diagnosis text" or null
     }
   ],
   "clinical": {
     "reasonForReferral": "why the patient is being referred" or null,
-    "symptoms": ["list of symptoms mentioned"] or [],
+    "symptoms": ["list of symptoms"] or [],
     "medications": ["current medications"] or [],
     "history": "relevant medical history" or null,
     "bmi": "BMI value" or null,
@@ -85,18 +116,24 @@ Extract ALL structured data you can see into this EXACT JSON format. Use null fo
 CRITICAL RULES:
 1. Output ONLY valid JSON — no markdown, no explanation, no code fences.
 2. Preserve exact spelling, numbers, and formatting as printed on the document.
-3. For phone numbers, extract digits only (no parentheses or dashes).
+3. PHONE NUMBER SEPARATION IS CRITICAL:
+   - patient.phones = the PATIENT's personal phone (home, cell, mobile). Usually near the patient's name/address/demographics section.
+   - referringProvider.phone = the DOCTOR's office phone. Usually near the provider name, practice, or in a "Referring Physician" section.
+   - referringProvider.fax = the office fax. Usually labeled "Fax", "F:", or near the provider section.
+   - If a phone number is in the header/letterhead of a medical practice, it belongs to referringProvider, NOT the patient.
+   - If a phone number is near "Patient Phone", "Home", "Cell", "Mobile" labels, it belongs to patient.
+   - When in doubt about whose phone it is, put it in BOTH patient.phones AND referringProvider.phone so nothing is lost.
 4. For dates, always use MM/DD/YYYY format.
 5. If you see a table or form with labeled fields, use the labels to identify which value goes where.
-6. If a field is partially legible, include your best reading with confidence < 0.7.
-7. If handwriting is present, attempt to read it — it's often the most critical information.
-8. If this page is a fax cover sheet with no patient data, set pageType to "cover_sheet" and all fields to null.
-9. Member IDs and group IDs: copy EXACTLY as printed, including letters, numbers, and dashes.
-10. If you see multiple insurance entries (primary/secondary), include both in the insurance array.
-11. For patient name: "first" means the person's given name, "last" means their family/surname. If you see "LASTNAME, FIRSTNAME" format, the part BEFORE the comma is the last name.
-12. NPI is ALWAYS a 10-digit number starting with 1 or 2. Phone numbers and fax numbers are NOT NPIs.
-13. Every value in the JSON must be a simple string, number, or null — never nest objects inside string fields.
-14. Each diagnosis code must be a single string (e.g., "G47.33"), not an array. List multiple diagnoses as separate objects in the diagnoses array.`;
+6. If handwriting is present, attempt to read it — it's often the most critical information.
+7. If this page is a fax cover sheet with no patient data, set pageType to "cover_sheet" and all fields to null.
+8. Member IDs and group IDs: copy EXACTLY as printed, including letters, numbers, and dashes.
+9. If you see multiple insurance entries (primary/secondary), include both in the insurance array.
+10. For patient name: "first" means given name, "last" means family/surname. "LASTNAME, FIRSTNAME" = part BEFORE comma is last.
+11. NPI is ALWAYS a 10-digit number starting with 1 or 2. Phone/fax numbers are NOT NPIs.
+12. Every value in the JSON must be a simple string, number, or null — never nest objects inside string fields.
+13. Each diagnosis code must be a single string (e.g., "G47.33"), not an array.
+14. CPT code must be a single 5-digit string. If multiple CPT codes are present, use the primary/first one.`;
 
 /**
  * Multi-page merge prompt — sent after individual pages are extracted.
@@ -190,7 +227,7 @@ export async function extractPage(imagePath, pageNum = 1) {
     return {
       patient: { first: null, last: null, dob: null, phones: [], email: null, address: {} },
       insurance: [],
-      provider: { name: null, npi: null, practice: null, phone: null, fax: null },
+      provider: { name: null, npi: null, practice: null, phone: null, fax: null, email: null },
       procedure: { cpt: null, description: null, authNumber: null },
       diagnoses: [],
       clinical: { reasonForReferral: null, symptoms: [], medications: [], history: null, notes: null },
@@ -350,12 +387,14 @@ function mergePageExtractions(pages) {
       }
     }
 
-    // Provider: prefer first non-null
-    if (!merged.provider.name && page.provider?.name) merged.provider.name = page.provider.name;
-    if (!merged.provider.npi && page.provider?.npi) merged.provider.npi = page.provider.npi;
-    if (!merged.provider.practice && page.provider?.practice) merged.provider.practice = page.provider.practice;
-    if (!merged.provider.phone && page.provider?.phone) merged.provider.phone = page.provider.phone;
-    if (!merged.provider.fax && page.provider?.fax) merged.provider.fax = page.provider.fax;
+    // Provider (VLM may output as "referringProvider" or "provider")
+    const prov = getProvider(page);
+    if (!merged.provider.name && prov.name) merged.provider.name = prov.name;
+    if (!merged.provider.npi && prov.npi) merged.provider.npi = prov.npi;
+    if (!merged.provider.practice && prov.practice) merged.provider.practice = prov.practice;
+    if (!merged.provider.phone && prov.phone) merged.provider.phone = prov.phone;
+    if (!merged.provider.fax && prov.fax) merged.provider.fax = prov.fax;
+    if (!merged.provider.email && prov.email) merged.provider.email = prov.email;
 
     // Procedure: prefer first non-null
     if (!merged.procedure.cpt && page.procedure?.cpt) merged.procedure.cpt = page.procedure.cpt;
@@ -399,7 +438,7 @@ function mergePageExtractions(pages) {
  * Normalize VLM extraction to match the app's expected result schema.
  * Maps VLM output fields to the exact format downstream consumers expect.
  */
-function normalizeVlmResult(vlm) {
+export function normalizeVlmResult(vlm) {
   // Fix name order: if first looks like a last name (all caps, followed by comma-style)
   // and last looks like a first name, swap them
   let firstName = vlm.patient?.first || null;
@@ -436,25 +475,86 @@ function normalizeVlmResult(vlm) {
     return null; // Not a valid NPI (might be a phone number the VLM confused)
   };
   
-  // Normalize CPT: extract the code string if VLM returned an object/array
+  // ── CPT SPLITTING & NORMALIZATION ──
+  // Handles concatenated CPT codes (e.g., "95801G03999580095806") and objects/arrays
   const normalizeCpt = (cpt) => {
     if (!cpt) return null;
-    if (typeof cpt === 'string') return cpt.replace(/[^\dA-Za-z]/g, '').toUpperCase();
-    if (Array.isArray(cpt) && cpt.length > 0) {
+    let raw;
+    if (typeof cpt === 'string') {
+      // Treat "null", "NULL", "none", "N/A" as null
+      if (/^(null|none|n\/?a|not\s*applicable)$/i.test(cpt.trim())) return null;
+      raw = cpt;
+    } else if (Array.isArray(cpt) && cpt.length > 0) {
       const first = cpt[0];
-      if (typeof first === 'string') return first;
-      if (first?.code) return String(first.code);
+      raw = typeof first === 'string' ? first : first?.code ? String(first.code) : null;
+    } else if (typeof cpt === 'object' && cpt.code) {
+      raw = String(cpt.code);
     }
-    if (typeof cpt === 'object' && cpt.code) return String(cpt.code);
+    if (!raw) return null;
+
+    // Strip non-alphanumeric
+    raw = raw.replace(/[^\dA-Za-z]/g, '').toUpperCase();
+
+    // If it's already a clean 5-digit code, return it
+    if (/^\d{5}$/.test(raw)) return raw;
+
+    // Try to extract valid 5-digit CPT codes from concatenated mess
+    const cptMatches = raw.match(/\d{5}/g);
+    if (cptMatches && cptMatches.length > 0) {
+      // Return the first valid sleep-study CPT if present, otherwise first match
+      const sleepCpts = cptMatches.filter(c => SLEEP_CPT_MAP[c]);
+      return sleepCpts.length > 0 ? sleepCpts[0] : cptMatches[0];
+    }
+
+    // Last resort: return raw if it's a valid short alphanumeric code (not garbage)
+    if (raw.length <= 6 && /\d/.test(raw)) return raw;
     return null;
   };
-  
-  // Normalize diagnosis code: ensure it's a string, not an array
-  const normalizeDxCode = (code) => {
+
+  // ── CPT INFERENCE FROM DESCRIPTION ──
+  // If VLM couldn't find a CPT code but gave us a description, infer it
+  const inferCptFromDescription = (description) => {
+    if (!description) return null;
+    const desc = description.toLowerCase();
+    for (const [keywords, code] of CPT_INFERENCE_RULES) {
+      if (keywords.some(kw => desc.includes(kw))) return code;
+    }
+    return null;
+  };
+
+  // ── ICD-10 CODE CLEANING ──
+  // Extracts clean ICD-10 code from messy strings like "R0683 Snoring" → "R06.83"
+  const cleanIcdCode = (code) => {
     if (!code) return null;
-    if (typeof code === 'string') return code;
-    if (Array.isArray(code)) return code[0] || null;
-    return String(code);
+    if (typeof code !== 'string') {
+      if (Array.isArray(code)) return cleanIcdCode(code[0]);
+      return String(code);
+    }
+
+    // Already clean format like G47.33
+    if (/^[A-Z]\d{2}\.\d{1,4}$/.test(code.trim())) return code.trim();
+
+    // Try to extract ICD-10 pattern from messy string
+    // Matches: G47.33, R06.83, E66.01, Z12.11, etc.
+    const withDot = code.match(/\b([A-Z]\d{2}\.\d{1,4})\b/i);
+    if (withDot) return withDot[1].toUpperCase();
+
+    // No dot format: R0683 → R06.83, G4733 → G47.33
+    const noDot = code.match(/\b([A-Z]\d{2})(\d{1,4})\b/i);
+    if (noDot) return `${noDot[1].toUpperCase()}.${noDot[2]}`;
+
+    // Match just the code part if description is appended: "G47.00 (ICD-10-CM) - Insomnia"
+    const prefixed = code.match(/^\s*([A-Z]\d{2}\.?\d{0,4})/i);
+    if (prefixed) {
+      let c = prefixed[1].toUpperCase();
+      // Insert dot if missing: G4700 → G47.00
+      if (c.length >= 4 && !c.includes('.')) {
+        c = c.slice(0, 3) + '.' + c.slice(3);
+      }
+      return c;
+    }
+
+    return code.trim();
   };
   // Build symptoms array in the expected format
   const symptoms = (vlm.clinical?.symptoms || []).map(s => ({
@@ -464,7 +564,7 @@ function normalizeVlmResult(vlm) {
     page: vlm._meta?.page || 1
   }));
 
-  return {
+  const result = {
     patient: {
       first: firstName,
       last: lastName,
@@ -480,21 +580,42 @@ function normalizeVlmResult(vlm) {
       planType: ins.planType || null,
       status: 'pending_verification'
     })),
-    provider: {
-      name: vlm.provider?.name || null,
-      npi: normalizeNpi(vlm.provider?.npi),
-      practice: vlm.provider?.practice || null,
-      phone: normalizePhone(vlm.provider?.phone),
-      fax: normalizePhone(vlm.provider?.fax)
-    },
-    procedure: {
-      cpt: normalizeCpt(vlm.procedure?.cpt),
-      description: typeof vlm.procedure?.description === 'string' ? vlm.procedure.description : null,
-      authNumber: vlm.procedure?.authNumber || null,
-      notes: [typeof vlm.procedure?.description === 'string' ? vlm.procedure.description : null].filter(Boolean)
-    },
+    provider: (() => {
+      const prov = vlm.referringProvider || vlm.provider || {};
+      return {
+        name: prov.name || null,
+        npi: normalizeNpi(prov.npi),
+        practice: prov.practice || null,
+        phone: normalizePhone(prov.phone),
+        fax: normalizePhone(prov.fax),
+        email: prov.email || null
+      };
+    })(),
+    procedure: (() => {
+      let cpt = normalizeCpt(vlm.procedure?.cpt);
+      const desc = typeof vlm.procedure?.description === 'string' ? vlm.procedure.description : null;
+      // If CPT is null or invalid, try to infer from description
+      if (!cpt && desc) {
+        cpt = inferCptFromDescription(desc);
+        if (cpt) log('info', 'cpt_inferred', { from: desc, inferred: cpt });
+      }
+      // Also try inferring from diagnoses if still null
+      if (!cpt) {
+        const dxCodes = (vlm.diagnoses || []).map(d => d.code).filter(Boolean).join(' ');
+        if (/G47\.|R06\.83|E66/i.test(dxCodes)) {
+          cpt = '95810'; // Sleep apnea diagnosis → PSG
+          log('info', 'cpt_inferred_from_dx', { codes: dxCodes, inferred: cpt });
+        }
+      }
+      return {
+        cpt,
+        description: desc,
+        authNumber: vlm.procedure?.authNumber || null,
+        notes: [desc].filter(Boolean)
+      };
+    })(),
     diagnoses: (vlm.diagnoses || []).map(dx => ({
-      code: normalizeDxCode(dx.code),
+      code: cleanIcdCode(dx.code),
       description: typeof dx.description === 'string' ? dx.description : null,
       temporal: 'current'
     })).filter(dx => dx.code),
@@ -514,6 +635,22 @@ function normalizeVlmResult(vlm) {
       reasons: (vlm.confidence || 0) < 0.6 ? ['Low VLM extraction confidence'] : []
     }
   };
+
+  // ── POST-PROCESSING: Phone cross-check ──
+  // If patient has no phones but provider section has them, flag for review
+  const prov = result.provider || {};
+  if (result.patient.phones.length === 0 && (prov.phone || prov.fax)) {
+    result.flags.verifyManually = true;
+    result.flags.reasons.push('No patient phone found — verify provider phone is not patient\'s');
+  }
+
+  // If patient has phones that look like they match the provider's, flag
+  if (prov.phone && result.patient.phones.includes(prov.phone)) {
+    result.flags.verifyManually = true;
+    result.flags.reasons.push('Patient phone matches provider phone — possible mix-up');
+  }
+
+  return result;
 }
 
 /**
@@ -534,7 +671,7 @@ function emptyResult() {
   return {
     patient: { first: null, last: null, dob: null, phones: [], email: null, address: {} },
     insurance: [],
-    provider: { name: null, npi: null, practice: null, phone: null, fax: null },
+    provider: { name: null, npi: null, practice: null, phone: null, fax: null, email: null },
     procedure: { cpt: null, description: null, authNumber: null },
     diagnoses: [],
     clinical: { reasonForReferral: null, symptoms: [], medications: [], history: null, bmi: null, notes: null },
@@ -543,9 +680,16 @@ function emptyResult() {
 }
 
 /**
+ * Get provider data from VLM output — handles both "provider" and "referringProvider" field names.
+ */
+function getProvider(page) {
+  return page.referringProvider || page.provider || {};
+}
+
+/**
  * Parse JSON from VLM response, handling common VLM output quirks.
  */
-function parseVlmJson(raw, pageNum = 0) {
+export function parseVlmJson(raw, pageNum = 0) {
   if (!raw || !raw.trim()) {
     log('warn', 'vlm_empty_response', { page: pageNum });
     return { ...emptyResult(), confidence: 0, pageType: 'unknown' };

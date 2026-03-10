@@ -654,6 +654,17 @@ export default function OcrDebugPage() {
                     {selectedDoc.confidenceLevel && (
                       <Badge size="sm" color="sky" variant="outline">Confidence: {selectedDoc.confidenceLevel}</Badge>
                     )}
+                    {selectedDoc._verification?.status && (() => {
+                      const vs = selectedDoc._verification.status;
+                      const cfg = {
+                        confirmed: { color: 'green', label: 'Verified' },
+                        vlm_confirmed: { color: 'teal', label: 'VLM Verified' },
+                        auto_corrected: { color: 'orange', label: 'Auto-Corrected' },
+                        flagged: { color: 'red', label: 'Flagged' },
+                      };
+                      const c = cfg[vs] || { color: 'gray', label: vs };
+                      return <Badge size="sm" color={c.color} variant="light">{c.label}</Badge>;
+                    })()}
                   </Group>
                   <Group justify="space-between" align="center">
                     <Text size="sm" fw={600}>Coverage</Text>
@@ -754,6 +765,49 @@ export default function OcrDebugPage() {
                           </div>
                         )}
                       </>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
+
+              {/* Verification Details */}
+              {selectedDoc._verification && (
+                <Paper withBorder radius="md" p="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="center">
+                      <Text size="sm" fw={600}>Verification</Text>
+                      {(() => {
+                        const vs = selectedDoc._verification.status;
+                        const cfg = {
+                          confirmed: { color: 'green', label: 'Verified' },
+                          vlm_confirmed: { color: 'teal', label: 'VLM Verified' },
+                          auto_corrected: { color: 'orange', label: 'Auto-Corrected' },
+                          flagged: { color: 'red', label: 'Flagged' },
+                        };
+                        const c = cfg[vs] || { color: 'gray', label: vs };
+                        return <Badge size="sm" color={c.color} variant="light">{c.label}</Badge>;
+                      })()}
+                    </Group>
+                    {selectedDoc._verification.corrections?.length > 0 && (
+                      <Stack gap={4}>
+                        <Text size="xs" fw={500}>Corrections Applied:</Text>
+                        {selectedDoc._verification.corrections.map((corr, i) => (
+                          <Group key={i} gap="xs">
+                            <Badge size="xs" variant="outline">{corr.field}</Badge>
+                            <Text size="xs" c="red" td="line-through">{corr.old || '(empty)'}</Text>
+                            <Text size="xs">→</Text>
+                            <Text size="xs" c="green" fw={500}>{corr.new || '(empty)'}</Text>
+                          </Group>
+                        ))}
+                      </Stack>
+                    )}
+                    {selectedDoc._verification.flaggedFields?.length > 0 && (
+                      <Stack gap={4}>
+                        <Text size="xs" fw={500} c="red">Flagged Fields:</Text>
+                        {selectedDoc._verification.flaggedFields.map((f, i) => (
+                          <Text key={i} size="xs" c="red">• {f}</Text>
+                        ))}
+                      </Stack>
                     )}
                   </Stack>
                 </Paper>

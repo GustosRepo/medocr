@@ -90,12 +90,35 @@ export async function convertPdfPagesToImages(pdfPath, pageIndices, options = {}
           resizeHeight = Math.round(resizeHeight * scale);
         }
 
-        // Resize and compress
+        // Qwen2.5-VL requires image dimensions compatible with its vision encoder.
+        // Force resize to a fixed width (1120 = 28*40) that avoids GGML assertion errors,
+        // keeping aspect ratio intact and rounding height to multiple of 28.
+        const VLM_SAFE_WIDTH = 1120; // 28 * 40
+        if (resizeWidth > VLM_SAFE_WIDTH || resizeWidth !== Math.floor(resizeWidth / 28) * 28) {
+          const scale = VLM_SAFE_WIDTH / resizeWidth;
+          resizeWidth = VLM_SAFE_WIDTH;
+          resizeHeight = Math.floor((resizeHeight * scale) / 28) * 28;
+        } else {
+          resizeWidth = Math.floor(resizeWidth / 28) * 28;
+          resizeHeight = Math.floor(resizeHeight / 28) * 28;
+        }
+
+        // Resize, enhance contrast/sharpness for fax documents, and compress
         const processedBuffer = await sharp(imageBuffer)
           .resize(resizeWidth, resizeHeight, {
             fit: 'inside',
             withoutEnlargement: true
           })
+          .normalize()          // Auto contrast stretch — crucial for washed-out faxes
+          .sharpen({             // Sharpen text edges after resize
+            sigma: 1.0,
+            m1: 1.5,
+            m2: 0.7,
+            x1: 2.0,
+            y2: 10,
+            y3: 20
+          })
+          .gamma(1.1)           // Slight gamma boost to darken text
           .jpeg({
             quality,
             progressive: true,

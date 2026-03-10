@@ -295,6 +295,16 @@ export default function ChecklistPage() {
                       </Tooltip>
                     )}
                     {r.confidence && <Badge size="xs" color="grape" variant="light">{r.confidence}</Badge>}
+                    {r.verification && (() => {
+                      const cfg = {
+                        confirmed: { color: 'green', label: '✓ Verified' },
+                        vlm_confirmed: { color: 'teal', label: '✓ VLM' },
+                        auto_corrected: { color: 'orange', label: '⚡ Corrected' },
+                        flagged: { color: 'red', label: '⚑ Flagged' },
+                      };
+                      const c = cfg[r.verification];
+                      return c ? <Badge size="xs" color={c.color} variant="light">{c.label}</Badge> : null;
+                    })()}
                     {needs && <Badge size="xs" color="orange" variant="outline">Review</Badge>}
                   </Group>
                   {isExpanded && <div style={{ borderTop:'1px solid #2a323c', margin:'6px 0' }} />}

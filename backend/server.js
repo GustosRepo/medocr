@@ -36,6 +36,8 @@ import { invalidateConfigCache } from './rules/utils/configLoader.js';
 import { getOllamaHealth, ollamaMonitor } from './ollamaMonitor.js';
 import { normalizeFields, getClientConfig } from './utils/fieldNormalizer.js';
 import { extractDocument as vlmExtractDocument, crossValidate as vlmCrossValidate, checkVlmHealth } from './vlmExtractor.js';
+import { extractFromOcrText, computeOcrConfidence } from './textLlmExtractor.js';
+import { verifyExtraction } from './verifyExtraction.js';
 import { convertPdfPagesToImages, cleanupTempImages } from './utils/imageResizer.js';
 import { selectInformationRichPages } from './pageSelector.js';
 import aiAnalysisRoutes from './routes/aiAnalysis.js';
@@ -324,7 +326,17 @@ function scheduleDocumentProcessing(id) {
 
   const runTask = () => {
     docInFlight++;
-    processDocument(id)
+    // Pipeline selection:
+    //   TEXT_LLM=true  → OCR + text-only LLM (fastest, VLM fallback if OCR quality low)
+    //   VLM_DIRECT=true → skip OCR, send page images straight to VLM (slowest, best quality)
+    //   neither        → OCR + regex rules engine (+ optional VLM_PRIMARY cross-validation)
+    const pipelineMode = process.env.TEXT_LLM === 'true' ? 'text_llm'
+      : process.env.VLM_DIRECT === 'true' ? 'vlm_direct'
+      : 'ocr_regex';
+    const processor = pipelineMode === 'text_llm' ? processDocumentTextLlm
+      : pipelineMode === 'vlm_direct' ? processDocumentVlmDirect
+      : processDocument;
+    processor(id)
       .then(result => docInQueue.get(id)?.resolve(result))
       .catch(err => docInQueue.get(id)?.reject(err))
       .finally(() => {
@@ -349,6 +361,11 @@ function scheduleDocumentProcessing(id) {
 // In-memory doc store for dev
 const docs = new Map(); // id -> { filePath, status, result, error, ocrParams? }
 const RESULTS_DIR = path.join(__dirname, '..', 'data', 'results');
+
+// Helper: check if a document entry is fully processed (handles 'done' and 'complete' status)
+function isDone(entry) {
+  return entry && (entry.status === 'done' || entry.status === 'complete') && !!entry.result;
+}
 
 // Helper: find original upload bytes by matching SHA-256 hash against data/uploads
 async function findOriginalByHash(fileHash) {
@@ -579,11 +596,16 @@ async function hydrateDocsFromDisk(limit = 300) {
         const p = path.join(RESULTS_DIR, file);
         const raw = await fsPromises.readFile(p, 'utf8');
         const result = JSON.parse(raw);
-        const entry = { status: 'done', result, filePath: null };
+        // Recover filePath from persisted originalFilePath if file still exists
+        let recoveredPath = result?.documentMeta?.originalFilePath || null;
+        if (recoveredPath && !fs.existsSync(recoveredPath)) recoveredPath = null;
+        const entry = { status: 'done', result, filePath: recoveredPath };
         // Attempt to recover original PDF bytes by fileHash for downstream needs
-        const fileHash = result?.documentMeta?.fileHash;
-        const originalBuf = await findOriginalByHash(fileHash);
-        if (originalBuf) entry._originalBytes = originalBuf;
+        if (!recoveredPath) {
+          const fileHash = result?.documentMeta?.fileHash;
+          const originalBuf = await findOriginalByHash(fileHash);
+          if (originalBuf) entry._originalBytes = originalBuf;
+        }
         docs.set(id, entry);
         loaded++;
       } catch (e) {
@@ -635,7 +657,7 @@ app.get('/api/checklist', (req, res) => {
   let processed = 0, additionalActions = 0, readyToSchedule = 0;
   // Iterate newest-first similar to documents listing
   for (const [id, entry] of Array.from(docs.entries()).reverse()) {
-    if (entry.status !== 'done' || !entry.result) continue;
+    if (!isDone(entry)) continue;
     const r = entry.result;
     if (dateFilter && r.documentMeta?.intakeDate !== dateFilter) continue;
     processed++;
@@ -681,6 +703,7 @@ app.get('/api/checklist', (req, res) => {
       actions: prettyActs,
       actionsRaw,
       confidence: r.confidenceLevel || r.confidence || null,
+      verification: r._verification?.status || null,
       manual: !!r.flags?.verifyManually,
       none: !problem,
       override,
@@ -794,7 +817,7 @@ app.get('/api/documents/:id/status', (req, res) => {
     else if (err.includes('input file not found')) { errorCode = 'file_missing'; suggestions = ['Re-upload the document']; }
     else { errorCode = 'ocr_failed'; }
   }
-  res.json({ id, status, progress: status === 'done' ? 1 : status === 'processing' ? 0.5 : 0.1, flags: entry.result?.flags || { verifyManually: false, reasons: [] }, error: entry.error, errorCode, suggestions });
+  res.json({ id, status: (status === 'complete' ? 'done' : status), progress: (status === 'done' || status === 'complete') ? 1 : status === 'processing' ? 0.5 : 0.1, flags: entry.result?.flags || { verifyManually: false, reasons: [] }, error: entry.error, errorCode, suggestions });
 });
 
 // Result: returns extraction result or error if processing failed/unavailable
@@ -863,7 +886,7 @@ app.post('/api/documents/:id/update-field', express.json({ limit: '64kb' }), (re
       return res.status(400).json({ error: { code: 'bad_request', message: 'path is required' } });
     }
     const entry = docs.get(id);
-    if (!entry || entry.status !== 'done' || !entry.result) {
+    if (!isDone(entry)) {
       return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
     }
 
@@ -942,7 +965,7 @@ app.post('/api/documents/:id/update-fields', express.json({ limit: '128kb' }), (
       return res.status(400).json({ error: { code: 'bad_request', message: 'edits array required' } });
     }
     const entry = docs.get(id);
-    if (!entry || entry.status !== 'done' || !entry.result) {
+    if (!isDone(entry)) {
       return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
     }
 
@@ -1012,7 +1035,7 @@ app.post('/api/documents/:id/apply-corrections', (req, res) => {
   if (!entry) {
     return res.status(404).json({ error: { code: 'not_found', message: 'document not found' } });
   }
-  if (entry.status !== 'done' || !entry.result) {
+  if (!isDone(entry)) {
     return res.status(400).json({ error: { code: 'not_ready', message: 'document not processed yet' } });
   }
   try {
@@ -1031,7 +1054,7 @@ app.get('/api/documents/:id/fhir', (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
   if (!entry) return res.status(404).json({ error: { code: 'not_found', category: classifyError('not_found'), message: 'document not found' } });
-  if (entry.status !== 'done' || !entry.result) return res.status(409).json({ error: { code: 'not_ready', category: classifyError('not_ready'), message: 'document not processed' } });
+  if (!isDone(entry)) return res.status(409).json({ error: { code: 'not_ready', category: classifyError('not_ready'), message: 'document not processed' } });
   try {
     const bundle = toFhirBundle(entry.result);
     res.json(bundle);
@@ -1045,7 +1068,7 @@ app.get('/api/documents/:id/fhir', (req, res) => {
 app.get('/api/documents/:id/summary.pdf', (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
-  if (!entry || entry.status !== 'done' || !entry.result) {
+  if (!isDone(entry)) {
     return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
   }
   // Apply naming convention: LastName_FirstName_DOB_ReferralDate.pdf
@@ -1084,7 +1107,7 @@ app.get('/api/documents/:id/original.pdf', (req, res) => {
 app.get('/api/documents/:id/annotated.pdf', async (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
-  if (!entry || entry.status !== 'done' || !entry.result) {
+  if (!isDone(entry)) {
     return res.status(404).json({ error: { code: 'not_ready', category: classifyError('not_ready'), message: 'document not found or not processed' } });
   }
   if (!entry.filePath || !fs.existsSync(entry.filePath)) {
@@ -1122,7 +1145,7 @@ app.get('/api/documents/:id/annotated.pdf', async (req, res) => {
 app.get('/api/documents/:id/packet.pdf', async (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
-  if (!entry || entry.status !== 'done' || !entry.result) {
+  if (!isDone(entry)) {
     return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
   }
 
@@ -1144,7 +1167,7 @@ app.get('/api/documents/:id/packet.pdf', async (req, res) => {
 app.get('/api/documents/:id/patient-report.pdf', async (req, res) => {
   const id = req.params.id;
   const entry = docs.get(id);
-  if (!entry || entry.status !== 'done' || !entry.result) {
+  if (!isDone(entry)) {
     return res.status(404).json({ error: { code: 'not_ready', message: 'document not found or not processed' } });
   }
   try {
@@ -1840,6 +1863,375 @@ app.get('/api/analytics', (_req, res) => {
   });
 });
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TEXT-LLM PIPELINE — OCR + text-only LLM (fast path, VLM fallback)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function processDocumentTextLlm(id) {
+  const entry = docs.get(id);
+  if (!entry) return;
+  const t0 = performance.now();
+
+  if (!entry.filePath || !fs.existsSync(entry.filePath)) {
+    entry.status = 'error';
+    entry.error = 'Input file not found';
+    entry.result = null;
+    docs.set(id, entry);
+    incCounter('docsErrored');
+    return;
+  }
+
+  entry.status = 'processing';
+  docs.set(id, entry);
+  log('info', 'text_llm_pipeline_start', { id });
+
+  try {
+    // Step 1: Limit PDF to first N pages, then OCR
+    const ocrTimeoutMs = parseInt(process.env.OCR_TIMEOUT_MS || '60000', 10);
+    const maxPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
+    const fileBuffer = await fs.promises.readFile(entry.filePath);
+
+    // Extract only first N pages to avoid OCR processing 10+ page PDFs
+    const { PDFDocument } = await import('pdf-lib');
+    const srcDoc = await PDFDocument.load(fileBuffer);
+    const totalPages = srcDoc.getPageCount();
+    let pdfToSend = fileBuffer;
+
+    if (totalPages > maxPages) {
+      const trimmedDoc = await PDFDocument.create();
+      const pageIndices = Array.from({ length: Math.min(totalPages, maxPages) }, (_, i) => i);
+      const copiedPages = await trimmedDoc.copyPages(srcDoc, pageIndices);
+      copiedPages.forEach(p => trimmedDoc.addPage(p));
+      pdfToSend = Buffer.from(await trimmedDoc.save());
+      log('info', 'text_llm_pdf_trimmed', { id, totalPages, sentPages: maxPages });
+    }
+
+    const form = new FormData();
+    const blob = new Blob([pdfToSend], { type: 'application/pdf' });
+    form.append('file', blob, path.basename(entry.filePath));
+
+    const queueEnqueuedAt = performance.now();
+    const resp = await scheduleOcr(() => {
+      const queueWait = performance.now() - queueEnqueuedAt;
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), ocrTimeoutMs);
+      const serviceUrl = nextOcrServiceUrl();
+      log('info', 'text_llm_ocr_start', { id, serviceUrl, queueWaitMs: Math.round(queueWait) });
+      // Use fast OCR settings: low DPI, skip rotation/tiling, basic preprocessing
+      return fetch(`${serviceUrl.replace(/\/$/, '')}/ocr?dpi=150&mode=basic&skip_rotate=true&skip_tile=true`, { method: 'POST', body: form, signal: controller.signal })
+        .finally(() => clearTimeout(timeoutHandle));
+    });
+
+    if (!resp.ok) throw new Error(`OCR service error: ${resp.status}`);
+    const ocrJson = await resp.json();
+    const ocrPages = Array.isArray(ocrJson.ocr) ? ocrJson.ocr : [];
+
+    const ocrElapsed = Math.round(performance.now() - queueEnqueuedAt);
+    log('info', 'text_llm_ocr_complete', { id, pages: ocrPages.length, elapsed: ocrElapsed });
+
+    if (ocrPages.length === 0) throw new Error('OCR returned no pages');
+
+    // Step 2: Try text-LLM extraction
+    let mappedResult = await extractFromOcrText(ocrPages, { id });
+
+    // Step 3: If text-LLM failed (low OCR confidence or parse error), fallback to VLM
+    if (!mappedResult) {
+      log('info', 'text_llm_fallback_to_vlm', { id, reason: 'text_llm_returned_null' });
+
+      // Convert PDF pages to images and run VLM (same as vlm_direct pipeline)
+      const pdfDoc = await (await import('pdf-lib')).PDFDocument.load(fileBuffer);
+      const totalPages = pdfDoc.getPageCount();
+      const maxVlmPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
+      const pageIndices = Array.from({ length: Math.min(totalPages, maxVlmPages) }, (_, i) => i);
+
+      const docTempDir = `data/temp/${id}`;
+      const imageResults = await convertPdfPagesToImages(entry.filePath, pageIndices, {
+        targetDPI: 150,
+        maxWidth: 1600,
+        quality: 85,
+        outputDir: docTempDir
+      });
+
+      const imagePaths = imageResults.map(r => r.imagePath);
+      mappedResult = await vlmExtractDocument(imagePaths, {});
+      mappedResult.extractionMethod = 'vlm_fallback';
+      mappedResult._vlmFallback = { reason: 'low_ocr_confidence_or_parse_failure' };
+
+      await cleanupTempImages(imageResults);
+      try { await import('fs').then(f => f.promises.rm(docTempDir, { recursive: true, force: true })); } catch (_) {}
+
+      log('info', 'text_llm_vlm_fallback_complete', { id, elapsed: Math.round(performance.now() - t0) });
+    }
+
+    // Step 3.5: Verification — string-match + VLM cross-check
+    const combinedOcrText = ocrPages.map(p => (p.text || p.fullText || '')).join('\n');
+    let page1ImagePath = null;
+    let verifyTempDir = null;
+    const skipVerify = process.env.SKIP_VERIFY === 'true';
+    
+    if (!skipVerify && mappedResult.extractionMethod !== 'vlm_fallback') {
+      try {
+        // Get page 1 image for VLM spot-check
+        verifyTempDir = `data/temp/${id}-verify`;
+        const imgResults = await convertPdfPagesToImages(entry.filePath, [0], {
+          targetDPI: 150,
+          maxWidth: 1600,
+          quality: 85,
+          outputDir: verifyTempDir
+        });
+        page1ImagePath = imgResults[0]?.imagePath || null;
+
+        // Run verification (string-match is instant, VLM adds ~35-40s)
+        mappedResult = await verifyExtraction(mappedResult, combinedOcrText, page1ImagePath, { id });
+
+        // Cleanup temp image
+        await cleanupTempImages(imgResults);
+        try { await fs.promises.rm(verifyTempDir, { recursive: true, force: true }); } catch (_) {}
+      } catch (verifyErr) {
+        log('warn', 'verify_error', { id, error: verifyErr.message });
+        // Verification failure is non-fatal — continue with unverified result
+        if (verifyTempDir) {
+          try { await fs.promises.rm(verifyTempDir, { recursive: true, force: true }); } catch (_) {}
+        }
+      }
+    } else if (skipVerify) {
+      log('info', 'verify_skipped', { id, reason: 'SKIP_VERIFY=true' });
+    }
+
+    // Step 4: Apply corrections and save
+    const trace = [{ rule: 'text_llm_extraction', value: `${ocrPages.length} pages via ${process.env.TEXT_MODEL || 'qwen2.5:7b'}` }];
+
+    // Apply learned corrections
+    try {
+      const corrections = await import('./corrections_db.js');
+      const learnedPhone = corrections.lookupCorrection?.('provider.phone');
+      if (learnedPhone) mappedResult.provider.phone = learnedPhone;
+    } catch (_) {}
+
+    // Enrich documentMeta with fileHash, filename, pages (mirrors vlm_direct pipeline)
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    const meta = mappedResult.documentMeta || {};
+    const intakeDate = meta.orderDate || meta.referralDate || meta.studyDate || meta.documentDate || meta.intakeDate || '';
+    if (intakeDate) meta.documentDate = intakeDate;
+    mappedResult.documentMeta = {
+      ...meta,
+      filename: entry.originalName || path.basename(entry.filePath),
+      pages: totalPages,
+      intakeDate,
+      fileHash,
+      originalFilePath: entry.filePath
+    };
+
+    // Save result
+    mappedResult._trace = trace;
+    mappedResult._timing = { totalMs: Math.round(performance.now() - t0), ocrMs: ocrElapsed };
+
+    const outputPath = `data/results/${id}.json`;
+    await fs.promises.writeFile(outputPath, JSON.stringify(mappedResult, null, 2));
+
+    entry.status = 'done';
+    entry.result = mappedResult;
+    docs.set(id, entry);
+
+    incCounter('docsProcessed');
+    recordLatency(performance.now() - t0);
+    addSnapshot(id, mappedResult);
+
+    log('info', 'text_llm_pipeline_complete', {
+      id,
+      method: mappedResult.extractionMethod,
+      elapsed: Math.round(performance.now() - t0),
+      confidence: mappedResult.confidenceScore
+    });
+
+  } catch (err) {
+    log('error', 'text_llm_pipeline_error', { id, error: err.message, stack: err.stack?.slice(0, 300) });
+    entry.status = 'error';
+    entry.error = err.message;
+    docs.set(id, entry);
+    incCounter('docsErrored');
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// VLM-DIRECT PIPELINE — Skip OCR, send page images straight to VLM
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function processDocumentVlmDirect(id) {
+  const entry = docs.get(id);
+  if (!entry) return;
+  const t0 = performance.now();
+
+  if (!entry.filePath || !fs.existsSync(entry.filePath)) {
+    entry.status = 'error';
+    entry.error = 'Input file not found';
+    entry.result = null;
+    docs.set(id, entry);
+    incCounter('docsErrored');
+    recordLatency(performance.now() - t0);
+    return;
+  }
+
+  entry.status = 'processing';
+  docs.set(id, entry);
+  log('info', 'vlm_direct_start', { id, filePath: entry.filePath });
+
+  try {
+    // Step 1: Hash the file
+    const fileBuffer = await fs.promises.readFile(entry.filePath);
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+    // Step 2: Convert PDF to page images (fast — no OCR, just rendering)
+    // First, figure out total page count
+    const pdfDoc = await PDFDocument.load(fileBuffer);
+    const totalPages = pdfDoc.getPageCount();
+    const maxPages = parseInt(process.env.MAX_PDF_PAGES || '150', 10);
+    if (totalPages > maxPages) throw new Error(`PDF exceeds max pages (${maxPages})`);
+
+    // Select pages to process: first 4 pages cover most referrals
+    // (demographics, insurance card, clinical notes, referral form)
+    const maxVlmPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
+    const pageIndices = Array.from({ length: Math.min(totalPages, maxVlmPages) }, (_, i) => i);
+
+    log('info', 'vlm_direct_converting_pages', { id, totalPages, selectedPages: pageIndices.length });
+
+    const docTempDir = `data/temp/${id}`;
+    const imageResults = await convertPdfPagesToImages(entry.filePath, pageIndices, {
+      targetDPI: 150,
+      maxWidth: 1600,
+      quality: 85,
+      outputDir: docTempDir
+    });
+
+    const imagePaths = imageResults.map(r => r.imagePath);
+    log('info', 'vlm_direct_images_ready', { 
+      id, 
+      pageCount: imagePaths.length, 
+      totalSize: imageResults.reduce((s, r) => s + r.processedSize, 0),
+      conversionMs: Math.round(performance.now() - t0)
+    });
+
+    // Step 3: Send images to VLM — this is the extraction
+    const vlmResult = await vlmExtractDocument(imagePaths, {});
+
+    log('info', 'vlm_direct_extraction_complete', {
+      id,
+      confidence: vlmResult.confidenceScore,
+      pagesUsable: vlmResult._vlm?.pagesUsable,
+      elapsed: Math.round(performance.now() - t0)
+    });
+
+    // Step 4: Cleanup temp images and per-doc temp directory
+    await cleanupTempImages(imageResults);
+    try { await import('fs').then(f => f.promises.rm(docTempDir, { recursive: true, force: true })); } catch (_) {}
+
+    // Step 5: Build the final result in the app's expected shape
+    const mappedResult = vlmResult;
+    mappedResult.extractionMethod = 'vlm_direct';
+
+    // Apply any learned corrections
+    const trace = [{ rule: 'vlm_direct_extraction', value: `${imagePaths.length} pages via ${process.env.VLM_MODEL || 'qwen2.5vl:7b'}` }];
+    applyCorrectionsPostprocess(mappedResult, trace, { id });
+
+    // Set document date from priority date fields
+    const meta = mappedResult?.documentMeta || {};
+    const intakeDate = meta.orderDate || meta.referralDate || meta.studyDate || meta.documentDate || meta.intakeDate || '';
+    if (intakeDate) meta.documentDate = intakeDate;
+
+    const result = {
+      ...mappedResult,
+      documentMeta: {
+        ...mappedResult.documentMeta,
+        filename: entry.originalName || path.basename(entry.filePath),
+        pages: totalPages,
+        intakeDate,
+        fileHash
+      }
+    };
+
+    // Filename from data
+    const filenameName = parseNameFromFilename(result.documentMeta?.filename);
+    if (filenameName) {
+      const existingFirst = result.patient?.first;
+      const existingLast = result.patient?.last;
+      const sameName = existingFirst && existingLast &&
+        existingFirst.toLowerCase() === filenameName.first.toLowerCase() &&
+        existingLast.toLowerCase() === filenameName.last.toLowerCase();
+      if (!sameName && !existingFirst && !existingLast) {
+        result.patient = { ...result.patient, ...filenameName };
+        trace.push({ rule: 'patient_name_filename_fallback', value: `${filenameName.last}, ${filenameName.first}` });
+      }
+    }
+
+    // PDF model
+    try {
+      result.pdfModel = buildPdfModel(result);
+    } catch (e) { log('warn', 'pdf_model_build_failed', { id, err: String(e.message || e) }); }
+
+    // Highlight spans
+    try {
+      const spans = buildHighlightSpans(result);
+      entry._highlight = { spans, scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+    } catch (e) {
+      entry._highlight = { spans: [], scopeColors: DEFAULT_ANNOTATION_SCOPE_COLORS };
+    }
+
+    // Confidence level alias
+    if (result?.confidenceScore != null && !result.confidenceLevel) {
+      const s = result.confidenceScore;
+      result.confidenceLevel = s >= 0.8 ? 'High' : s >= 0.55 ? 'Medium' : s >= 0.35 ? 'Low' : 'Manual Review Required';
+    }
+
+    // Generate display filename
+    try {
+      const displayFilename = generateDisplayFilename(result, { includeDate: true, includeExtension: true });
+      if (displayFilename && isValidFilename(displayFilename)) {
+        entry.displayFilename = displayFilename;
+        if (result.documentMeta) {
+          result.documentMeta.displayFilename = displayFilename;
+          result.documentMeta.suggestedFilename = displayFilename;
+        }
+        log('info', 'display_filename_generated', { id, displayFilename });
+      }
+    } catch (err) {
+      log('warn', 'display_filename_generation_failed', { id, err: String(err?.message || err) });
+    }
+
+    // Persist
+    entry.result = result;
+    entry._trace = trace;
+    entry.status = 'done';
+    entry.error = null;
+    docs.set(id, entry);
+
+    try {
+      await fsPromises.mkdir(RESULTS_DIR, { recursive: true });
+      await fsPromises.writeFile(path.join(RESULTS_DIR, `${id}.json`), JSON.stringify(result, null, 2), 'utf8');
+    } catch (e) {
+      log('warn', 'result_persist_failed', { id, err: String(e?.message || e) });
+    }
+
+    incCounter('docsProcessed');
+    recordLatency(performance.now() - t0);
+    try { addSnapshot(id, result); } catch {}
+    try { addProcessedRecord(id, entry); } catch {}
+    if (result?.confidenceScore != null) recordConfidence(Number(result.confidenceScore));
+    log('info', 'vlm_direct_complete', { 
+      id, 
+      totalMs: Math.round(performance.now() - t0), 
+      pages: totalPages,
+      confidence: result.confidenceScore 
+    });
+
+  } catch (e) {
+    entry.result = null;
+    entry.status = 'error';
+    entry.error = String(e.message || e);
+    docs.set(id, entry);
+    log('error', 'vlm_direct_failed', { id, err: entry.error });
+    incCounter('docsErrored');
+    recordLatency(performance.now() - t0);
+  }
+}
+
 async function processDocument(id) {
   const entry = docs.get(id);
   if (!entry) return;
@@ -1925,11 +2317,12 @@ async function processDocument(id) {
       log('info', 'vlm_pages_selected', { id, pages: pagesToProcess });
       
       // Step 2: Convert selected PDF pages to images for VLM
+      const docTempDir = `data/temp/${id}`;
       const imageResults = await convertPdfPagesToImages(entry.filePath, pagesToProcess, {
         targetDPI: 200,
         maxWidth: 2400,
         quality: 90,
-        outputDir: 'data/temp'
+        outputDir: docTempDir
       });
       
       const imagePaths = imageResults.map(r => r.imagePath);
@@ -1962,8 +2355,9 @@ async function processDocument(id) {
       mappedResult._vlm = vlmResult._vlm;
       mappedResult._crossValidation = crossValidated._crossValidation;
       
-      // Cleanup temp images
+      // Cleanup temp images and per-doc temp directory
       await cleanupTempImages(imageResults);
+      try { await import('fs').then(f => f.promises.rm(docTempDir, { recursive: true, force: true })); } catch (_) {}
       
     } catch (err) {
       log('warn', 'vlm_primary_failed', { id, err: String(err.message || err) });
@@ -2491,7 +2885,7 @@ app.post('/api/documents/processed/purge', express.json({ limit: '64kb' }), asyn
 app.post('/api/admin/backfill-pdf-models', (req, res) => {
   let built = 0;
   for (const [id, entry] of docs.entries()) {
-    if (entry.status === 'done' && entry.result && !entry.result.pdfModel) {
+    if (isDone(entry) && !entry.result.pdfModel) {
       try {
         entry.result.pdfModel = buildPdfModel(entry.result);
         if (entry.result.pdfModel && typeof recordPdfModelStats === 'function') {
@@ -2531,7 +2925,7 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
     for (const id of ids) {
       let entry = docs.get(id);
       // Recovery: load persisted result if in-memory missing
-      if (!entry || entry.status !== 'done' || !entry.result) {
+      if (!isDone(entry)) {
         try {
           const raw = await fsPromises.readFile(path.join(RESULTS_DIR, `${id}.json`), 'utf8');
           const result = JSON.parse(raw);
@@ -2542,7 +2936,7 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
           if (originalBuf) entry._originalBytes = originalBuf; // as a buffer fallback
         } catch {}
       }
-      if (!entry || entry.status !== 'done' || !entry.result) continue;
+      if (!isDone(entry)) continue;
       try {
         const stem = buildSummaryFileStem(entry.result);
         // Build packet.pdf (summary + original merged)

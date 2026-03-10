@@ -747,6 +747,10 @@ async def ocr(request: Request, file: UploadFile = File(...)):
     }
 
     try:
+        # Fast-mode flags from query params
+        skip_rotate = (q.get('skip_rotate') or '').lower() in ('true', '1', 'yes')
+        skip_tile = (q.get('skip_tile') or '').lower() in ('true', '1', 'yes')
+
         for i, img in enumerate(images):
             import time
             page_start = time.time()
@@ -759,14 +763,18 @@ async def ocr(request: Request, file: UploadFile = File(...)):
             det_engine = getattr(engine, 'text_det', None)
             cls_engine = getattr(engine, 'text_cls', None)
             rec_engine = getattr(engine, 'text_rec', None)
-            img = autorotate_with_cls(img, det_engine, cls_engine)
-            print(f"[ocr] {_timestamp()} page={i+1} autorotate took {time.time()-t1:.2f}s", flush=True)
+            if not skip_rotate:
+                img = autorotate_with_cls(img, det_engine, cls_engine)
+            print(f"[ocr] {_timestamp()} page={i+1} autorotate took {time.time()-t1:.2f}s (skipped={skip_rotate})", flush=True)
             
             # Stage 2: Check if tiling needed for very large images
             t2 = time.time()
-            # Pass the sub-engines (text_det and text_rec) to tiling function
-            tiled_result, was_tiled = maybe_tile(img, det_engine, rec_engine)
-            print(f"[ocr] {_timestamp()} page={i+1} tiling_check took {time.time()-t2:.2f}s (tiled={was_tiled})", flush=True)
+            tiled_result = None
+            was_tiled = False
+            if not skip_tile:
+                # Pass the sub-engines (text_det and text_rec) to tiling function
+                tiled_result, was_tiled = maybe_tile(img, det_engine, rec_engine)
+            print(f"[ocr] {_timestamp()} page={i+1} tiling_check took {time.time()-t2:.2f}s (tiled={was_tiled}, skipped={skip_tile})", flush=True)
             
             if was_tiled:
                 # Use tiled results directly
