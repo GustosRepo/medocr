@@ -1,0 +1,174 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "Filename pattern -> routing rules for M1A File Intake. Files are manually labeled during intake with standardized suffixes. This JSON maps those patterns to document types, expected studies, and routing decisions.",
+  "_used_by": "M1A (File Intake & OCR)",
+  "_source": "Visual Decision Tree v0.19.0 M1A section, LLM Framework v0.16 Part 1.0, Codified Logic Tree v0.16.5 Stage 0-1",
+
+  "patterns": {
+    "_INCOMPLETE": {
+      "document_type": "incomplete",
+      "route": "SIMPLIFIED",
+      "action": "M6_PENDING",
+      "process_ocr": false,
+      "description": "Fax/document not complete. Request full document from sender.",
+      "flag": "STOP_INCOMPLETE",
+      "human_action": "Fax back request for complete document. Include blank Rx form."
+    },
+    "_MSLT": {
+      "document_type": "order_present",
+      "route": "SIMPLIFIED",
+      "action": "M6_STOP",
+      "process_ocr": false,
+      "description": "Multiple Sleep Latency Test -- not a service we provide.",
+      "flag": "STOP_UNABLE_TO_SCHEDULE",
+      "human_action": "Fax UTS (Unable to Schedule) to referring provider."
+    },
+    "_MWT": {
+      "document_type": "order_present",
+      "route": "SIMPLIFIED",
+      "action": "M6_STOP",
+      "process_ocr": false,
+      "description": "Maintenance of Wakefulness Test -- not a service we provide.",
+      "flag": "STOP_UNABLE_TO_SCHEDULE",
+      "human_action": "Fax UTS (Unable to Schedule) to referring provider."
+    },
+    "_POX": {
+      "document_type": "courtesy",
+      "route": "SIMPLIFIED",
+      "action": "COURTESY_BYPASS",
+      "process_ocr": true,
+      "description": "Pulse oximetry -- courtesy test. Bypasses normal authorization workflow.",
+      "flag": "FLAG_POX_COURTESY",
+      "human_action": "Process as courtesy test. Minimal documentation required."
+    },
+    "_Chart Notes": {
+      "document_type": "notes_only",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "unknown",
+      "description": "Chart notes without a separate order. Check Path C (order language in notes).",
+      "validation_path": "C",
+      "notes": "No CPT in filename -- order scope determined from note content in M2A."
+    },
+    "_95806": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "HST",
+      "expected_cpt": ["95806"],
+      "description": "Home Sleep Test order.",
+      "validation_path": "AB"
+    },
+    "_G0399": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "HST",
+      "expected_cpt": ["G0399"],
+      "description": "Home Sleep Test order (alternate code).",
+      "validation_path": "AB"
+    },
+    "_95810": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "PSG",
+      "expected_cpt": ["95810"],
+      "description": "In-lab diagnostic polysomnography order.",
+      "validation_path": "AB"
+    },
+    "_95811": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "TITRATION",
+      "expected_cpt": ["95811"],
+      "description": "PAP titration order. Requires prior positive diagnostic.",
+      "validation_path": "AB"
+    },
+    "_95810,95811": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "FULL_SCOPE",
+      "expected_cpt": ["95810", "95811"],
+      "description": "Full scope order -- diagnostic + titration. Split night evaluation eligible.",
+      "validation_path": "AB"
+    },
+    "_95806,95810": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "DIAGNOSTIC",
+      "expected_cpt": ["95806", "95810"],
+      "description": "Diagnostic scope -- HST and/or PSG. Test selection in M4.",
+      "validation_path": "AB"
+    },
+    "_95806,95810,95811": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "COMPLETE",
+      "expected_cpt": ["95806", "95810", "95811"],
+      "description": "Complete scope -- all tests authorized by physician.",
+      "validation_path": "AB"
+    },
+    "_95782": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "PEDIATRIC_PSG",
+      "expected_cpt": ["95782"],
+      "description": "Pediatric PSG (age 2-5). Verify age at anticipated service date.",
+      "validation_path": "AB"
+    },
+    "_95783": {
+      "document_type": "order_present",
+      "route": "FULL_OCR",
+      "action": "PROCESS",
+      "process_ocr": true,
+      "expected_study": "PEDIATRIC_TITRATION",
+      "expected_cpt": ["95783"],
+      "description": "Pediatric titration (age 2-5). Requires prior positive diagnostic.",
+      "validation_path": "AB"
+    }
+  },
+
+  "default_pattern": {
+    "document_type": "unknown",
+    "route": "FULL_OCR",
+    "action": "PROCESS",
+    "process_ocr": true,
+    "expected_study": "unknown",
+    "description": "Filename doesn't match known patterns. Process through OCR and determine scope in M2A.",
+    "validation_path": "AB",
+    "flag": "INFO_UNRECOGNIZED_FILENAME"
+  },
+
+  "filename_format": {
+    "description": "Standard format: LastName, FirstName_CPTcodes OR _suffix",
+    "examples": [
+      "Smith, John_95806",
+      "Garcia, Maria_95810,95811",
+      "Lee, David_Chart Notes",
+      "Brown, Sarah_INCOMPLETE",
+      "Wilson, James_MSLT",
+      "Chen, Amy_POX"
+    ],
+    "parsing_rules": {
+      "patient_name": "Everything before the last underscore",
+      "suffix": "Everything after the last underscore",
+      "cpt_codes": "If suffix contains comma-separated numbers, parse as CPT array"
+    }
+  }
+}

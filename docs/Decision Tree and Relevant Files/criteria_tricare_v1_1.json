@@ -1,0 +1,408 @@
+{
+  "_meta": {
+    "criteria_id": "tricare",
+    "criteria_name": "TRICARE",
+    "version": "1.1",
+    "effective_date": "2026-02-01",
+    "strictness_tier": 2,
+    "strictness_label": "MODERATE",
+    "notes": "Only Prime plans require auth/referral. Select/TFL/Reserve need no auth. Prime plans use Carelon baseline criteria for clinical sufficiency. Updated: full clinical criteria sections with keywords added for Prime plan M2C/M2D processing. Non-Prime plans skip clinical review but universal hard stops still apply."
+  },
+  "plan_types": {
+    "prime_active_duty": {
+      "auth_required": true,
+      "referral_required": true,
+      "referral_source": "pcm_via_regional_contractor"
+    },
+    "prime_other": {
+      "auth_required": true,
+      "referral_required": true,
+      "referral_source": "pcm_via_regional_contractor"
+    },
+    "select": {
+      "auth_required": false,
+      "referral_required": false
+    },
+    "select_overseas": {
+      "auth_required": false,
+      "referral_required": false
+    },
+    "reserve_select": {
+      "auth_required": false,
+      "referral_required": false
+    },
+    "retired_reserve": {
+      "auth_required": false,
+      "referral_required": false
+    },
+    "young_adult_select": {
+      "auth_required": false,
+      "referral_required": false
+    },
+    "for_life": {
+      "auth_required": false,
+      "referral_required": false,
+      "secondary_to_medicare": true,
+      "coverage_percent": 100
+    }
+  },
+  "clinical_criteria_for_prime": {
+    "source": "carelon_baseline",
+    "criteria_file": "criteria_carelon.json",
+    "notes": "Use Carelon-level documentation as conservative default for Prime plan auths"
+  },
+  "clinical_criteria_for_non_prime": {
+    "source": "none",
+    "notes": "No clinical review -- schedule directly after verification"
+  },
+  "verification": {
+    "requires_ssn_or_dbn": true,
+    "portal_limitations": "Tricare For Life must CALL to verify -- portal won't work",
+    "availity_note": "Redirects to Tricare's own system, multiple steps"
+  },
+  "hst_eligibility": {
+    "description": "For Prime plans: use Carelon baseline criteria. For non-Prime: no clinical review.",
+    "applies_to": "prime_plans_only",
+    "carelon_baseline": true,
+    "pathways": [
+      {
+        "id": "A",
+        "name": "Observed Apneas",
+        "requires": [
+          "observed_apneas"
+        ],
+        "minimum_count": 1
+      },
+      {
+        "id": "B",
+        "name": "Symptom 2-of-5",
+        "requires_from": [
+          "excessive_daytime_sleepiness",
+          "habitual_snoring",
+          "treatment_resistant_hypertension",
+          "obesity",
+          "craniofacial_airway"
+        ],
+        "minimum_count": 2
+      },
+      {
+        "id": "C",
+        "name": "Cardiovascular + 1 Symptom",
+        "requires": [
+          "cardiovascular"
+        ],
+        "plus_from": [
+          "excessive_daytime_sleepiness",
+          "habitual_snoring",
+          "treatment_resistant_hypertension",
+          "obesity",
+          "craniofacial_airway"
+        ],
+        "plus_minimum": 1
+      },
+      {
+        "id": "D",
+        "name": "Unexplained Condition",
+        "description": "Pulmonary HTN, treatment-resistant arrhythmia, or refractory HTN without other cause"
+      }
+    ],
+    "symptom_definitions": {
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      },
+      "treatment_resistant_hypertension": {
+        "keywords": [
+          "resistant hypertension",
+          "refractory hypertension",
+          "3+ antihypertensive",
+          "three or more BP medications",
+          "uncontrolled hypertension"
+        ],
+        "medication_count_threshold": 3
+      },
+      "obesity": {
+        "keywords": [
+          "obese",
+          "obesity",
+          "BMI",
+          "overweight",
+          "neck circumference",
+          "morbid obesity"
+        ],
+        "bmi_threshold": 30,
+        "neck_circumference_male_inches": 17,
+        "neck_circumference_female_inches": 16
+      },
+      "craniofacial_airway": {
+        "keywords": [
+          "adenotonsillar hypertrophy",
+          "retrognathia",
+          "macroglossia",
+          "deviated septum",
+          "craniofacial",
+          "micrognathia",
+          "Mallampati",
+          "tonsillar enlargement",
+          "narrow airway",
+          "crowded oropharynx"
+        ]
+      },
+      "cardiovascular": {
+        "keywords": [
+          "coronary artery disease",
+          "CAD",
+          "atrial fibrillation",
+          "AFib",
+          "sustained arrhythmia",
+          "ischemic heart disease",
+          "IHD",
+          "myocardial infarction"
+        ]
+      },
+      "observed_apneas": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "bed partner reports apnea",
+          "spouse observed breathing stops",
+          "observed cessation of breathing"
+        ]
+      }
+    }
+  },
+  "hst_contraindications": {
+    "description": "For Prime plans: use Carelon baseline contraindications. For non-Prime: no clinical review, but universal hard stops still apply.",
+    "applies_to": "all_plans",
+    "conditions": [
+      {
+        "id": "home_oxygen",
+        "condition": "Supplemental oxygen -- HARD STOP for HST (universal)",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "applies_to": "all_plans"
+      },
+      {
+        "id": "copd",
+        "condition": "FEV1/FVC <= 0.7 AND FEV1 < 80% (Carelon threshold)",
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "prime_only"
+      },
+      {
+        "id": "chf",
+        "condition": "NYHA Class III or IV",
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "prime_only"
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": "Chronic opioid use",
+        "keywords": [
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "prime_only"
+      },
+      {
+        "id": "neuromuscular",
+        "condition": "Progressive neuromuscular disease",
+        "keywords": [
+          "ALS",
+          "amyotrophic lateral sclerosis",
+          "MS",
+          "multiple sclerosis",
+          "myotonic dystrophy",
+          "Parkinson",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "spinal muscular atrophy",
+          "neuropathy",
+          "Guillain-Barre"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "prime_only"
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Suspected central sleep apnea",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "prime_only"
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "Unable to operate home equipment",
+        "keywords": [
+          "dementia",
+          "cognitive impairment",
+          "Alzheimer",
+          "unable to follow instructions"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "all_plans"
+      },
+      {
+        "id": "physical_impairment",
+        "condition": "Unable to apply equipment",
+        "keywords": [
+          "physical impairment",
+          "unable to apply",
+          "dexterity",
+          "mobility limitation",
+          "bedridden"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "all_plans"
+      },
+      {
+        "id": "failed_hst",
+        "condition": "Prior HST failed or inconclusive",
+        "keywords": [
+          "failed HST",
+          "inadequate HST",
+          "HST failure",
+          "inconclusive HST",
+          "failed HSAT",
+          "HSAT failure",
+          "negative HSAT"
+        ],
+        "action": "route_to_psg",
+        "applies_to": "all_plans"
+      }
+    ]
+  },
+  "psg_criteria": {
+    "description": "For Prime: Carelon baseline PSG indications. For non-Prime: no auth needed, schedule directly.",
+    "indications": [
+      "hst_contraindication_present",
+      "failed_hst",
+      "pediatric",
+      "suspected_narcolepsy_or_parasomnia",
+      "clinical_judgment"
+    ]
+  },
+  "titration_criteria": {
+    "description": "Carelon baseline: prior positive diagnostic required",
+    "requires": "confirmed_osa_diagnosis",
+    "ahi_threshold": 5,
+    "prior_study_max_years": 5
+  },
+  "split_night_criteria": {
+    "indicated": {
+      "ahi_threshold": 40,
+      "window_hours": 2
+    },
+    "may_consider": {
+      "ahi_min": 20,
+      "ahi_max": 40,
+      "window_hours": 2
+    },
+    "not_recommended": {
+      "ahi_below": 20
+    },
+    "minimum_titration_hours": 3
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    }
+  },
+  "thresholds": {
+    "_notes": "Carelon baseline thresholds used for Prime plan clinical review",
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_indicated": 40,
+    "ahi_split_may_consider": 20,
+    "ahi_pediatric_abnormal": 1,
+    "bmi_obesity": 30,
+    "bmi_ohs_risk": 33,
+    "bicarb_ohs": 28,
+    "ess_threshold": 10,
+    "fev1_copd": 80,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

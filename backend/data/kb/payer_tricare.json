@@ -1,0 +1,219 @@
+{
+  "_meta": {
+    "payer_id": "tricare",
+    "payer_name": "TRICARE",
+    "version": "1.1",
+    "last_updated": "2026-02-01",
+    "notes": "v1.0→v1.1: Added plan_type_routing with per-plan workflows/pain levels, regional_contractors, id_format rules (SSN/DBN), identification_tips for plan classification, FLAG_TRICARE_SELECT_NO_AUTH flag. Plan type determines everything. Prime = auth + referral. Select/TFL/Reserve = no auth, no referral. Need SSN or DBN to verify."
+  },
+  "criteria_source": {
+    "criteria_id": "tricare",
+    "criteria_file": "criteria_tricare_v1_1.json",
+    "confidence": "verified"
+  },
+  "plan_types": [
+    "prime_active_duty",
+    "prime_other",
+    "select",
+    "select_overseas",
+    "reserve_select",
+    "retired_reserve",
+    "young_adult_select",
+    "for_life"
+  ],
+  "plan_type_routing": {
+    "prime_active_duty": {
+      "auth_required": true,
+      "referral_required": true,
+      "referral_source": "pcm_via_regional_contractor",
+      "additional": "Fitness-for-duty review may be required",
+      "without_referral": "patient pays out of pocket",
+      "verification_method": "availity_ssn",
+      "pain_level": "red",
+      "workflow": [
+        "Verify eligibility (need SSN or DBN)",
+        "Confirm plan is Prime Active Duty",
+        "Patient must get referral from PCM",
+        "PCM submits for pre-auth through regional contractor",
+        "Once auth received → schedule patient"
+      ]
+    },
+    "prime_other": {
+      "auth_required": true,
+      "referral_required": true,
+      "referral_source": "pcm_via_regional_contractor",
+      "without_referral": "point-of-service option at higher cost",
+      "special_cases": {
+        "prime_remote": "Work with regional contractor if no assigned PCM",
+        "overseas": "Call TRICARE Overseas Regional Call Center"
+      },
+      "verification_method": "availity_ssn",
+      "pain_level": "red",
+      "workflow": [
+        "Verify eligibility (need SSN or DBN)",
+        "Confirm plan is Prime (not Select)",
+        "Patient must get referral from PCM",
+        "PCM gets referral AND pre-auth simultaneously",
+        "Once auth received → schedule patient"
+      ]
+    },
+    "select": {
+      "auth_required": false,
+      "referral_required": false,
+      "verification_method": "availity_ssn",
+      "pain_level": "yellow",
+      "workflow": [
+        "Verify eligibility via Availity (need SSN or DBN)",
+        "Confirm plan type is Select",
+        "No referral needed",
+        "No pre-auth needed for sleep studies",
+        "Schedule directly"
+      ]
+    },
+    "select_overseas": {
+      "auth_required": false,
+      "referral_required": false,
+      "verification_method": "availity_ssn",
+      "pain_level": "yellow"
+    },
+    "reserve_select": {
+      "auth_required": false,
+      "referral_required": false,
+      "verification_method": "availity_ssn",
+      "pain_level": "yellow",
+      "workflow": [
+        "Verify eligibility via Availity (need SSN or DBN)",
+        "Confirm plan type",
+        "No referral needed",
+        "No pre-auth needed for sleep studies",
+        "Schedule directly"
+      ]
+    },
+    "retired_reserve": {
+      "auth_required": false,
+      "referral_required": false,
+      "verification_method": "availity_ssn",
+      "pain_level": "yellow"
+    },
+    "young_adult_select": {
+      "auth_required": false,
+      "referral_required": false,
+      "verification_method": "availity_ssn",
+      "pain_level": "yellow"
+    },
+    "for_life": {
+      "auth_required": false,
+      "referral_required": false,
+      "secondary_to_medicare": true,
+      "coverage_after_medicare": "100%",
+      "verification_method": "phone_only",
+      "verification_note": "Must CALL to verify — portal will NOT work",
+      "pain_level": "green",
+      "workflow": [
+        "Verify Medicare paid first",
+        "CALL Tricare to verify TFL eligibility (portal won't work)",
+        "No auth required for any codes",
+        "100% covered after Medicare",
+        "Schedule directly"
+      ]
+    }
+  },
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": "prime_only"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "regional_contractor",
+    "notes": "PCM works with regional contractor for Prime plans. No submission needed for Select/TFL."
+  },
+  "referral": {
+    "required": "prime_only",
+    "notes": "Prime plans require PCM referral for specialty care. Select/TFL/Reserve do not. Without referral on Prime, patient pays out of pocket or uses point-of-service option."
+  },
+  "regional_contractors": {
+    "east": {
+      "contractor": "Humana Military",
+      "notes": "Check specific requirements"
+    },
+    "west": {
+      "contractor": "Health Net Federal Services",
+      "notes": "Check specific requirements"
+    },
+    "overseas": {
+      "contractor": "TRICARE Overseas",
+      "notes": "Call Regional Call Center"
+    }
+  },
+  "id_format": {
+    "ssn": {
+      "digits": 9,
+      "description": "Social Security Number — primary verification identifier",
+      "format_regex": "^\\d{9}$"
+    },
+    "dbn": {
+      "digits": 11,
+      "description": "Defense Benefits Number — alternative to SSN",
+      "format_regex": "^\\d{11}$"
+    },
+    "verification_note": "Cannot verify eligibility with Member ID alone — need SSN or DBN"
+  },
+  "identification_tips": [
+    { "clue": "Active duty military", "likely_plan": "prime_active_duty" },
+    { "clue": "Military dependent", "likely_plan": "prime_other OR select — verify" },
+    { "clue": "Retired on card", "likely_plan": "retired_reserve OR for_life" },
+    { "clue": "Medicare primary", "likely_plan": "for_life" },
+    { "clue": "Reserve or Guard member", "likely_plan": "reserve_select" },
+    { "clue": "Under 26, parent is military", "likely_plan": "young_adult_select" }
+  ],
+  "verification_challenges": [
+    "Cannot verify eligibility with Member ID alone — need SSN or DBN",
+    "Tricare For Life: Must CALL to verify (portal won't work)",
+    "Availity redirects to Tricare's own system — multiple steps required"
+  ],
+  "pain_level": "red",
+  "flags": [
+    {
+      "flag_id": "FLAG_TRICARE_PRIME_AUTH",
+      "trigger": "tricare_prime",
+      "message": "Patient needs referral from PCM + pre-auth for specialty care",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_TRICARE_SELECT_NO_AUTH",
+      "trigger": "tricare_select_or_reserve_or_ya",
+      "message": "No auth required for sleep studies — verify eligibility and schedule directly",
+      "severity": "info",
+      "blocking": false
+    },
+    {
+      "flag_id": "FLAG_TRICARE_SSN_REQUIRED",
+      "trigger": "tricare AND no_ssn_dbn",
+      "message": "Need SSN or DBN to verify eligibility",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_TRICARE_FOR_LIFE",
+      "trigger": "tricare_for_life",
+      "message": "CALL to verify (portal won't work). 100% covered after Medicare.",
+      "severity": "low",
+      "blocking": false
+    }
+  ]
+}

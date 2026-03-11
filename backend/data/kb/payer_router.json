@@ -1,0 +1,393 @@
+{
+  "_meta": {
+    "description": "Three-layer payer identification and routing engine. Layer 1: name matching. Layer 2: ID pattern / card clue detection. Layer 3: unknown payer protocol with Carelon baseline fallback. Feeds into payer_*.json files for operational rules and criteria_*.json for clinical standards.",
+    "version": "3.0",
+    "last_updated": "2026-02-27",
+    "relationship_to_payer_criteria_map": "This file is the FRONT DOOR that was always missing from payer_criteria_map.json. It resolves OCR-extracted text into a payer_id, which then loads the corresponding payer JSON (individual files) or payer_criteria_map entry (legacy). The criteria map assumed the payer was already identified -- this file does the identifying."
+  },
+
+  "resolution_order": {
+    "description": "Try these layers in order. Stop at first confident match.",
+    "layer_1": "Name matching -- compare OCR-extracted payer name against known names",
+    "layer_2": "ID pattern detection -- analyze member ID format, card logos, network indicators",
+    "layer_3": "Unknown protocol -- process clinicals against Carelon baseline, flag for verification"
+  },
+
+  "layer_1_name_routes": {
+    "_usage": "Normalize OCR text to lowercase. Try exact match, then substring match, then fuzzy match. Multiple names map to same payer_id.",
+
+    "aetna":                      {"payer_id": "aetna",               "notes": null},
+    "aetna medicare":             {"payer_id": "aetna",               "notes": "Aetna Medicare still routes through Evicore"},
+    "meritain health":            {"payer_id": "meritain",            "notes": "Aetna subsidiary -- different workflow"},
+    "meritain":                   {"payer_id": "meritain",            "notes": null},
+
+    "anthem bcbs":                {"payer_id": "bcbs_carelon",        "notes": "Verify prefix in bcbs_prefix_database.json"},
+    "anthem bcbs medicaid":       {"payer_id": "anthem_medicaid",     "notes": "Uses Carelon criteria but submits via Availity/fax -- NOT Carelon portal"},
+    "anthem bcbs medicare":       {"payer_id": "bcbs_carelon",        "notes": "Verify prefix"},
+    "anthem mediblue":            {"payer_id": "bcbs_carelon",        "notes": "Anthem Medicare product"},
+    "anthem":                     {"payer_id": "bcbs_carelon",        "notes": "Default to Carelon -- verify prefix"},
+    "bcbs":                       {"payer_id": "bcbs_carelon",        "notes": "Generic BCBS -- run prefix check"},
+    "bcbs federal":               {"payer_id": "bcbs_non_carelon",    "notes": "Federal employee plan"},
+    "blue cross/blue shield":     {"payer_id": "bcbs_carelon",        "notes": "Generic -- run prefix check"},
+
+    "carpenters health":          {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefix JVU."},
+    "electrical workers":         {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefixes QEW, AFJ."},
+    "operating engineers":        {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefix OEHOE. NO AUTH per prefix DB."},
+    "southwest carpenters":       {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefixes N5X, EFWSC."},
+    "teamsters":                  {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefixes JTL, JTFZBL, TDGZHC."},
+    "ufcw local 711":             {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Prefix W9QCW."},
+    "sheet metal workers":        {"payer_id": "bcbs_carelon",        "notes": "BCBS union plan. Verify prefix."},
+    "lucent health":              {"payer_id": "bcbs_non_carelon",    "notes": "BCBS affiliate. Prefix FCT."},
+
+    "cigna":                      {"payer_id": "cigna",               "notes": null},
+    "great west health care":     {"payer_id": "cigna",               "notes": "Acquired by Cigna. Verify if processing through Evicore."},
+
+    "united healthcare":          {"payer_id": "uhc_commercial",      "notes": "Default to Commercial -- check for Medicare/Optum during benefits"},
+    "uhc":                        {"payer_id": "uhc_commercial",      "notes": null},
+    "uhg":                        {"payer_id": "uhc_commercial",      "notes": null},
+    "unicare":                    {"payer_id": "uhc_commercial",      "notes": "UHC subsidiary"},
+    "united aarp medicare":       {"payer_id": "uhc_medicare_direct", "notes": "Check if Optum-managed during benefits"},
+    "united medicare focus":      {"payer_id": "uhc_medicare_direct", "notes": "Check if Optum-managed"},
+    "aarp":                       {"payer_id": "uhc_medicare_direct", "notes": "AARP Medicare through UHC"},
+    "aarp medicare":              {"payer_id": "uhc_medicare_direct", "notes": null},
+    "optumcare":                  {"payer_id": "uhc_medicare_optum",  "notes": "Optum-managed -- use Curo portal"},
+    "surest":                     {"payer_id": "uhc_surest",          "notes": "Variable copay -- must call for accurate copay"},
+
+    "humana":                     {"payer_id": "humana",              "notes": "Check for Optum IPA during benefits"},
+    "tricare":                    {"payer_id": "tricare",             "notes": "Determine Prime vs Select during verification"},
+    "triwest":                    {"payer_id": "tricare",             "notes": "TriWest manages TRICARE West Region"},
+
+    "medicare":                   {"payer_id": "medicare_ffs",        "notes": "Default FFS. If Medicare Advantage, reroute to parent company."},
+    "medicare advantage":         {"payer_id": "medicare_ffs",        "notes": "Identify parent company and reroute to that payer_id"},
+
+    "medicaid":                   {"payer_id": "nevada_medicaid_ffs", "notes": "Determine MCO or FFS"},
+    "medicaid (sami)":            {"payer_id": "nevada_medicaid_ffs", "notes": "SAMI = State-Administered Medicaid"},
+
+    "silver summit health plan":  {"payer_id": "silversummit",        "notes": null},
+    "ambetter":                   {"payer_id": "silversummit",        "notes": "Ambetter = Silversummit marketplace product"},
+    "molina medicaid":            {"payer_id": "molina",              "notes": null},
+
+    "sierra health & life":       {"payer_id": "sierra_hpn",         "notes": null},
+    "sierra healthcare options":  {"payer_id": "sierra_hpn",         "notes": null},
+    "hpn (hmo)":                  {"payer_id": "sierra_hpn",         "notes": null},
+    "hpn (pos)":                  {"payer_id": "sierra_hpn",         "notes": null},
+    "hpn (ppo)":                  {"payer_id": "sierra_hpn",         "notes": null},
+    "hpn medicaid":               {"payer_id": "sierra_hpn",         "notes": null},
+    "blue hpn":                   {"payer_id": "sierra_hpn",         "notes": null},
+
+    "umr":                        {"payer_id": "umr",                 "notes": "Check portal redirect for Sierra vs UHC network"},
+    "clark county self-funded":   {"payer_id": "sierra_hpn",         "notes": "UMR sub-plan. HPN portal. HST 95806."},
+    "mgm direct":                 {"payer_id": "sierra_hpn",         "notes": "UMR sub-plan. HPN portal. HST 95806. 100/0."},
+    "loomis":                     {"payer_id": "sierra_hpn",         "notes": "UMR sub-plan. HPN portal."},
+    "pebp":                       {"payer_id": "sierra_hpn",         "notes": "Public Employees Benefits Program. HPN portal."},
+    "venetian":                   {"payer_id": "sierra_hpn",         "notes": "Local employer plan. HPN portal."},
+    "hometown health":            {"payer_id": "sierra_hpn",         "notes": "Local NV plan. HPN portal. HST 95806."},
+
+    "teachers health trust":      {"payer_id": "champva",            "notes": "NO AUTH any code. HST 80/20. In-lab $75 copay."},
+
+    "va choice":                  {"payer_id": "va",                  "notes": null},
+    "champ va":                   {"payer_id": "champva",             "notes": null},
+
+    "department of labor":        {"payer_id": "workers_comp",        "notes": null},
+    "dcmwc":                      {"payer_id": "workers_comp",        "notes": "Division of Coal Mine Workers Compensation"},
+    "deeoic":                     {"payer_id": "workers_comp",        "notes": "DOE Energy Employees"},
+
+    "geha":                       {"payer_id": "geha",                "notes": null},
+    "apwu":                       {"payer_id": "geha",                "notes": "APWU uses GEHA network"},
+    "nalc":                       {"payer_id": "geha",                "notes": "NALC uses GEHA network"},
+    "mailhandler's":              {"payer_id": "geha",                "notes": "Mailhandlers uses GEHA network"},
+
+    "ebms":                       {"payer_id": "ebms",                "notes": null},
+    "allegiance benefits":        {"payer_id": "ebms",                "notes": "TPA. Call to verify auth."},
+    "principal life":             {"payer_id": "ebms",                "notes": "Employer TPA. Call to verify."},
+    "trustmark":                  {"payer_id": "ebms",                "notes": "TPA. Call to verify."},
+
+    "multiplan/phcs":             {"payer_id": "multiplan_phcs",      "notes": null},
+    "phcs":                       {"payer_id": "multiplan_phcs",      "notes": null},
+    "beech street":               {"payer_id": "multiplan_phcs",      "notes": "Beech Street = Multiplan network"},
+    "first health":               {"payer_id": "first_health",        "notes": "Call IBA"},
+    "allied benefits":            {"payer_id": "multiplan_phcs",      "notes": "TPA. Multiplan/PHCS network."},
+    "assurant health":            {"payer_id": "multiplan_phcs",      "notes": "Multiplan/PHCS network."},
+    "john alden":                 {"payer_id": "multiplan_phcs",      "notes": "Assurant subsidiary. Multiplan/PHCS."},
+    "healthscope":                {"payer_id": "multiplan_phcs",      "notes": "TPA. Multiplan/PHCS."},
+    "ghi (emblem health)":        {"payer_id": "multiplan_phcs",      "notes": "NY plan. OON for NV. Multiplan when applicable."},
+    "mutual of omaha":            {"payer_id": "multiplan_phcs",      "notes": "Multiplan/PHCS. Call IBA."},
+    "one health":                 {"payer_id": "multiplan_phcs",      "notes": "Small carrier. Multiplan/PHCS."},
+    "the health plan":            {"payer_id": "multiplan_phcs",      "notes": "Regional. Multiplan/PHCS for OON NV."},
+    "us health group":            {"payer_id": "first_health",        "notes": "First Health Network."},
+    "medi-share":                 {"payer_id": "multiplan_phcs",      "notes": "Health sharing ministry. In-lab only. No HST rate."},
+
+    "las vegas fire fighters":    {"payer_id": "lv_firefighters",     "notes": null},
+    "clark county firefighters":  {"payer_id": "lv_firefighters",     "notes": "Same union plan"},
+    "caresource":                 {"payer_id": "caresource",          "notes": null},
+    "prominence":                 {"payer_id": "sierra_hpn",          "notes": "CONTRACT EXPIRED 2025-10-31. Verify current status."}
+  },
+
+  "layer_2_pattern_detection": {
+    "_usage": "When Layer 1 name match fails or returns ambiguous result, analyze the member ID format, card features, and network indicators to narrow identification.",
+
+    "id_format_patterns": {
+      "_description": "Regex patterns against the member ID string. Test in order -- first match wins.",
+
+      "bcbs_alpha_prefix": {
+        "regex": "^[A-Z]{3}",
+        "description": "3-letter prefix = BCBS plan. Extract prefix, look up in bcbs_prefix_database.json.",
+        "route_to": "bcbs_carelon",
+        "secondary_check": "bcbs_prefix_database.json",
+        "confidence": "high",
+        "id_body_subtyping": {
+          "all_numeric_after_prefix": {
+            "regex_body": "^\\d{6,}$",
+            "signal": "Typically NOT Carelon. Chat verification usually unavailable. Call or use payer portal.",
+            "likely_carelon": false
+          },
+          "alpha_numeric_mixed": {
+            "regex_body": "\\d{1,4}[A-Z]\\d{3,}",
+            "signal": "Usually Carelon or No Auth. Chat verification typically works.",
+            "likely_carelon": true
+          },
+          "extended_numeric": {
+            "regex_body": "^\\d{10,}$",
+            "signal": "Unusual. Special plan. Call to verify.",
+            "likely_carelon": false
+          }
+        }
+      },
+
+      "bcbs_federal_r_prefix": {
+        "regex": "^R\\d{8,}$",
+        "description": "Single R + 8+ digits = BCBS Federal Employee Program",
+        "route_to": "bcbs_non_carelon",
+        "confidence": "high"
+      },
+
+      "medicare_mbi": {
+        "regex": "^\\d[A-Z][A-Z0-9]\\d[A-Z][A-Z0-9]\\d[A-Z][A-Z0-9]\\d\\d$",
+        "description": "Medicare Beneficiary Identifier format: 1C4D5E6F7G89 pattern (digit-letter alternating, 11 chars)",
+        "route_to": "medicare_ffs",
+        "confidence": "high",
+        "notes": "If patient also has a commercial plan, this may be secondary. Check COB."
+      },
+
+      "medicaid_nv": {
+        "regex": "^\\d{10,12}$",
+        "description": "10-12 digit numeric ID with no letters = likely Nevada Medicaid",
+        "route_to": "nevada_medicaid_ffs",
+        "confidence": "medium",
+        "notes": "Could also be MCO Medicaid -- need to determine which MCO. Use medicaid_mco_routing."
+      },
+
+      "tricare_dod": {
+        "regex": "^\\d{10}$",
+        "description": "10-digit DOD Benefits Number",
+        "route_to": "tricare",
+        "confidence": "medium",
+        "notes": "Could also be SSN-based. Confirm with card or patient."
+      },
+
+      "uhc_format": {
+        "regex": "^\\d{9}$",
+        "description": "9-digit numeric = common UHC format",
+        "route_to": "uhc_commercial",
+        "confidence": "low",
+        "notes": "Many payers use 9-digit IDs. Only use as tiebreaker with other clues."
+      }
+    },
+
+    "card_clue_detection": {
+      "_description": "OCR may extract logos, network names, phone numbers, or other text from insurance cards. These clues help identify the payer even when the name is unclear.",
+
+      "logo_keywords": {
+        "blue cross": "bcbs_carelon",
+        "blue shield": "bcbs_carelon",
+        "bcbs": "bcbs_carelon",
+        "anthem": "bcbs_carelon",
+        "cigna": "cigna",
+        "united": "uhc_commercial",
+        "uhc": "uhc_commercial",
+        "aetna": "aetna",
+        "humana": "humana",
+        "tricare": "tricare",
+        "champva": "champva",
+        "medicare": "medicare_ffs",
+        "medicaid": "nevada_medicaid_ffs",
+        "multiplan": "multiplan_phcs",
+        "phcs": "multiplan_phcs",
+        "first health": "first_health",
+        "beech street": "multiplan_phcs"
+      },
+
+      "phone_number_clues": {
+        "_description": "Certain phone numbers on cards are associated with specific networks. OCR may extract these.",
+        "800-810-2583": {"payer_hint": "evicore", "notes": "Evicore main line -- likely Cigna or Aetna plan"},
+        "866-959-1357": {"payer_hint": "bcbs_nv", "notes": "BCBS NV member services"},
+        "800-832-7850": {"payer_hint": "uhc", "notes": "UHC member services"},
+        "833-224-6930": {"payer_hint": "bcbs_union", "notes": "BCBS union plan line"}
+      },
+
+      "network_text_indicators": {
+        "_description": "Text found on card that indicates network affiliation",
+        "evicore": {"route_to": "cigna", "notes": "Evicore on card = Cigna or Aetna. Check payer name."},
+        "carelon": {"route_to": "bcbs_carelon", "notes": "Carelon on card = BCBS Carelon-routed"},
+        "optum": {"route_to": "uhc_medicare_optum", "notes": "Optum on card = likely UHC Medicare Optum-managed"},
+        "curo": {"route_to": "uhc_medicare_optum", "notes": "Curo reference = Optum"},
+        "availity": {"route_to": null, "notes": "Many payers use Availity -- not a payer identifier by itself"},
+        "innovative care": {"route_to": "bcbs_carelon", "notes": "Innovative Care Mgmt = BCBS union plan auth handler"},
+        "nevada health solutions": {"route_to": "bcbs_carelon", "notes": "NV Health Solutions = BCBS union plan auth handler"},
+        "aim specialty": {"route_to": "bcbs_carelon", "notes": "AIM = now Carelon"}
+      }
+    },
+
+    "self_funded_employer_detection": {
+      "_description": "When card shows an employer name instead of an insurance company, try to identify the TPA or network",
+      "clues": [
+        "If card shows employer name + BCBS logo -> BCBS plan (use prefix routing)",
+        "If card shows employer name + UHC logo -> UHC plan (check uhcprovider.com)",
+        "If card shows employer name + Multiplan/PHCS/First Health -> rental network (call IBA)",
+        "If card shows employer name + EBMS -> TPA (call EBMS number)",
+        "If card shows employer name + 'Administered by [name]' -> that name is the TPA",
+        "If card shows employer name + no other identifiers -> call number on card to determine handler"
+      ],
+      "common_local_employers": {
+        "mgm": "sierra_hpn",
+        "venetian": "sierra_hpn",
+        "clark county": "sierra_hpn",
+        "station casinos": null,
+        "wynn": null,
+        "caesars": null
+      }
+    }
+  },
+
+  "layer_3_unknown_protocol": {
+    "_description": "When Layer 1 and Layer 2 both fail to identify the payer. Does NOT block processing. Uses Carelon baseline for clinical sufficiency check while flagging for verification.",
+
+    "processing_rules": {
+      "blocks_clinical_processing": false,
+      "blocks_scheduling": true,
+      "criteria_baseline": "carelon",
+      "criteria_file": "criteria_carelon.json",
+      "confidence": "conservative_default"
+    },
+
+    "workflow": [
+      "1. Process document normally -- extract all clinical data",
+      "2. Check clinical sufficiency against Carelon baseline criteria",
+      "3. Output CONDITIONAL readiness status",
+      "4. Fire FLAG_UNKNOWN_PAYER",
+      "5. Attempt identification via card clues (Layer 2)",
+      "6. If still unknown: staff calls number on card",
+      "7. During call, gather: payer name, network, auth required per code, HST code, submission method, benefits",
+      "8. After call: combine auth status with clinical readiness for final output",
+      "9. Fire FLAG_ADD_TO_SYSTEM to catalog new payer for future"
+    ],
+
+    "conditional_output": {
+      "meets_baseline": "If auth required, documentation likely meets criteria",
+      "does_not_meet_baseline": "If auth required, additional documentation likely needed"
+    },
+
+    "minimum_info_before_scheduling": [
+      "payer_name",
+      "auth_required_per_code",
+      "hst_code",
+      "benefits",
+      "network_status",
+      "submission_method_if_auth_required"
+    ],
+
+    "flags": {
+      "FLAG_UNKNOWN_PAYER": {
+        "severity": "medium",
+        "blocking_for_scheduling": true,
+        "blocking_for_processing": false,
+        "action": "Call number on card. Determine auth requirements, HST code, submission method."
+      },
+      "FLAG_CLINICAL_BASELINE_MET": {
+        "severity": "info",
+        "action": "Note: if auth required, documentation likely meets criteria"
+      },
+      "FLAG_CLINICAL_BASELINE_NOT_MET": {
+        "severity": "medium",
+        "action": "Note: if auth required, additional documentation likely needed"
+      },
+      "FLAG_ADD_TO_SYSTEM": {
+        "severity": "low",
+        "action": "Add newly identified payer to insurance.json and create payer routing entry"
+      }
+    },
+
+    "escalation": [
+      "If unable to identify payer after call: escalate to supervisor",
+      "If patient has no card: request card, cannot proceed without verifiable info",
+      "If truly unresolvable: schedule as self-pay pending verification"
+    ]
+  },
+
+  "secondary_routing": {
+    "_description": "These are secondary routing steps that run AFTER initial payer_id is determined, to refine the routing.",
+
+    "bcbs_prefix_routing": {
+      "triggers_when": "payer_id starts with 'bcbs_'",
+      "process": "Extract prefix from member ID -> look up in bcbs_prefix_database.json -> refine to Carelon vs non-Carelon, get specific auth method per prefix",
+      "prefix_database": "bcbs_prefix_database.json",
+      "union_note": "BCBS union plans have specific prefixes with custom auth routing per prefix"
+    },
+
+    "medicare_advantage_routing": {
+      "triggers_when": "payer_id == 'medicare_ffs' AND plan appears to be Medicare Advantage (not original Medicare)",
+      "process": "Identify parent company -> reroute to parent's payer_id",
+      "common_parents": {
+        "UHC Medicare Advantage": "uhc_medicare_direct",
+        "Humana Medicare Advantage": "humana",
+        "Aetna Medicare Advantage": "aetna",
+        "Anthem Medicare Advantage": "bcbs_carelon",
+        "Cigna Medicare Advantage": "cigna"
+      },
+      "flag_if_unknown": "FLAG_MEDICARE_ADVANTAGE_IDENTIFY_PARENT"
+    },
+
+    "medicaid_mco_routing": {
+      "triggers_when": "payer_id == 'nevada_medicaid_ffs' AND patient has MCO (not straight FFS)",
+      "process": "Determine which MCO -> reroute to MCO's payer_id",
+      "mcos": {
+        "Anthem Medicaid": "anthem_medicaid",
+        "Silversummit Medicaid": "silversummit",
+        "Molina Medicaid": "molina",
+        "HPN Medicaid": "sierra_hpn",
+        "Caresource Medicaid": "caresource"
+      },
+      "flag_if_unknown": "FLAG_MEDICAID_IDENTIFY_MCO"
+    },
+
+    "uhc_plan_type_routing": {
+      "triggers_when": "payer_id starts with 'uhc_'",
+      "process": "During benefits verification, determine: Commercial vs Medicare Direct vs Medicare Optum vs Surest. Refine payer_id accordingly.",
+      "refinement_map": {
+        "benefits_show_optum_ipa": "uhc_medicare_optum",
+        "benefits_show_uhc_medicare_direct": "uhc_medicare_direct",
+        "card_says_surest": "uhc_surest",
+        "default": "uhc_commercial"
+      }
+    },
+
+    "humana_plan_type_routing": {
+      "triggers_when": "payer_id == 'humana'",
+      "process": "During benefits check via Availity, check for Optum IPA or P3/Intermountain IPA.",
+      "refinement": {
+        "optum_ipa_found": "Use Optum criteria, submit via Curo portal (NOT Humana criteria)",
+        "p3_or_intermountain_ipa": "OON -- cannot accept"
+      }
+    }
+  },
+
+  "do_not_accept": [
+    {"payer": "Culinary", "reason": "Out of network", "action": "STOP_OON -- fax UTS to referring provider"},
+    {"payer": "Intermountain Health Plans", "reason": "Out of network", "action": "STOP_OON"},
+    {"payer": "P3 Health Partners", "reason": "Out of network", "action": "STOP_OON"},
+    {"payer": "Select Health", "reason": "Out of network", "action": "STOP_OON"},
+    {"payer": "WellCare", "reason": "Out of network", "action": "STOP_OON"}
+  ],
+
+  "self_pay_identifiers": ["cash pay", "no insurance", "uninsured", "self pay", "self-pay", "private pay"]
+}

@@ -1,0 +1,1252 @@
+{
+  "_version": "0.19.3",
+  "_updated": "2026-02-27",
+  "_description": "All 105 flags referenced in the v0.19.3 decision tree. Mapped to severity tier, source module, and suggested human action. This is the TREE's flag system — Gus should reconcile with the existing flags_catalog.json naming.",
+  "_note_for_gus": "The existing flags_catalog.json uses different names (e.g., AUTHORIZATION_REQUIRED vs FLAG_VERIFY_AUTH). This file maps what the tree expects. You decide: adopt tree names, map old names to new, or create aliases. The tree's 5-tier severity hierarchy is: STOP (1) > PENDING (2) > FLAG/REMOVE (3) > ALERT (4) > INFO (5).",
+  "severity_tiers": {
+    "1_STOP": "Blocks processing entirely. Cannot proceed. Requires resolution or UTS.",
+    "2_PENDING": "Processing paused. Waiting for external input. Has re-entry point.",
+    "3_FLAG": "Processing continues but human action required. Includes REMOVE_ (CPT removal).",
+    "4_ALERT": "Processing continues. Informational warning for human review.",
+    "5_INFO": "Processing continues. Logged for awareness. No action required."
+  },
+  "flags": [
+    {
+      "id": "STOP_AGE",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Patient age is outside testable range.",
+      "human_action": "Review age. Under 2 = cannot test. Document and notify provider.",
+      "source_module": "M1B",
+      "tree_lines": [
+        312,
+        342
+      ]
+    },
+    {
+      "id": "STOP_CANNOT_TEST",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Patient cannot be tested (homebound + O2, or other hard block).",
+      "human_action": "Document reason. Fax UTS if applicable.",
+      "source_module": "M2C",
+      "tree_lines": [
+        312
+      ]
+    },
+    {
+      "id": "STOP_NONE",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "No valid test options remain after M3 scope filtering.",
+      "human_action": "Review coverage. Consider cash pay or appeal.",
+      "source_module": "M3",
+      "tree_lines": [
+        1195,
+        1249
+      ]
+    },
+    {
+      "id": "STOP_NO_VALID_OPTIONS",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "All CPTs removed from scope \u2014 nothing approvable.",
+      "human_action": "Contact payer or offer cash pay option.",
+      "source_module": "M3",
+      "tree_lines": [
+        1159
+      ]
+    },
+    {
+      "id": "STOP_OON",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Payer is out of network. Cannot accept.",
+      "human_action": "Fax UTS to referring provider. Do not schedule.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1760
+      ]
+    },
+    {
+      "id": "STOP_OON_PRIMARY",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Primary insurance is OON on COB case.",
+      "human_action": "Check if secondary is in-network. If not, fax UTS.",
+      "source_module": "M1C",
+      "tree_lines": [
+        122,
+        489,
+        515
+      ]
+    },
+    {
+      "id": "STOP_PED",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Pediatric patient cannot have HST and no PSG available.",
+      "human_action": "Verify age and test options. May need pediatric facility referral.",
+      "source_module": "M2C",
+      "tree_lines": [
+        1236,
+        1237,
+        1250
+      ]
+    },
+    {
+      "id": "STOP_TITRATION_EXPIRED",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Prior diagnostic study is over 5 years old. Hard stop \u2014 titration cannot proceed without new diagnostic.",
+      "human_action": "New diagnostic study required before titration. Contact ordering physician for new diagnostic order.",
+      "source_module": "M2B",
+      "tree_lines": []
+    },
+    {
+      "id": "STOP_UNABLE_TO_SCHEDULE",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Cannot schedule for any reason (e.g., VirtuOx prefix).",
+      "human_action": "Document and notify referring provider.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1026,
+        1030,
+        1063,
+        1524
+      ]
+    },
+    {
+      "id": "STOP_UNABLE_TO_TEST",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Testing not possible \u2014 clinical or logistical block.",
+      "human_action": "Review reason, document, notify provider.",
+      "source_module": "M2C",
+      "tree_lines": [
+        1314
+      ]
+    },
+    {
+      "id": "PENDING_INS",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Alias for PENDING_INSURANCE.",
+      "human_action": "Same as PENDING_INSURANCE.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1419
+      ]
+    },
+    {
+      "id": "PENDING_INSURANCE",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "No insurance info. Processing as cash with contact flag.",
+      "human_action": "Contact patient for insurance info. Re-entry at M1C when obtained.",
+      "source_module": "M1C",
+      "tree_lines": [
+        102,
+        126,
+        159,
+        228,
+        337,
+        1407,
+        1431,
+        1437,
+        1442,
+        1463,
+        1808
+      ]
+    },
+    {
+      "id": "PENDING_NEW_ORDER",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Current order not viable (e.g., HST ordered but payer requires PSG).",
+      "human_action": "Contact physician for new order specifying correct test. Re-entry at M2B.",
+      "source_module": "M3",
+      "tree_lines": [
+        165,
+        200,
+        232,
+        863,
+        879,
+        1124,
+        1140,
+        1145,
+        1442,
+        1464,
+        1810
+      ]
+    },
+    {
+      "id": "PENDING_NOTES",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "No clinical notes found in document.",
+      "human_action": "Request notes from referring provider. Re-entry at M2D.",
+      "source_module": "M1E",
+      "tree_lines": [
+        1812
+      ]
+    },
+    {
+      "id": "PENDING_AGE_ELIGIBLE",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Patient approaching 2nd birthday (within 2 months). File processed completely with pediatric codes pre-set (95782/95783, HST NOT allowed). Scheduling BLOCKED until birthday.",
+      "human_action": "Do not schedule until patient turns 2. System auto-triggers re-entry (REENTRY_RE_AGE2 -> M6_START) on birthday to regenerate output with scheduling unblocked. No reprocessing needed.",
+      "source_module": "M1B",
+      "tree_lines": []
+    },
+    {
+      "id": "PENDING_ORDER",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "No physician order found. Clinical pre-assessment done.",
+      "human_action": "Contact referring provider for order. Re-entry at M2B when received.",
+      "source_module": "M1E",
+      "tree_lines": [
+        102,
+        147,
+        154,
+        227,
+        805,
+        819,
+        980,
+        1062,
+        1407,
+        1437,
+        1442,
+        1462,
+        1806
+      ]
+    },
+    {
+      "id": "PENDING_PRIOR_RESULTS",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Prior sleep study results needed but not available.",
+      "human_action": "Request prior results. Re-entry at M2B when received.",
+      "source_module": "M2B",
+      "tree_lines": [
+        1442,
+        1465,
+        1816
+      ]
+    },
+    {
+      "id": "PENDING_QUESTIONNAIRE",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Clinical questionnaire data would strengthen case.",
+      "human_action": "Send questionnaire to patient. Re-entry at M2D.",
+      "source_module": "M2D",
+      "tree_lines": [
+        1814
+      ]
+    },
+    {
+      "id": "PENDING_VERIFICATION",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Manual benefit verification needed before proceeding.",
+      "human_action": "Call payer to verify benefits. Confirm plan type and network.",
+      "source_module": "M6",
+      "tree_lines": [
+        1429
+      ]
+    },
+    {
+      "id": "FLAG_100_PERCENT_COVERED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Patient has 100% coverage (Medicaid, Workers Comp).",
+      "human_action": "No patient cost share. Note in scheduling.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1599,
+        1602
+      ]
+    },
+    {
+      "id": "FLAG_AETNA_CHECK_DUAL_AVAILITY",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Aetna: must check both Evicore AND Availity.",
+      "human_action": "After Evicore submission, also check Availity for auth status.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1176,
+        1587
+      ]
+    },
+    {
+      "id": "FLAG_AMBIGUOUS_ORDER",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Order language is unclear about test type.",
+      "human_action": "Review order. May need physician clarification.",
+      "source_module": "M2B",
+      "tree_lines": [
+        797,
+        842
+      ]
+    },
+    {
+      "id": "FLAG_CALL_FOR_QUESTIONNAIRE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Chart notes present but clinical criteria NOT met for authorization. Need additional documentation via sleep questionnaire.",
+      "human_action": "Call patient to complete sleep questionnaire (Epworth Sleepiness Scale / STOP-BANG). Add results to submission package.",
+      "source_module": "M2D",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_CLINICAL_INSUFFICIENT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Clinical documentation doesn't meet sufficiency criteria.",
+      "human_action": "Request additional clinical documentation.",
+      "source_module": "M2D",
+      "tree_lines": [
+        1102
+      ]
+    },
+    {
+      "id": "FLAG_COB_MANUAL_DETERMINATION",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Multi-payer COB requires manual determination.",
+      "human_action": "Call both payers to confirm primary/secondary.",
+      "source_module": "M1C",
+      "tree_lines": [
+        493
+      ]
+    },
+    {
+      "id": "FLAG_COMPLEX_CASE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Multiple comorbidities suggest complex case.",
+      "human_action": "Flag for clinical review. Consider PSG over HST.",
+      "source_module": "M2C",
+      "tree_lines": [
+        1015
+      ]
+    },
+    {
+      "id": "FLAG_CONTACT_PATIENT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Need to contact patient (for insurance, scheduling, etc.).",
+      "human_action": "Call patient to collect missing information.",
+      "source_module": "M1C",
+      "tree_lines": [
+        489,
+        515
+      ]
+    },
+    {
+      "id": "FLAG_COVERAGE_CONFLICT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Payer won't cover the medically necessary test.",
+      "human_action": "Options: appeal, cash pay, or request different order.",
+      "source_module": "M3",
+      "tree_lines": [
+        1138
+      ]
+    },
+    {
+      "id": "FLAG_CRITERIA_NOT_MET",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Payer criteria not met with available documentation.",
+      "human_action": "Document gaps. Request additional info or prepare appeal.",
+      "source_module": "M5",
+      "tree_lines": [
+        1379
+      ]
+    },
+    {
+      "id": "FLAG_FUTURE_DATE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Signature or referral date is in the future.",
+      "human_action": "Verify date. Likely data entry error.",
+      "source_module": "M1B",
+      "tree_lines": [
+        570
+      ]
+    },
+    {
+      "id": "FLAG_HOMEBOUND",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Patient is homebound.",
+      "human_action": "HST only option. If O2 also present = STOP_CANNOT_TEST.",
+      "source_module": "M2C",
+      "tree_lines": [
+        1025
+      ]
+    },
+    {
+      "id": "FLAG_HPN_MEDICAID_SUBMIT_VIA_PORTAL",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "HPN Medicaid: NOT no-auth. Must submit via portal.",
+      "human_action": "Submit through Sierra/HPN portal. Request 2 units.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1599
+      ]
+    },
+    {
+      "id": "FLAG_HST_NO_AUTH_INLAB_AUTH",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Split auth pattern: HST no auth, in-lab needs auth.",
+      "human_action": "HST: schedule directly. In-lab: submit auth via Availity/fax.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1602
+      ]
+    },
+    {
+      "id": "FLAG_INVALID_MBI",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Medicare ID does not match MBI format (11 chars, alternating letters/numbers, no 3+ consecutive same type, last 4 = 2 letters + 2 numbers). May be old HICN, MA plan ID, or OCR error.",
+      "human_action": "Verify Medicare ID with patient. If old HICN format, look up current MBI.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_INVALID_MEDICAID_ID",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Medicaid ID is not 11 digits or contains letters. Not a valid Medicaid ID format.",
+      "human_action": "Verify ID with patient. Look up in NV Medicaid FFS portal using name+DOB if needed.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_LOW_OCR_CONFIDENCE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "OCR confidence below 85%. Data may be unreliable.",
+      "human_action": "Manually review extracted data against source document.",
+      "source_module": "M1A",
+      "tree_lines": [
+        262
+      ]
+    },
+    {
+      "id": "FLAG_MA_HMO_REFERRAL",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Medicare Advantage HMO: PCP referral may be required.",
+      "human_action": "Verify referral requirement with MA plan.",
+      "source_module": "MA Routing",
+      "tree_lines": [
+        1736
+      ]
+    },
+    {
+      "id": "FLAG_MA_IPA_VERIFY",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Medicare Advantage IPA routing needs verification.",
+      "human_action": "Confirm IPA assignment and auth routing.",
+      "source_module": "MA Routing",
+      "tree_lines": [
+        1712
+      ]
+    },
+    {
+      "id": "FLAG_MA_OPTUM_ROUTING",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Medicare Advantage may route through Optum.",
+      "human_action": "Check if auth goes through Optum or direct to plan.",
+      "source_module": "MA Routing",
+      "tree_lines": [
+        1708
+      ]
+    },
+    {
+      "id": "FLAG_MISSING_SIGNATURE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Physician signature not detected.",
+      "human_action": "Check document for signature. If missing, request signed order.",
+      "source_module": "M1B",
+      "tree_lines": [
+        563
+      ]
+    },
+    {
+      "id": "FLAG_NEEDS_PRIOR_RESULTS",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Prior results referenced but not available.",
+      "human_action": "Request prior study results from patient or facility.",
+      "source_module": "M2B",
+      "tree_lines": [
+        803,
+        896
+      ]
+    },
+    {
+      "id": "FLAG_NEED_PRIOR_RESULTS",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Alias for FLAG_NEEDS_PRIOR_RESULTS.",
+      "human_action": "Same as FLAG_NEEDS_PRIOR_RESULTS.",
+      "source_module": "M2B",
+      "tree_lines": [
+        895
+      ]
+    },
+    {
+      "id": "FLAG_NEW_PREFIX",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "BCBS prefix not found in database.",
+      "human_action": "Call BCBS to verify prefix. Log new prefix for PIN-4.",
+      "source_module": "BCBS Hierarchy",
+      "tree_lines": [
+        1496
+      ]
+    },
+    {
+      "id": "FLAG_NOTES_MISSING",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "No clinical notes in document.",
+      "human_action": "Request notes from provider. Cannot assess clinical sufficiency.",
+      "source_module": "M1E",
+      "tree_lines": [
+        598
+      ]
+    },
+    {
+      "id": "FLAG_NOTES_QUALITY_POOR",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Chart notes present but quality is poor \u2014 single page, checkbox-only, minimal narrative content, or template without patient-specific detail.",
+      "human_action": "Review notes manually. May be sufficient for some payers but likely insufficient for strict payers (Evicore, NV Medicaid). Consider requesting more complete notes.",
+      "source_module": "M1E",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_NOTES_UNSIGNED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Chart notes present but appear unsigned \u2014 no physician signature, initials, or electronic signature indicator found.",
+      "human_action": "Request signed copy from physician office. Unsigned notes may be rejected by payers.",
+      "source_module": "M1E",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_NO_PROVIDER_CONTACT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Provider phone/fax not found.",
+      "human_action": "Look up provider contact info via NPI registry.",
+      "source_module": "M1D",
+      "tree_lines": [
+        580
+      ]
+    },
+    {
+      "id": "FLAG_NV_MEDICAID_QUESTIONNAIRE_REQUIRED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "NV Medicaid FFS requires sleep questionnaire for auth submission. This is the ONLY payer that mandates it.",
+      "human_action": "If chart notes do not meet clinical criteria for testing, call patient for sleep questionnaire (Epworth/STOP-BANG) before submitting auth.",
+      "source_module": "M2D",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_OUT_OF_STATE_PROVIDER",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Referring provider is out of state.",
+      "human_action": "Check if payer allows out-of-state referrals (NV Medicaid = blocker).",
+      "source_module": "M1D",
+      "tree_lines": [
+        590,
+        591
+      ]
+    },
+    {
+      "id": "FLAG_PAYER_FROM_FORMAT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Payer derived from member ID format pattern (e.g., 3-letter alpha prefix = BCBS, MBI pattern = Medicare, H-prefix = Humana) because payer name was not recognized. Lower confidence than name-based identification.",
+      "human_action": "Confirm payer identity during benefits verification. Format-derived identification may be incorrect if ID format overlaps between payers.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_PSG_RECOMMENDED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "PSG recommended due to comorbidities (soft recommendation).",
+      "human_action": "Note recommendation. If physician ordered HST, can still proceed.",
+      "source_module": "M2C",
+      "tree_lines": [
+        148,
+        1004,
+        1052,
+        1053,
+        1054,
+        1055,
+        1056,
+        1057,
+        1058
+      ]
+    },
+    {
+      "id": "FLAG_REQUEST_PRIOR_STUDY",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Prior study needed for titration eligibility.",
+      "human_action": "Request prior diagnostic results.",
+      "source_module": "M2B",
+      "tree_lines": [
+        897,
+        937
+      ]
+    },
+    {
+      "id": "FLAG_RULES_CHANGED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "BCBS prefix rules may have changed.",
+      "human_action": "Verify current auth requirements for this prefix.",
+      "source_module": "BCBS Hierarchy",
+      "tree_lines": [
+        1497
+      ]
+    },
+    {
+      "id": "FLAG_SIGNATURE_STALE",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Signature date is old (>90 days or per payer rules).",
+      "human_action": "Check payer requirements. May need updated/re-signed order.",
+      "source_module": "M1B",
+      "tree_lines": [
+        569
+      ]
+    },
+    {
+      "id": "FLAG_SUPERVISING_NEEDED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Mid-level provider (NP/PA) \u2014 supervising physician may be needed.",
+      "human_action": "Verify if supervising physician info is required for auth.",
+      "source_module": "M1D",
+      "tree_lines": [
+        620,
+        624
+      ]
+    },
+    {
+      "id": "FLAG_TITRATION_PRIOR_STUDY_AGING",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Prior diagnostic study is aging. Titration validity depends on circumstances \u2014 review context.",
+      "human_action": "Review prior study date, reason for titration, and payer requirements. Hard stop at 5 years. Under 5 years is circumstantial based on clinical context.",
+      "source_module": "M2B",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_TITRATION_TIMING",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Timing issue with titration (too soon, expired, etc.).",
+      "human_action": "Review prior study date against payer retitration rules.",
+      "source_module": "M2B",
+      "tree_lines": [
+        905
+      ]
+    },
+    {
+      "id": "FLAG_UMR_HST_PRIORITY",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "UMR plan detected. HST should be prioritized unless clinical reason for in-lab. UMR HST reimbursement is $900 (much higher than other tests). Patient charged at HPN rates.",
+      "human_action": "Prioritize HST for this patient unless clinical contraindication. Bill patient at HPN rate ($334.04 HST), actual reimbursement = $900.",
+      "source_module": "M4",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_UNKNOWN_PAYER",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Payer not found in insurance.json.",
+      "human_action": "Manually identify payer. Verify network status. Process with generic criteria.",
+      "source_module": "M1C",
+      "tree_lines": [
+        372,
+        1614,
+        1691,
+        1722
+      ]
+    },
+    {
+      "id": "FLAG_VA_1_WEEK_SCHEDULING",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "VA: must schedule within 1 week of referral.",
+      "human_action": "Prioritize scheduling. Track referral receipt date.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1582
+      ]
+    },
+    {
+      "id": "FLAG_VA_REFERRAL_REQUIRED",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "VA: referral must be on file. Referral = authorization.",
+      "human_action": "Verify referral is received before scheduling.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1582
+      ]
+    },
+    {
+      "id": "FLAG_VERIFY_AETNA_12DIGIT",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Aetna 12-digit ID detected. Could be Medicare Advantage (accepted) or Intermountain HMO (OON). Must verify before scheduling.",
+      "human_action": "Call Aetna to confirm plan type. If Medicare \u2192 proceed. If Intermountain/CVS HMO \u2192 STOP_OON, fax UTS.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_VERIFY_AETNA_SUPPLEMENT_ID",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Aetna Supplement ID does not start with 3 letters. Expected format: 3 letters (often CLI) followed by numbers.",
+      "human_action": "Verify policy number with patient. Confirm this is a supplement plan.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_VERIFY_AUTH",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Auth requirement uncertain \u2014 verify during benefits call.",
+      "human_action": "Confirm auth requirements when calling for benefits.",
+      "source_module": "M1C",
+      "tree_lines": [
+        1495
+      ]
+    },
+    {
+      "id": "FLAG_VERIFY_GEHA_ID",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "GEHA ID does not start with G. All GEHA IDs should be G followed by numbers.",
+      "human_action": "Verify ID with patient. Confirm payer is GEHA.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_VERIFY_HUMANA_ID",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Humana ID does not start with H. May be wrong payer, Medicaid line, or OCR misread.",
+      "human_action": "Verify ID with patient. Check if this is actually a Humana Medicaid (use Medicaid ID instead) or a different payer.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_VERIFY_LVFF_ID",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "LV Firefighters UHSS ID does not start with 800. Expected format: 800 followed by numbers.",
+      "human_action": "Verify ID with patient. Confirm this is the UHSS plan.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "REMOVE_HST",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "HST removed from scope (pediatric, NV Medicaid, O2, etc.).",
+      "human_action": "Review reasons. Consolidated from multiple flags per M6 dedup.",
+      "source_module": "M6",
+      "tree_lines": [
+        1426,
+        1458
+      ]
+    },
+    {
+      "id": "ALERT_10",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient approaching age 10 (scheduling consideration \u2014 no code change).",
+      "human_action": "Note for scheduling. No CPT code change at age 10.",
+      "source_module": "M1B",
+      "tree_lines": [
+        317,
+        330,
+        345
+      ]
+    },
+    {
+      "id": "ALERT_18",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient approaching age 18 (adult/pediatric boundary + HST eligibility).",
+      "human_action": "Confirm correct CPT code set and HST eligibility at test date. Under 18 = no HST.",
+      "source_module": "M1B",
+      "tree_lines": [
+        319,
+        331,
+        346
+      ]
+    },
+    {
+      "id": "ALERT_2",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient approaching age 2 (testing eligibility boundary).",
+      "human_action": "Verify age at time of scheduled test.",
+      "source_module": "M1B",
+      "tree_lines": [
+        313,
+        328,
+        343
+      ]
+    },
+    {
+      "id": "ALERT_6",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient approaching age 6 (pediatric code boundary).",
+      "human_action": "Check if 95782 or 95810 applies at test date.",
+      "source_module": "M1B",
+      "tree_lines": [
+        315,
+        329,
+        344
+      ]
+    },
+    {
+      "id": "ALERT_BEHAVIORAL_CONCERN",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has documented behavioral/mental health concern relevant to overnight stay.",
+      "human_action": "Brief tech. Consider staffing. Ensure calm environment. May need adjusted approach.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_CODE_RETIRED",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "ICD code is retired/invalid in current year.",
+      "human_action": "Find replacement code. Check icd10_master for successor.",
+      "source_module": "M2A",
+      "tree_lines": [
+        696
+      ]
+    },
+    {
+      "id": "ALERT_COMMUNICATION_BARRIER",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has communication barrier (hearing loss, vision loss, speech disorder). May need interpreter or special accommodation.",
+      "human_action": "Arrange interpreter if needed. Written instructions for hearing impaired. Extra setup time.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_CONTACT_FOR_INSURANCE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Need to contact patient/provider for insurance info.",
+      "human_action": "Reach out to collect insurance details.",
+      "source_module": "M1C",
+      "tree_lines": [
+        126,
+        159,
+        337,
+        1431
+      ]
+    },
+    {
+      "id": "ALERT_INCOMPLETE_INSURANCE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Insurance info partially extracted.",
+      "human_action": "Verify missing fields during benefits call.",
+      "source_module": "M1C",
+      "tree_lines": [
+        336
+      ]
+    },
+    {
+      "id": "ALERT_INCONTINENCE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has incontinence (urinary or fecal). Scheduling alert for room preparation.",
+      "human_action": "Prepare room with protective covers. Extra linens available. No clinical impact on testing.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_LANGUAGE_BARRIER",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient notes indicate non-English primary language or language barrier.",
+      "human_action": "Arrange interpreter for setup/consent. Written materials in patient's language if available.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_MISSING_DOB",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Date of birth not extracted.",
+      "human_action": "Check document for DOB. Age-dependent logic may be affected.",
+      "source_module": "M1B",
+      "tree_lines": [
+        308
+      ]
+    },
+    {
+      "id": "ALERT_MISSING_MEMBER_ID",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Payer identified but no member ID extracted from referral. Format validation skipped.",
+      "human_action": "Request member ID from patient or referring provider. Needed for eligibility check and auth submission.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_MISSING_NPI",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Provider NPI not extracted.",
+      "human_action": "Look up NPI via NPPES registry.",
+      "source_module": "M1D",
+      "tree_lines": [
+        542
+      ]
+    },
+    {
+      "id": "ALERT_MISSING_PATIENT_CONTACT",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "No patient phone number, email, or address extracted from referral.",
+      "human_action": "Contact ordering physician office for patient contact info. Need at minimum a phone number for scheduling.",
+      "source_module": "M1B",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_MISSING_PATIENT_NAME",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient name not extracted.",
+      "human_action": "Check document for patient name.",
+      "source_module": "M1B",
+      "tree_lines": [
+        305
+      ]
+    },
+    {
+      "id": "ALERT_MISSING_PROVIDER_NAME",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Provider name not extracted.",
+      "human_action": "Check document for provider name.",
+      "source_module": "M1D",
+      "tree_lines": [
+        536
+      ]
+    },
+    {
+      "id": "ALERT_MISSING_SIG_DATE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Signature date not found.",
+      "human_action": "Check document. May affect stale order determination.",
+      "source_module": "M1B",
+      "tree_lines": [
+        566
+      ]
+    },
+    {
+      "id": "ALERT_PPE_AIRBORNE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has documented airborne infectious disease (TB, COVID, viral pneumonia). PPE required.",
+      "human_action": "N95 mask + isolation room if available. Verify disease is inactive/treated before scheduling. If active \u2192 defer testing.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_PPE_BLOODBORNE",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has documented bloodborne pathogen (HIV, Hep B, Hep C). PPE required.",
+      "human_action": "Standard + enhanced PPE. Gloves mandatory for all contact. Sharps precautions. No impact on testing eligibility.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_PPE_CONTACT",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has documented contact-precaution infection (MRSA, shingles, fungal). PPE required.",
+      "human_action": "Gown + gloves for contact. Enhanced room cleaning after study. No impact on testing eligibility.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_PTSD",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has PTSD. Scheduling alert for tech approach and environment.",
+      "human_action": "Brief tech on PTSD awareness. Calm environment. May need extra time for hookup. May startle easily.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_SEIZURE_DISORDER",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has seizure disorder/epilepsy. Scheduling alert for sleep tech safety awareness.",
+      "human_action": "Ensure tech is aware. Prepare for possible seizure during study. Emergency protocol readily available.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "ALERT_TURNING_10",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient will turn 10 near test date.",
+      "human_action": "Note for scheduling. No CPT code change at age 10.",
+      "source_module": "M1B",
+      "tree_lines": [
+        317
+      ]
+    },
+    {
+      "id": "ALERT_TURNING_18",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient will turn 18 near test date.",
+      "human_action": "Confirm correct CPT code set and HST eligibility at test date. Under 18 = no HST.",
+      "source_module": "M1B",
+      "tree_lines": [
+        319
+      ]
+    },
+    {
+      "id": "ALERT_TURNING_2",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient will turn 2 near test date.",
+      "human_action": "Same as ALERT_2.",
+      "source_module": "M1B",
+      "tree_lines": [
+        313
+      ]
+    },
+    {
+      "id": "ALERT_TURNING_6",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient will turn 6 near test date.",
+      "human_action": "Same as ALERT_6.",
+      "source_module": "M1B",
+      "tree_lines": [
+        315
+      ]
+    },
+    {
+      "id": "ALERT_VIOLENT_TENDENCY",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "Patient has documented violent behavior or aggression disorder. Critical safety alert.",
+      "human_action": "Staff safety precaution. Consider scheduling when additional staff available. Brief all staff.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_UHC_SUREST_DETECTED",
+      "severity_tier": 4,
+      "severity_label": "ALERT",
+      "description": "UHC ID is 12 digits starting with 771/777 \u2014 likely a Surest plan. Surest may have different auth/network rules than standard UHC.",
+      "human_action": "Verify plan is Surest during benefits call. Confirm auth requirements.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "INFO_COST_PENDING_VERIFICATION",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Cost estimate is baseline, not payer-verified.",
+      "human_action": "Confirm actual cost during benefits verification.",
+      "source_module": "M6",
+      "tree_lines": [
+        1224
+      ]
+    },
+    {
+      "id": "INFO_CPAP_CONTEXT",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "CPAP-related information detected in clinical notes. Context carried through for output assessment.",
+      "human_action": "Review CPAP details in output \u2014 usage history, compliance, pressure settings, issues reported.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "INFO_INFECTIOUS_DISEASE_PPE",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Infectious disease ICD code detected \u2014 PPE needed.",
+      "human_action": "Flag for staff safety. PPE required for in-lab study.",
+      "source_module": "M2A",
+      "tree_lines": [
+        716
+      ]
+    },
+    {
+      "id": "INFO_MEDICATION_BP",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Blood pressure medication detected in notes. Indicates cardiovascular comorbidity relevant to sleep apnea.",
+      "human_action": "Informational. Cardiovascular comorbidity documented. Supports clinical justification.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "INFO_MEDICATION_PSYCH",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Psychiatric/sleep medication detected (antidepressant, anxiolytic, sleep aid). Relevant to sleep study interpretation.",
+      "human_action": "Informational. Document for tech and interpreting physician. May affect sleep architecture.",
+      "source_module": "M2A",
+      "tree_lines": []
+    },
+    {
+      "id": "INFO_OCR_MARGINAL",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "OCR confidence 85-89%. Proceed but note for review.",
+      "human_action": "Quick visual check of key fields.",
+      "source_module": "M1A",
+      "tree_lines": [
+        261
+      ]
+    },
+    {
+      "id": "INFO_POSSIBLE_DUPLICATE",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Patient may already be in system.",
+      "human_action": "Check for existing record before creating new.",
+      "source_module": "M1B",
+      "tree_lines": [
+        278
+      ]
+    },
+    {
+      "id": "INFO_RESPIRATORY_INFECTION",
+      "severity_tier": 5,
+      "severity_label": "INFO",
+      "description": "Active respiratory infection noted.",
+      "human_action": "May need to delay testing. Flag for scheduling.",
+      "source_module": "M2A",
+      "tree_lines": [
+        719
+      ]
+    },
+    {
+      "id": "FLAG_MERITAIN_CALL_FIRST",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Meritain Health: must call payer before submitting auth. Meritain requires verbal notification prior to formal auth submission.",
+      "human_action": "Call Meritain at number on member card BEFORE submitting auth online. Document call reference number.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_NV_MEDICAID_NO_HST",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "Nevada Medicaid FFS does not cover home sleep testing (HST). Only in-lab PSG (95810/95811) is covered.",
+      "human_action": "Do NOT order HST/G0399 for NV Medicaid FFS patients. Schedule in-lab PSG only. If physician ordered HST, contact for in-lab order.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_UMR_CHECK_NETWORK",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "UMR plan detected. Network status varies by underlying employer plan. Must verify facility is in-network before proceeding.",
+      "human_action": "Call UMR or check portal to verify network status for this specific plan. UMR is a TPA — network depends on employer's chosen network.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_OON_AUTO",
+      "severity_tier": 1,
+      "severity_label": "STOP",
+      "description": "Carrier is on the do-not-accept list (out of network). Auto-flagged as OON.",
+      "human_action": "Do NOT schedule. Fax Unable to Schedule (UTS) letter to referring provider. Patient must use in-network facility.",
+      "source_module": "M1C",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_BCBS_UNVERIFIED_PREFIX",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "BCBS plan routing unverified. Prefix not confirmed as Carelon — using Carelon criteria as conservative default.",
+      "human_action": "Look up prefix in bcbs_prefix_database.json. If not found, call BCBS member services to verify auth requirements and plan routing.",
+      "source_module": "BCBS Hierarchy",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_OPTUM_MISLABELED_REFERRAL",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "UHC Medicare Optum plan detected. Optum is an IPA — referrals may be mislabeled as standard UHC.",
+      "human_action": "Verify plan is Optum-managed. Check if referral was sent to correct entity. Auth goes through Curo portal, NOT Evicore.",
+      "source_module": "MA Routing",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_OPTUM_WRONG_PORTAL",
+      "severity_tier": 2,
+      "severity_label": "PENDING",
+      "description": "Optum-managed UHC Medicare: auth must go through Curo portal, NOT uhcprovider.com or Evicore.",
+      "human_action": "Submit auth via Curo (curo.optum.com). Check benefits via providers.optumcaremw.com. Do NOT use uhcprovider.com for auth.",
+      "source_module": "MA Routing",
+      "tree_lines": []
+    },
+    {
+      "id": "FLAG_SUREST_COPAY_CALL",
+      "severity_tier": 3,
+      "severity_label": "FLAG",
+      "description": "UHC Surest plan detected. Copay varies by ZIP code — portal displays incorrect copay amount.",
+      "human_action": "Do NOT quote copay from UHC portal. Call or message UHC for accurate Surest copay specific to patient's ZIP code.",
+      "source_module": "M1C",
+      "tree_lines": []
+    }
+  ]
+}

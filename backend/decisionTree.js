@@ -11,9 +11,19 @@
  * Routes documents to appropriate workflow based on validation results.
  * 
  * DYNAMIC VALIDATION: Supports flexible field paths to handle different document layouts
+ *
+ * Level 6: Knowledge Base Assessment (KB Layer 2)
+ * Runs deterministic modules: age, payer, BCBS routing, test selection, cost, flags.
  */
 
 import { getNestedValue, isPlaceholder } from './utils/fieldNormalizer.js';
+import { assessAge } from './rules/kb/ageCalc.js';
+import { assessPayer } from './rules/kb/payerCriteria.js';
+import { assessBcbs } from './rules/kb/bcbsRouter.js';
+import { selectTest } from './rules/kb/testSelector.js';
+import { assessCost } from './rules/kb/costEstimate.js';
+import { aggregateFlags, determineStatus } from './rules/kb/flagEngine.js';
+import { assessIcd } from './rules/kb/icdMatcher.js';
 
 class DecisionTreeEngine {
   constructor(options = {}) {
@@ -72,7 +82,7 @@ class DecisionTreeEngine {
    * @param {Object} validationResult - Validation metadata from dual-engine processing
    * @returns {Object} Routing decision with actions and validation details
    */
-  evaluate(extractedData, validationResult = {}) {
+  async evaluate(extractedData, validationResult = {}) {
     const validationSteps = [
       this.checkCompleteness(extractedData),
       this.checkInsurance(extractedData),
@@ -81,11 +91,30 @@ class DecisionTreeEngine {
       this.checkDemographics(extractedData)
     ];
 
+    // Level 6: Knowledge Base Assessment
+    let kbAssessment = null;
+    try {
+      kbAssessment = await this.checkKbAssessment(extractedData);
+      validationSteps.push({
+        level: 6,
+        name: 'Knowledge Base Assessment',
+        passed: kbAssessment.status === 'CLEAR' || kbAssessment.status === 'ALERT',
+        severity: kbAssessment.status === 'STOP' ? 'critical' : kbAssessment.status === 'PENDING' ? 'warning' : 'success',
+        issues: kbAssessment.flags.filter(f => f.severity <= 3).map(f => f.action),
+        message: `KB: ${kbAssessment.flagSummary}`,
+        requiredAction: kbAssessment.status === 'STOP' ? 'MANUAL_REVIEW' : kbAssessment.status === 'PENDING' ? 'PROVIDER_FOLLOWUP' : null
+      });
+    } catch (err) {
+      // KB assessment is non-blocking — log but don't fail the pipeline
+      console.warn('[DecisionTree] KB assessment error:', err.message);
+    }
+
     const route = this.determineRoute(validationSteps, validationResult);
 
     return {
       route,
       validationSteps,
+      kbAssessment,
       timestamp: new Date().toISOString(),
       processingMetadata: {
         agreementScore: validationResult.agreementScore || null,
@@ -575,6 +604,92 @@ class DecisionTreeEngine {
     const combinedText = `${diagnosisText} ${reasonText} ${notesText}`;
 
     return urgentKeywords.some(keyword => combinedText.includes(keyword));
+  }
+
+  /**
+   * Level 6: Knowledge Base Assessment
+   * Runs all KB Layer 2 deterministic modules and aggregates results.
+   * 
+   * @param {Object} data - Extracted data
+   * @returns {Object} KB assessment with flags, test recommendation, cost, payer info
+   */
+  async checkKbAssessment(data) {
+    // 1. Age assessment
+    const ageResult = assessAge(data);
+
+    // 2. Payer resolution
+    const payerResult = assessPayer(data);
+
+    // 3. BCBS routing (only runs if carrier looks like BCBS)
+    const bcbsResult = assessBcbs(data);
+
+    // 4. Test selection
+    const testResult = selectTest({
+      ageAssessment: ageResult,
+      payerAssessment: payerResult,
+      result: data
+    });
+
+    // 5. Cost estimate
+    const costResult = assessCost({
+      payerAssessment: payerResult,
+      recommendedCpt: testResult.recommendedCpt
+    });
+
+    // 6. ICD matching (Tier A sync + Tier B async LLM)
+    let icdResult = { codes: [], tier: 'none', flags: [] };
+    try {
+      icdResult = await assessIcd(data);
+    } catch (err) {
+      console.warn('[DecisionTree] ICD matching error:', err.message);
+    }
+
+    // 7. Aggregate all flags
+    const flagResult = aggregateFlags(
+      ageResult.flags,
+      payerResult.flags,
+      bcbsResult.flags,
+      testResult.flags,
+      costResult.flags,
+      icdResult.flags
+    );
+
+    const status = determineStatus(flagResult);
+
+    return {
+      status,
+      age: ageResult,
+      payer: {
+        payerId: payerResult.payerId,
+        payerName: payerResult.payerName,
+        authRequired: payerResult.authRequired,
+        submission: payerResult.submission
+      },
+      bcbs: bcbsResult.isBcbs ? {
+        prefix: bcbsResult.prefix,
+        affiliate: bcbsResult.affiliate,
+        authRequirement: bcbsResult.authRequirement,
+        state: bcbsResult.state
+      } : null,
+      testRecommendation: {
+        recommendedCpt: testResult.recommendedCpt,
+        alternativeCpts: testResult.alternativeCpts,
+        reason: testResult.reason
+      },
+      costEstimate: {
+        allowableRate: costResult.allowableRate,
+        payerName: costResult.payerName,
+        cpt: costResult.cpt
+      },
+      icd: {
+        codes: icdResult.codes,
+        tier: icdResult.tier,
+      },
+      flags: flagResult.flags,
+      flagSummary: flagResult.summary,
+      hasStop: flagResult.hasStop,
+      hasPending: flagResult.hasPending
+    };
   }
 
   /**

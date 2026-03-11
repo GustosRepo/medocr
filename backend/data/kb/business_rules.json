@@ -1,0 +1,190 @@
+{
+  "_meta": {
+    "file_id": "business_rules",
+    "version": "1.0",
+    "last_updated": "2026-03-11",
+    "source": "MEDOCR_Business_Rules_v0_19_3.md (213 lines)",
+    "purpose": "Structured business rules not captured by contraindications.json — clinical sufficiency criteria, split night decision factors, COB determination, scope rules, age transitions.",
+    "notes": "Supplements contraindications.json (hard/soft stops, titration prerequisites, pediatric restrictions). Operational thresholds live in facility_config.json. Payer-specific exceptions live in individual payer JSONs."
+  },
+
+  "clinical_sufficiency": {
+    "_description": "Most payers require clinical sufficiency for authorization. 4 pathways to qualification.",
+    "criteria_set": [
+      { "id": 1, "name": "excessive_daytime_sleepiness", "definition": "ESS > 10", "keywords": ["ESS", "Epworth", "excessive daytime sleepiness", "EDS", "hypersomnia"] },
+      { "id": 2, "name": "snoring_or_witnessed_events", "definition": "Habitual snoring or witnessed gasping/choking", "keywords": ["snoring", "witnessed apnea", "gasping", "choking", "stops breathing"] },
+      { "id": 3, "name": "treatment_resistant_hypertension", "definition": "HTN on 3+ medications", "keywords": ["treatment resistant hypertension", "resistant HTN", "3 antihypertensives", "refractory hypertension"] },
+      { "id": 4, "name": "obesity", "definition": "BMI > 30 or neck circumference > 17\" male / 16\" female", "keywords": ["obesity", "BMI", "neck circumference", "obese"] },
+      { "id": 5, "name": "craniofacial_airway", "definition": "Craniofacial or airway abnormalities", "keywords": ["retrognathia", "micrognathia", "macroglossia", "tonsillar hypertrophy", "deviated septum", "enlarged uvula", "narrow palate", "high arched palate"] }
+    ],
+    "pathways": {
+      "A_observed_apneas": {
+        "description": "Observed apneas by bed partner → sufficient regardless of other criteria",
+        "requires": "witnessed_apnea_by_bed_partner",
+        "sufficient_alone": true
+      },
+      "B_two_of_five": {
+        "description": "2 of 5 criteria met → sufficient",
+        "requires_count": 2,
+        "requires_from": "criteria_set"
+      },
+      "C_cardiovascular_plus_one": {
+        "description": "Cardiovascular history + 1 symptom → sufficient",
+        "requires_cardiovascular": true,
+        "requires_symptom_count": 1,
+        "cardiovascular_conditions": ["coronary artery disease", "atrial fibrillation", "heart failure", "stroke", "hypertension"]
+      },
+      "D_unexplained_condition": {
+        "description": "Unexplained condition → sufficient",
+        "conditions": ["right heart failure", "polycythemia", "sleep arrhythmia", "pulmonary hypertension"]
+      }
+    },
+    "insufficient_action": {
+      "flag": "FLAG_INSUFFICIENT_CLINICAL",
+      "nv_medicaid_only": {
+        "additional_flag": "FLAG_CALL_FOR_QUESTIONNAIRE",
+        "description": "Call patient to administer ESS/STOP-BANG by phone"
+      }
+    }
+  },
+
+  "split_night_criteria": {
+    "_description": "Split night study (95810 + 95811 same night) decision factors. Evaluated when both diagnostic and titration are in scope.",
+    "eligibility_requirements": {
+      "ahi_threshold": 20,
+      "ahi_note": "AHI >= 20 events/hour during diagnostic portion (configurable in facility_config.json)",
+      "minimum_titration_hours": 3,
+      "titration_note": ">= 3 hours remaining after diagnostic portion",
+      "locality_required": true,
+      "locality_note": "Patient must be LOCAL (service area cities in facility_config.json). Split night inefficient if patient traveled far.",
+      "prior_pap_factor": "If patient has prior PAP history, split is more appropriate (they'll likely need titration)"
+    },
+    "cash_payment_gate": {
+      "rule_id": "M4_SPLIT_PAY",
+      "applies_to": ["cash", "pending_insurance"],
+      "description": "Cash/pending patients selecting split night must pass through payment gate",
+      "route_to": "Cash cost comparison section",
+      "costs": {
+        "split_night": 650,
+        "two_separate_nights": 1250
+      },
+      "bypass_allowed": false
+    },
+    "payer_coverage_check": {
+      "description": "Some payers don't cover split night — removed in M3 before reaching M4",
+      "check_in": "M3_PAYER_SCOPE"
+    }
+  },
+
+  "scope_rules": {
+    "_description": "Scope defines the ceiling. Physician's order determines maximum test set. System can only narrow scope, never expand it.",
+    "order_language_mapping": {
+      "FULL": {
+        "triggers": ["evaluate and treat", "complete sleep study", "sleep evaluation"],
+        "scope": ["95806", "G0399", "95810", "95811", "95782", "95783"],
+        "description": "All codes available: HST, PSG, split, titration"
+      },
+      "DIAGNOSTIC": {
+        "triggers": ["diagnostic only", "polysomnogram", "diagnostic sleep study"],
+        "scope": ["95806", "G0399", "95810"],
+        "description": "PSG and HST only (no titration unless split)"
+      },
+      "HST_LOCKED": {
+        "triggers": ["home sleep test", "home sleep apnea test", "HSAT", "HST"],
+        "scope": ["95806", "G0399"],
+        "description": "HST only"
+      },
+      "TITRATION_LOCKED": {
+        "triggers": ["titration", "CPAP study", "PAP titration"],
+        "scope": ["95811"],
+        "description": "95811 only (requires prior positive diagnostic)"
+      },
+      "UNKNOWN": {
+        "triggers": ["no_order_present"],
+        "scope": [],
+        "status": "PENDING_ORDER",
+        "description": "Pre-assessment runs, full scope assumed when order arrives"
+      }
+    },
+    "ambiguous_order_flag": "FLAG_AMBIGUOUS_ORDER",
+    "scope_contraction_path": "FULL → remove contraindicated tests → remove payer-excluded tests → tiebreaker if multiple remain",
+    "scope_expansion_rule": "NEVER automatic. If insurance covers PSG but not HST and order says HST_LOCKED, system generates PENDING_NEW_ORDER — does not upgrade without physician consent."
+  },
+
+  "cob_rules": {
+    "_description": "Coordination of Benefits when 2+ insurance plans detected. NAIC determination order.",
+    "federal_overrides": [
+      { "rule": "Medicaid is ALWAYS secondary/tertiary (last payer)", "applies_to": "all_medicaid" },
+      { "rule": "Tricare is secondary to employer-sponsored plans", "applies_to": "tricare" },
+      { "rule": "FEHB follows standard NAIC rules", "applies_to": "fehb" }
+    ],
+    "naic_determination_order": [
+      { "id": "D1", "rule": "Patient's own plan is primary over plan where patient is dependent" },
+      { "id": "D2", "rule": "Active employee plan is primary over COBRA/retired plan" },
+      { "id": "D3", "rule": "Custody rules for dependent children (custodial parent → custodial step-parent → non-custodial parent)" },
+      { "id": "D4", "rule": "Birthday rule — parent whose birthday falls earlier in calendar year has primary (NOT older parent)" },
+      { "id": "D5", "rule": "Longer continuous coverage = primary" },
+      { "id": "D6", "rule": "Fallback — existing primary/secondary designation continues" }
+    ],
+    "after_determination": {
+      "both_inn": "Run each through M3+ individually",
+      "primary_oon": "Standard OON stop applies. Secondary being INN does NOT override.",
+      "primary_inn_secondary_oon": "Process under primary with OON secondary noted in output"
+    }
+  },
+
+  "age_transition_rules": {
+    "_description": "Age-based transition logic for patients approaching key birthdays.",
+    "hard_stop_under_2": {
+      "condition": "Age < 2 AND birthday > 2 months away",
+      "action": "STOP_CANNOT_TEST → FINAL_STOPPED"
+    },
+    "soft_stop_approaching_2": {
+      "condition": "Age < 2 AND birthday within 2 months",
+      "status": "PENDING_AGE_ELIGIBLE",
+      "processing": "Full pipeline executes with pediatric parameters (95782/95783, HST NOT allowed). Scheduling BLOCKED until birthday.",
+      "on_birthday": "Automatic re-entry at M6_START to regenerate output with scheduling unblocked. No reprocessing needed."
+    },
+    "transition_boundaries": [2, 6, 18, 65],
+    "alert_window_days": 60,
+    "missing_dob": "Skip age calculation (cannot calculate without DOB)",
+    "missing_name_with_dob": "Still calculate age. ALERT_MISSING_PATIENT_NAME fires but age logic not bypassed."
+  },
+
+  "payer_identification_sequence": {
+    "_description": "Sequential payer identification: name → format → signals.",
+    "step_1_name": {
+      "source": "insurance.json",
+      "confidence": "highest",
+      "action": "Load payer JSON + criteria files, validate member ID format, gather plan type signals"
+    },
+    "step_2_format": {
+      "condition": "Name not recognized (OCR garbled, unknown carrier)",
+      "method": "Check member ID format (3-letter alpha prefix = BCBS, MBI pattern = Medicare FFS, H-prefix = Humana)",
+      "flag": "FLAG_PAYER_FROM_FORMAT",
+      "confidence": "lower"
+    },
+    "step_3_fallback": {
+      "condition": "Neither name nor format identify payer",
+      "action": "Use Carelon baseline with FLAG_UNKNOWN_PAYER"
+    },
+    "missing_member_id": {
+      "condition": "Payer identified but no member ID extracted",
+      "action": "Skip format validation, fire ALERT_MISSING_MEMBER_ID, continue to signals"
+    }
+  },
+
+  "flag_design_principles": {
+    "every_flag_has_action": true,
+    "severity_hierarchy": ["STOP", "PENDING", "FLAG", "ALERT", "INFO"],
+    "severity_meanings": {
+      "STOP": "Nothing else can happen until resolved",
+      "PENDING": "Waiting for specific info with a re-entry point",
+      "FLAG": "Attention needed but processing continues",
+      "ALERT": "Informational, carried to scheduling",
+      "INFO": "FYI only"
+    },
+    "deduplication": "If multiple modules remove same test, output shows one flag with all reasons listed",
+    "no_contradiction_rule": "STOP flag cannot coexist with READY_TO_SCHEDULE. Highest severity determines status."
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "Known referring provider database. Used in M1E for NPI validation, credential verification, and provider recognition. Populated from processed referrals over time. New providers flagged with FLAG_NEW_PROVIDER and added after verification.",
+  "_used_by": "M1E (Provider & Chart Notes), NPI validation cascade",
+  "_source": "Visual Tree v0.19.0 M1E, Codified Logic Tree v0.16.5 Stage 1.5",
+  "_population_notes": "This file starts mostly empty and grows as referrals are processed. Each verified provider gets an entry. The system learns known providers over time, reducing manual NPI lookups.",
+
+  "schema": {
+    "npi": "string -- 10-digit NPI number (primary key)",
+    "name": {
+      "last": "string",
+      "first": "string",
+      "suffix": "string (Jr, Sr, III, etc.) -- optional"
+    },
+    "credentials": "string -- MD, DO, NP, PA, etc.",
+    "specialty": "string -- optional, e.g. 'Pulmonology', 'Internal Medicine', 'Family Medicine'",
+    "practice": "string -- clinic/hospital name",
+    "phone": "string -- office phone for follow-up",
+    "fax": "string -- fax number for return communications",
+    "state": "string -- 2-letter state code",
+    "known_name_variants": "array -- alternate spellings/formats seen in OCR",
+    "supervising_physician_npi": "string -- if mid-level, link to supervising MD/DO NPI",
+    "referral_count": "integer -- number of referrals processed from this provider",
+    "last_referral_date": "string -- ISO date of most recent referral",
+    "verified": "boolean -- true if NPI confirmed against NPPES registry",
+    "notes": "string -- any special notes about this provider"
+  },
+
+  "providers": {
+    "_placeholder": {
+      "_note": "Replace this with actual provider entries as they are verified. Example entry below.",
+      "example": {
+        "1234567890": {
+          "name": { "last": "Smith", "first": "John", "suffix": null },
+          "credentials": "MD",
+          "specialty": "Pulmonology",
+          "practice": "Las Vegas Pulmonary Associates",
+          "phone": "702-555-0100",
+          "fax": "702-555-0101",
+          "state": "NV",
+          "known_name_variants": ["J. Smith", "Smith, J.", "John Smith MD"],
+          "supervising_physician_npi": null,
+          "referral_count": 47,
+          "last_referral_date": "2026-02-20",
+          "verified": true,
+          "notes": null
+        }
+      }
+    }
+  },
+
+  "lookup_logic": {
+    "_description": "How the system uses this databank during M1E processing.",
+    "by_npi": {
+      "step": "If NPI extracted from document, look up here first.",
+      "match": "If found AND name matches (fuzzy) -> NPI verified, no flag.",
+      "mismatch": "If found BUT name differs -> FLAG_NPI_NAME_MISMATCH.",
+      "not_found": "If not in databank -> cascade to NPPES registry API."
+    },
+    "by_name": {
+      "step": "If NPI not extracted, search by provider name.",
+      "match": "If found -> use stored NPI. Flag if multiple matches.",
+      "not_found": "Cascade to NPPES registry API by name + state."
+    },
+    "new_provider": {
+      "step": "If provider not found anywhere after full cascade.",
+      "action": "FLAG_NEW_PROVIDER -- process continues, provider added to databank queue.",
+      "queue": "After human verifies NPI, add entry to this file."
+    }
+  },
+
+  "maintenance": {
+    "auto_add": "When a new provider is verified (NPI confirmed), add entry automatically.",
+    "variant_learning": "When OCR produces a new spelling variant for a known provider, add to known_name_variants.",
+    "stale_check": "Providers with no referrals in 2+ years can be flagged for review.",
+    "nppes_refresh": "Periodically re-verify NPI numbers against NPPES registry (quarterly recommended)."
+  }
+}

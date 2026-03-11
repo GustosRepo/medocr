@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "payer_id": "medicare_ffs",
+    "payer_name": "Medicare Fee-for-Service",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "No auth for any code. Uses 95806 for HST (not G0399). Watch for AFib-only billing denial."
+  },
+  "criteria_source": {
+    "criteria_id": "medicare_ffs",
+    "criteria_file": "criteria_medicare_ffs.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "95806": {
+      "covered": true,
+      "auth_required": false,
+      "notes": "Medicare uses 95806 for HST, not G0399"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": false
+    }
+  },
+  "hst_code": "95806",
+  "submission": {
+    "primary_method": "none_required",
+    "notes": "No auth required. Billing rules only."
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green",
+  "flags": [
+    {
+      "flag_id": "FLAG_MEDICARE_AFIB_ONLY",
+      "trigger": "icd_codes == [G47.30, I48.91] AND no_other_codes",
+      "message": "Medicare requires additional symptom beyond AFib. Add snoring/EDS/obesity/HTN code.",
+      "severity": "medium"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "payer_id": "uhc_surest",
+    "payer_name": "UHC Surest",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Same auth rules as UHC Commercial. Variable copays by ZIP code -- portal shows WRONG copay. Must CALL or MESSAGE for accurate copay."
+  },
+  "criteria_source": {
+    "criteria_id": "uhc",
+    "criteria_file": "criteria_uhc.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "UHC Provider",
+    "portal_url": "https://uhcprovider.com"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_SUREST_COPAY_CALL",
+      "trigger": "payer == surest",
+      "message": "Do NOT quote portal copay -- must call/message UHC for accurate Surest copay (varies by ZIP)",
+      "severity": "high"
+    }
+  ]
+}

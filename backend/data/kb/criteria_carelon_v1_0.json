@@ -1,0 +1,994 @@
+{
+  "_meta": {
+    "criteria_id": "carelon",
+    "criteria_name": "Carelon Health (formerly AIM Specialty Health)",
+    "version": "1.0",
+    "effective_date": "2025-11-15",
+    "source_document": "Carelon SDM01-1125.1 Sleep Disorder Management",
+    "strictness_tier": 1,
+    "strictness_label": "STRICTEST",
+    "notes": "Used by many BCBS plans (IL, TX, CA, VA, AL, MA, NV, Premera, Regence, Independence, Highmark) and Anthem Medicaid (criteria only, submit via Availity). Symptoms-first model similar to Evicore. Updated: keyword arrays for OCR matching.",
+    "last_updated": "2026-02-27"
+  },
+  "general_requirements": {
+    "symptoms_first": true,
+    "symptoms_first_note": "Comorbidities alone are NOT sufficient — documented sleep apnea symptoms required before any testing",
+    "questionnaire_or_equivalent_required": false,
+    "questionnaire_note": "No specific questionnaire required, but symptom documentation is mandatory"
+  },
+  "hst_eligibility": {
+    "description": "Approved when ANY pathway (A, B, C, or D) is satisfied",
+    "requires_any": true,
+    "pathways": {
+      "pathway_a_observed_apneas": {
+        "description": "Observed apneas during sleep by bed partner or caregiver",
+        "requires": "observed_apnea",
+        "keywords": [
+          "observed apnea",
+          "witnessed apnea",
+          "bed partner reports",
+          "caregiver reports",
+          "stops breathing",
+          "breathing pauses during sleep",
+          "partner observed"
+        ]
+      },
+      "pathway_b_two_of_five_symptoms": {
+        "description": "Combination of TWO of the 5 listed symptoms",
+        "requires_count": 2,
+        "requires_from": 5,
+        "symptoms": [
+          {
+            "id": "excessive_daytime_sleepiness",
+            "description": "ESS >10, inappropriate napping, sleepiness interfering with activities",
+            "ess_threshold": 10,
+            "keywords": [
+              "ESS",
+              "Epworth",
+              "excessive daytime sleepiness",
+              "EDS",
+              "inappropriate napping",
+              "sleepiness interfering",
+              "hypersomnia",
+              "falls asleep during",
+              "unintentional sleep",
+              "excessive sleepiness",
+              "Epworth Sleepiness Scale"
+            ]
+          },
+          {
+            "id": "habitual_snoring_or_gasping",
+            "description": "Habitual snoring or gasping/choking with awakenings",
+            "keywords": [
+              "habitual snoring",
+              "loud snoring",
+              "heavy snoring",
+              "chronic snoring",
+              "gasping",
+              "choking",
+              "choking with awakenings",
+              "gasping awakenings",
+              "snoring",
+              "snores loudly",
+              "disruptive snoring"
+            ]
+          },
+          {
+            "id": "treatment_resistant_hypertension",
+            "description": "3+ antihypertensive medications",
+            "antihypertensive_count_threshold": 3,
+            "keywords": [
+              "resistant hypertension",
+              "treatment-resistant hypertension",
+              "refractory hypertension",
+              "3 antihypertensive",
+              "three blood pressure medications",
+              "multiple antihypertensives",
+              "uncontrolled hypertension",
+              "treatment resistant HTN"
+            ]
+          },
+          {
+            "id": "obesity",
+            "description": "BMI >30 or neck >17 inches (men) / >16 inches (women)",
+            "bmi_threshold": 30,
+            "neck_circumference_male_inches": 17,
+            "neck_circumference_female_inches": 16,
+            "keywords": [
+              "obesity",
+              "obese",
+              "BMI >30",
+              "BMI 30",
+              "BMI 35",
+              "BMI 40",
+              "morbid obesity",
+              "neck circumference",
+              "thick neck",
+              "large neck"
+            ]
+          },
+          {
+            "id": "craniofacial_upper_airway",
+            "description": "Adenotonsillar hypertrophy, neuromuscular disease, craniofacial abnormalities",
+            "keywords": [
+              "craniofacial",
+              "adenotonsillar hypertrophy",
+              "tonsillar hypertrophy",
+              "adenoid hypertrophy",
+              "neuromuscular disease",
+              "upper airway abnormality",
+              "retrognathia",
+              "micrognathia",
+              "macroglossia",
+              "deviated septum",
+              "nasal obstruction"
+            ]
+          }
+        ]
+      },
+      "pathway_c_cardiovascular_plus_one": {
+        "description": "Cardiovascular history PLUS at least ONE of the 5 symptoms above",
+        "requires": "cardiovascular_history AND 1_of_5_symptoms",
+        "cardiovascular_conditions": [
+          {
+            "id": "stroke_gt_30_days",
+            "description": "History of stroke more than 30 days prior",
+            "keywords": [
+              "stroke",
+              "CVA",
+              "cerebrovascular accident",
+              "history of stroke"
+            ]
+          },
+          {
+            "id": "tia",
+            "description": "Transient ischemic attack",
+            "keywords": [
+              "TIA",
+              "transient ischemic attack",
+              "mini stroke"
+            ]
+          },
+          {
+            "id": "cad",
+            "description": "Coronary artery disease",
+            "keywords": [
+              "CAD",
+              "coronary artery disease",
+              "coronary disease",
+              "ischemic heart disease",
+              "IHD"
+            ]
+          },
+          {
+            "id": "sustained_arrhythmia",
+            "description": "Sustained arrhythmias",
+            "keywords": [
+              "arrhythmia",
+              "atrial fibrillation",
+              "AFib",
+              "ventricular tachycardia",
+              "VT",
+              "sustained arrhythmia",
+              "cardiac arrhythmia"
+            ]
+          }
+        ],
+        "plus_symptoms_ref": "pathway_b_two_of_five_symptoms.symptoms",
+        "plus_symptoms_count": 1
+      },
+      "pathway_d_unexplained_conditions": {
+        "description": "Unexplained conditions suggesting OSA — no additional symptoms needed",
+        "conditions": [
+          {
+            "id": "right_heart_failure_unexplained",
+            "description": "Right heart failure with unclear etiology",
+            "keywords": [
+              "right heart failure",
+              "cor pulmonale",
+              "right ventricular failure",
+              "RV failure",
+              "right-sided heart failure"
+            ]
+          },
+          {
+            "id": "polycythemia_unexplained",
+            "description": "Polycythemia with unclear etiology",
+            "keywords": [
+              "polycythemia",
+              "erythrocytosis",
+              "elevated hematocrit",
+              "high red blood cell count"
+            ]
+          },
+          {
+            "id": "sleep_only_arrhythmia",
+            "description": "Sustained arrhythmia occurring solely during sleep",
+            "keywords": [
+              "arrhythmia during sleep",
+              "nocturnal arrhythmia",
+              "sleep-related arrhythmia",
+              "arrhythmia only during sleep"
+            ]
+          },
+          {
+            "id": "pulmonary_hypertension_unexplained",
+            "description": "Pulmonary hypertension with unclear etiology",
+            "keywords": [
+              "pulmonary hypertension",
+              "pulmonary HTN",
+              "PAH",
+              "elevated pulmonary pressure"
+            ]
+          }
+        ]
+      }
+    },
+    "follow_up_hst": {
+      "description": "Follow-up HST approved in these scenarios",
+      "indications": [
+        {
+          "id": "post_upper_airway_surgery",
+          "description": "ONE occasion after upper airway surgery for OSA",
+          "max_occurrences": 1,
+          "keywords": [
+            "upper airway surgery",
+            "UPPP",
+            "uvulopalatopharyngoplasty",
+            "tonsillectomy",
+            "adenoidectomy",
+            "post-surgical",
+            "post surgery"
+          ]
+        },
+        {
+          "id": "post_oral_appliance",
+          "description": "ONE occasion after initiation of oral appliance",
+          "max_occurrences": 1,
+          "keywords": [
+            "oral appliance",
+            "mandibular advancement",
+            "MAD",
+            "dental device",
+            "oral device"
+          ]
+        },
+        {
+          "id": "significant_weight_loss",
+          "description": "Weight loss >= 10% body weight since last study",
+          "weight_change_percent": 10,
+          "keywords": [
+            "weight loss",
+            "lost weight",
+            "significant weight loss",
+            "10% weight loss",
+            "bariatric"
+          ]
+        },
+        {
+          "id": "pre_hypoglossal_nerve_stimulator",
+          "description": "Prior to hypoglossal nerve stimulator if no study within 18 months",
+          "no_study_within_months": 18,
+          "keywords": [
+            "hypoglossal nerve stimulator",
+            "Inspire",
+            "nerve stimulator",
+            "upper airway stimulation"
+          ]
+        }
+      ]
+    }
+  },
+  "hst_contraindications": {
+    "description": "HST NOT allowed — route to PSG when ANY present",
+    "conditions": [
+      {
+        "id": "pediatric",
+        "condition": "Age <= 17 years",
+        "age_max": 17,
+        "keywords": [
+          "pediatric",
+          "child",
+          "minor",
+          "under 18",
+          "adolescent"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "moderate_severe_copd",
+        "condition": "FEV1/FVC <= 0.7 AND FEV1 < 80% predicted",
+        "fev1_fvc_ratio_max": 0.7,
+        "fev1_percent_predicted_max": 80,
+        "keywords": [
+          "COPD",
+          "emphysema",
+          "chronic bronchitis",
+          "FEV1",
+          "obstructive lung disease",
+          "chronic obstructive"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "moderate_severe_chf",
+        "condition": "NYHA Class III or IV",
+        "nyha_class_min": 3,
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA Class III",
+          "NYHA Class IV",
+          "NYHA 3",
+          "NYHA 4",
+          "cardiomyopathy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chf_with_arrhythmia",
+        "condition": "CHF with history of VF or sustained VT without ICD",
+        "keywords": [
+          "ventricular fibrillation",
+          "VF",
+          "sustained VT",
+          "ventricular tachycardia",
+          "CHF with arrhythmia",
+          "heart failure arrhythmia"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "Unable to follow instructions, no one to assist",
+        "keywords": [
+          "cognitive impairment",
+          "dementia",
+          "unable to follow instructions",
+          "confusion",
+          "cognitive deficit",
+          "intellectual disability"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "physical_impairment",
+        "condition": "Unable to apply equipment, no one to assist",
+        "keywords": [
+          "physical impairment",
+          "unable to apply",
+          "mobility impairment",
+          "dexterity",
+          "bedridden",
+          "paralysis",
+          "incapable"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "suspected_csa",
+        "condition": "Central sleep apnea suspected",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "suspected_narcolepsy",
+        "condition": "Narcolepsy suspected — need MSLT",
+        "keywords": [
+          "narcolepsy",
+          "cataplexy",
+          "suspected narcolepsy",
+          "MSLT"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "suspected_idiopathic_hypersomnia",
+        "condition": "Need PSG/MSLT",
+        "keywords": [
+          "idiopathic hypersomnia",
+          "IH",
+          "hypersomnia",
+          "excessive sleepiness disorder"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "parasomnia",
+        "condition": "Parasomnia — except bruxism and sleep talking",
+        "exceptions": [
+          "bruxism",
+          "sleep_talking"
+        ],
+        "keywords": [
+          "parasomnia",
+          "sleepwalking",
+          "sleep terrors",
+          "REM behavior disorder",
+          "RBD",
+          "confusional arousal"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "nocturnal_seizures",
+        "condition": "Need attended monitoring",
+        "keywords": [
+          "nocturnal seizures",
+          "seizure",
+          "epilepsy",
+          "nocturnal epilepsy",
+          "sleep-related seizure"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "suspected_plmd",
+        "condition": "Must document qualifying condition (see plmd_criteria)",
+        "keywords": [
+          "PLMD",
+          "periodic limb movement",
+          "PLM",
+          "leg movements during sleep",
+          "periodic leg movement"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "failed_hst",
+        "condition": "Two nights attempted still suboptimal OR negative with ongoing suspicion",
+        "keywords": [
+          "failed HST",
+          "failed HSAT",
+          "inadequate HST",
+          "inconclusive HST",
+          "negative HSAT",
+          "HST failure",
+          "suboptimal HST"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "oxygen_dependent",
+        "condition": "Oxygen dependent for any reason",
+        "keywords": [
+          "oxygen dependent",
+          "supplemental oxygen",
+          "home oxygen",
+          "O2 dependent",
+          "continuous oxygen"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "recent_stroke",
+        "condition": "Stroke within 30 days",
+        "stroke_within_days": 30,
+        "keywords": [
+          "recent stroke",
+          "acute stroke",
+          "CVA",
+          "stroke within 30 days"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chronic_opioid_use",
+        "condition": "Chronic opioid use when discontinuation not an option",
+        "keywords": [
+          "chronic opioid",
+          "opioid use",
+          "methadone",
+          "suboxone",
+          "opioid dependent",
+          "long-term opioid",
+          "opioid therapy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "ohs_high_risk",
+        "condition": "BMI > 33 + bicarbonate > 28 mmol/L",
+        "bmi_threshold": 33,
+        "bicarb_threshold": 28,
+        "keywords": [
+          "obesity hypoventilation",
+          "OHS",
+          "bicarbonate",
+          "bicarb",
+          "Pickwickian"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "established_ohs",
+        "condition": "BMI > 30 + hypoventilation documented",
+        "bmi_threshold": 30,
+        "keywords": [
+          "established OHS",
+          "obesity hypoventilation syndrome",
+          "documented hypoventilation",
+          "OHS diagnosis"
+        ],
+        "action": "route_to_psg"
+      }
+    ]
+  },
+  "plmd_criteria": {
+    "description": "To support PLMD suspicion for PSG routing, must document ONE qualifying condition",
+    "requires_one_of": [
+      {
+        "id": "pregnancy",
+        "keywords": ["pregnancy", "pregnant"]
+      },
+      {
+        "id": "renal_failure",
+        "keywords": ["renal failure", "kidney failure", "CKD", "ESRD", "dialysis"]
+      },
+      {
+        "id": "iron_deficiency_anemia",
+        "keywords": ["iron deficiency", "anemia", "low ferritin", "iron deficiency anemia"]
+      },
+      {
+        "id": "peripheral_neuropathy",
+        "keywords": ["peripheral neuropathy", "neuropathy", "nerve damage"]
+      },
+      {
+        "id": "antidepressant_or_antipsychotic",
+        "keywords": ["antidepressant", "antipsychotic", "SSRI", "SNRI", "TCA", "neuroleptic"]
+      }
+    ]
+  },
+  "psg_criteria": {
+    "adult": {
+      "description": "In-lab PSG criteria for adults >= 18",
+      "suspected_osa_with_contraindication": {
+        "description": "Same symptom criteria as HST, but patient has HST contraindication",
+        "rule": "hst_eligible_symptoms AND hst_contraindication_present"
+      },
+      "suspected_other_sleep_disorders": [
+        {
+          "id": "central_sleep_apnea",
+          "description": "Heart failure, stroke <= 90 days, chronic opioid use, or Chiari malformation",
+          "keywords": [
+            "central sleep apnea",
+            "CSA",
+            "Cheyne-Stokes",
+            "Chiari malformation",
+            "central apnea"
+          ]
+        },
+        {
+          "id": "narcolepsy",
+          "description": "EDS >= 8 weeks + cataplexy/hallucinations/sleep paralysis",
+          "eds_duration_weeks": 8,
+          "keywords": [
+            "narcolepsy",
+            "cataplexy",
+            "hallucinations",
+            "sleep paralysis",
+            "hypnagogic",
+            "hypnopompic"
+          ]
+        },
+        {
+          "id": "nocturnal_seizures",
+          "description": "Clinical suspicion of nocturnal seizures",
+          "keywords": [
+            "nocturnal seizures",
+            "sleep seizures",
+            "epilepsy"
+          ]
+        },
+        {
+          "id": "parasomnia_harmful",
+          "description": "Parasomnia likely to result in harm to patient or others",
+          "keywords": [
+            "parasomnia",
+            "sleepwalking",
+            "REM behavior disorder",
+            "harmful parasomnia"
+          ]
+        },
+        {
+          "id": "idiopathic_hypersomnia",
+          "description": "EDS >= 8 weeks, OSA excluded or treated",
+          "eds_duration_weeks": 8,
+          "keywords": [
+            "idiopathic hypersomnia",
+            "IH",
+            "excessive sleepiness"
+          ]
+        },
+        {
+          "id": "plmd",
+          "description": "Document qualifying condition + OSA/RLS treated first",
+          "keywords": [
+            "PLMD",
+            "periodic limb movement"
+          ]
+        },
+        {
+          "id": "nocturnal_desaturation",
+          "description": "Due to severe COPD or restrictive thoracic disorders",
+          "keywords": [
+            "nocturnal desaturation",
+            "nocturnal hypoxemia",
+            "restrictive thoracic",
+            "severe COPD"
+          ]
+        }
+      ]
+    },
+    "follow_up_psg": {
+      "description": "Follow-up in-lab PSG indications",
+      "indications": [
+        "post_upper_airway_surgery_with_hst_contraindication",
+        "post_oral_appliance_with_hst_contraindication",
+        "weight_loss_gte_10_percent_with_hst_contraindication",
+        "pre_hypoglossal_nerve_stimulator_no_study_18_months",
+        "post_hypoglossal_or_phrenic_nerve_stimulator_one_time",
+        "cpap_bpap_titration_when_apap_contraindicated_or_failed",
+        "retitrate_pap_symptoms_persist_despite_compliance"
+      ]
+    }
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "hst_rule": "HST NOT allowed for pediatric patients — PSG required",
+    "psg_indications": [
+      {
+        "id": "habitual_snoring_plus_one",
+        "description": "Habitual snoring plus any ONE of the following",
+        "plus_symptoms": [
+          "restless_disturbed_sleep",
+          "behavioral_disturbance_adhd_learning_disorders",
+          "frequent_awakenings",
+          "enuresis_bedwetting",
+          "growth_retardation_failure_to_thrive"
+        ]
+      },
+      {
+        "id": "excessive_daytime_somnolence",
+        "description": "Not explained by other conditions"
+      },
+      {
+        "id": "polycythemia_unexplained",
+        "description": "Polycythemia not explained by other conditions"
+      },
+      {
+        "id": "cor_pulmonale_unexplained",
+        "description": "Cor pulmonale not explained by other conditions"
+      },
+      {
+        "id": "witnessed_apnea",
+        "description": "Witnessed apnea > 2 respiratory cycles"
+      },
+      {
+        "id": "labored_breathing_during_sleep",
+        "description": "Labored breathing during sleep"
+      },
+      {
+        "id": "tonsillar_adenoid_hypertrophy_surgical_risk",
+        "description": "Tonsillar/adenoid hypertrophy in surgical-risk patient to avoid surgery if no OSA"
+      },
+      {
+        "id": "suspected_congenital_central_hypoventilation",
+        "description": "Suspected congenital central hypoventilation"
+      },
+      {
+        "id": "sleep_related_hypoventilation",
+        "description": "Neuromuscular disease, chest wall deformity"
+      },
+      {
+        "id": "apparent_life_threatening_event",
+        "description": "Apparent life-threatening event in infant"
+      },
+      {
+        "id": "post_adenotonsillectomy",
+        "description": "Post-adenotonsillectomy > 8 weeks if symptoms persist",
+        "post_surgery_weeks": 8
+      }
+    ],
+    "follow_up_psg": [
+      "persistent_symptoms_despite_pap_compliance",
+      "post_adenotonsillectomy_gt_8_weeks",
+      "pre_hypoglossal_nerve_stimulator",
+      "weight_loss_gte_10_percent",
+      "titrate_cpap_bpap_after_diagnostic",
+      "clinical_status_change_or_assess_therapy"
+    ]
+  },
+  "split_night_criteria": {
+    "ahi_threshold": 20,
+    "ahi_measurement_window_hours": 2,
+    "minimum_titration_hours_remaining": 3,
+    "description": "AHI > 20/hr during first 2 hours of diagnostic AND at least 3 hours remaining for titration",
+    "if_split_not_achieved": {
+      "night_1": "Diagnostic PSG (95810)",
+      "night_2": "PAP Titration (95811)"
+    }
+  },
+  "titration_criteria": {
+    "cpap_adult": {
+      "description": "CPAP indicated for adults >= 18 when BOTH conditions met",
+      "condition_1": {
+        "option_a": {
+          "ahi_threshold": 15,
+          "symptoms_required": false,
+          "description": "AHI >= 15"
+        },
+        "option_b": {
+          "ahi_min": 5,
+          "ahi_max": 14,
+          "symptoms_required": true,
+          "qualifying_symptoms": [
+            "excessive_daytime_sleepiness",
+            "impaired_cognition",
+            "mood_disorders",
+            "insomnia",
+            "hypertension",
+            "ischemic_heart_disease",
+            "stroke_history"
+          ],
+          "description": "AHI 5-14 with symptoms"
+        }
+      },
+      "condition_2": "Appropriate CPAP level determined"
+    },
+    "cpap_pediatric": {
+      "description": "CPAP indicated for pediatric <= 17 when BOTH conditions met",
+      "condition_1": {
+        "ahi_threshold": 1,
+        "test": "lab_based_psg",
+        "description": "Lab-based PSG shows AHI >= 1 with appropriate titration"
+      },
+      "condition_2_one_of": [
+        "adenotonsillectomy_unsuccessful",
+        "minimal_adenotonsillar_tissue",
+        "osa_due_to_other_cause_craniofacial_morbid_obesity",
+        "adenotonsillectomy_contraindicated"
+      ]
+    },
+    "apap_allowed_when": "Same criteria as CPAP with NO APAP contraindications",
+    "follow_up_titration": [
+      "retitrate_cpap_bpap_symptoms_persist_despite_compliance_4hr_70pct"
+    ]
+  },
+  "apap_contraindications": {
+    "description": "APAP NOT allowed when ANY present",
+    "conditions": [
+      {
+        "id": "chf",
+        "condition": "CHF — any",
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "moderate_severe_copd",
+        "condition": "FEV1/FVC <= 0.7 AND FEV1 < 80% predicted",
+        "fev1_fvc_ratio_max": 0.7,
+        "fev1_percent_predicted_max": 80,
+        "keywords": [
+          "COPD",
+          "emphysema",
+          "chronic bronchitis",
+          "FEV1"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "chronic_opioid_use",
+        "condition": "Chronic opioid use — any",
+        "keywords": [
+          "opioid",
+          "methadone",
+          "suboxone",
+          "chronic opioid"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "supplemental_o2_24hr",
+        "condition": "24-hour supplemental O2",
+        "keywords": [
+          "supplemental oxygen",
+          "24-hour O2",
+          "continuous oxygen",
+          "home oxygen"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "central_sleep_apnea",
+        "condition": ">= 50% central events OR > 5 central events/hr",
+        "central_events_percent": 50,
+        "central_index_threshold": 5,
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "central events"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "neuromuscular_disorders",
+        "condition": "Muscular dystrophy, myasthenia gravis, etc.",
+        "keywords": [
+          "neuromuscular",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "ALS",
+          "motor neuron disease"
+        ],
+        "action": "route_to_inlab_titration"
+      },
+      {
+        "id": "obesity_hypoventilation_syndrome",
+        "condition": "BMI > 30 + documented hypoventilation",
+        "bmi_threshold": 30,
+        "keywords": [
+          "OHS",
+          "obesity hypoventilation",
+          "Pickwickian",
+          "hypoventilation"
+        ],
+        "action": "route_to_inlab_titration"
+      }
+    ]
+  },
+  "compliance_requirements": {
+    "hours_per_night": 4,
+    "percentage_of_nights": 70,
+    "definition": "PAP use >= 4 hours/night on 70% of nights during consecutive 30-day period (CMS standard)",
+    "demonstration_schedule": {
+      "first_year": "Every 90 days",
+      "after_first_year": "Annually"
+    },
+    "exceptions": [
+      "pediatric_patients",
+      "bpap_for_non_osa_conditions"
+    ],
+    "alternative_compliance": "Treating provider (NOT DME) attests clinical benefit at current usage levels"
+  },
+  "mslt_mwt_criteria": {
+    "initial_narcolepsy": {
+      "description": "Approved when BOTH conditions met",
+      "condition_1": "EDS present >= 8 weeks",
+      "eds_duration_weeks": 8,
+      "condition_2_one_of": [
+        "disrupted_nocturnal_sleep",
+        "cataplexy",
+        "hypnagogic_hypnopompic_hallucinations",
+        "sleep_paralysis",
+        "psg_completed_symptoms_persist_after_osa_treatment"
+      ]
+    },
+    "repeat_narcolepsy": {
+      "description": "Previous test did not diagnose narcolepsy, continued suggestive symptoms"
+    },
+    "occupational_safety_mwt": {
+      "description": "Established sleep breathing disorder or narcolepsy, performed on current treatment"
+    },
+    "idiopathic_hypersomnia": {
+      "description": "Approved when BOTH conditions met",
+      "condition_1": "EDS present >= 8 weeks",
+      "eds_duration_weeks": 8,
+      "condition_2_one_of": [
+        "difficult_morning_awakening",
+        "prolonged_primary_sleep_period",
+        "sleep_drunkenness",
+        "frequent_non_refreshing_daytime_naps",
+        "psg_hsat_completed_symptoms_persist_after_osa_treatment"
+      ]
+    }
+  },
+  "submission_routing": {
+    "carelon_portal_plans": {
+      "portal": "providerportal.carelon.com",
+      "plans": [
+        "BCBS IL (letter-in-ID plans)",
+        "BCBS TX (letter-in-ID plans)",
+        "BCBS CA (most prefixes)",
+        "BCBS VA",
+        "BCBS AL",
+        "BCBS MA",
+        "BCBS NV (select prefixes)",
+        "Premera BCBS",
+        "Independence BCBS",
+        "Highmark BCBS (letter-in-ID plans)"
+      ],
+      "special_cases": {
+        "regence_bcbs": "Call only — cannot submit via portal"
+      }
+    },
+    "anthem_medicaid": {
+      "criteria_source": "carelon",
+      "submission_method": "Availity (preferred) or Fax to Anthem Medicaid",
+      "NOT_submitted_to": "Carelon portal",
+      "authorization_status": {
+        "hst_g0399": {
+          "auth_required": false,
+          "note": "Schedule directly"
+        },
+        "psg_95810": {
+          "auth_required": true,
+          "method": "Availity or Fax"
+        },
+        "titration_95811": {
+          "auth_required": true,
+          "method": "Availity or Fax"
+        },
+        "split": {
+          "auth_required": true,
+          "method": "Availity or Fax"
+        }
+      },
+      "referral_required": false,
+      "cost": "100% covered (Medicaid rule)",
+      "pain_level": "YELLOW"
+    }
+  },
+  "cpt_codes": {
+    "95800": "HSAT: heart rate, O2 sat, respiratory analysis, sleep time",
+    "95801": "HSAT: minimum heart rate, O2 sat, respiratory analysis",
+    "95806": "HSAT: Type III (4+ channels)",
+    "95807": "Attended sleep study (no staging)",
+    "95808": "PSG 1-3 parameters",
+    "95810": "PSG 4+ parameters (diagnostic)",
+    "95811": "PSG 4+ parameters with PAP titration",
+    "95782": "PSG pediatric <6 years (diagnostic)",
+    "95783": "PSG pediatric <6 years (with titration)",
+    "95805": "MSLT or MWT",
+    "G0398": "HSAT Type II (7+ channels)",
+    "G0399": "HSAT Type III",
+    "G0400": "HSAT Type IV (<=3 channels) — NOT MEDICALLY NECESSARY"
+  },
+  "thresholds": {
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_eligible": 20,
+    "ahi_pediatric_treatment": 1,
+    "bmi_obesity": 30,
+    "bmi_ohs_high_risk": 33,
+    "bmi_ohs_established": 30,
+    "bicarb_ohs_high_risk": 28,
+    "neck_circumference_male_inches": 17,
+    "neck_circumference_female_inches": 16,
+    "fev1_fvc_ratio_copd": 0.7,
+    "fev1_percent_predicted_copd": 80,
+    "nyha_class_chf": 3,
+    "stroke_recent_days": 30,
+    "ess_threshold": 10,
+    "eds_duration_weeks_mslt": 8,
+    "weight_change_significant_percent": 10,
+    "post_surgery_weeks_pediatric": 8,
+    "hypoglossal_no_study_months": 18,
+    "split_ahi_threshold": 20,
+    "split_diagnostic_hours": 2,
+    "split_titration_minimum_hours": 3,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70,
+    "compliance_demo_first_year_days": 90,
+    "antihypertensive_count_resistant": 3,
+    "central_events_percent_csa": 50,
+    "central_index_csa": 5
+  }
+}

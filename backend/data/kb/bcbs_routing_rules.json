@@ -1,0 +1,406 @@
+{
+  "_meta": {
+    "description": "BCBS routing rules — affiliate profiles, TPA detection, ID format classification, 3-tier cascade config",
+    "version": "1.0",
+    "sources": [
+      "BCBS_Complete_Payer_Knowledge_Base.md",
+      "BCBS_IDFormat_ImmediateOverride.md",
+      "BCBS_ThreeTier_Feedback_Architecture.md"
+    ],
+    "last_updated": "2026-02-27"
+  },
+  "decision_hierarchy": [
+    { "step": 0, "name": "TPA_CHECK", "question": "Is this a Quantum Health, Benesys/Union, or other TPA plan?", "on_yes": "STOP — use TPA-specific process", "on_no": "continue" },
+    { "step": 1, "name": "KNOWN_PREFIX", "question": "Is prefix in database with known rules?", "on_yes": "Use known rules", "on_no": "fall through" },
+    { "step": 2, "name": "UNIVERSAL_RULES", "rules": ["letter_in_id_carelon", "medicare_supplement_no_auth"], "on_resolved": "done", "on_unresolved": "fall through" },
+    { "step": 3, "name": "AFFILIATE_DEFAULTS", "action": "Use affiliate's known patterns", "if_unknown": "Call payer number on card" }
+  ],
+  "tpa_rules": {
+    "quantum_health": {
+      "detection_keywords": ["quantum health", "quantum", "CCBYQH"],
+      "auth_required": false,
+      "can_submit_for_documentation": true,
+      "portal": "https://www.ccbyqh.com/#/",
+      "phone": "800-247-8956",
+      "scope": "1-2 prefixes per affiliate, employer-offered plans"
+    },
+    "benesys_union": {
+      "detection_keywords": ["benesys", "union", "electrical workers", "pipe fitters", "ironworkers", "teamsters", "carpenters"],
+      "eligibility_tools": [
+        { "name": "Benesys", "url": "https://benesys-prod.webspyglass.com/logonE.jsp" },
+        { "name": "Zenith", "url": "https://www.zenithadm.com/ProviderServices/ProviderLogin.cfm" }
+      ],
+      "auth_handlers": {
+        "ICM": {
+          "full_name": "Innovative Care Management",
+          "submission": "upload_or_fax",
+          "url": "https://innovativecare.files.com/u/file-upload",
+          "auth_required_all_codes": true
+        },
+        "NHS": {
+          "full_name": "Nevada Health Solutions",
+          "submission": "portal_or_fax",
+          "url": "https://nhs.acuitynxt.com/providerportal/",
+          "auth_required_all_codes": true
+        },
+        "Telligen": {
+          "submission": "portal",
+          "url": "https://myqualitrac.com",
+          "auth_required_all_codes": true
+        }
+      },
+      "workflow": "Check spreadsheet first → if unknown use Benesys/Zenith to determine handler → submit through designated handler",
+      "note": "White card ID can find member via Benesys with alternate ID + prefix into BCBS Eligibility"
+    }
+  },
+  "universal_rules": {
+    "letter_in_id": {
+      "description": "Member ID body (after prefix) contains at least one letter → likely Carelon",
+      "routing_if_true": {
+        "auth_method": "carelon",
+        "portal": "https://providerportal.carelon.com",
+        "chat_available": true,
+        "fallback": "availity_chat"
+      },
+      "routing_if_false": {
+        "auth_method": "affiliate_specific",
+        "chat_available": false
+      },
+      "strength": "SOFT_SIGNAL"
+    },
+    "medicare_supplement": {
+      "description": "Benefits indicate Plan A through Plan N → true Medicare Supplement",
+      "plan_codes": ["A", "B", "C", "D", "F", "G", "K", "L", "M", "N"],
+      "result": { "auth_required": false, "reason": "True Medicare Supplement — no auth after Medicare" },
+      "exception": "Retirement plans are NOT Medicare Supplement even if similar"
+    },
+    "um_fallback_phone": "800-336-7767"
+  },
+  "id_format_patterns": {
+    "FORMAT_A": {
+      "name": "Numeric Body",
+      "regex": "^[A-Z]{3}\\d{6,}$",
+      "signals": { "likely_carelon": false, "chat_available": false, "requires_manual_verification": true }
+    },
+    "FORMAT_B": {
+      "name": "Alpha-Numeric Body",
+      "regex": "^[A-Z]{3}[A-Z0-9]*[A-Z][A-Z0-9]*$",
+      "signals": { "likely_carelon": true, "chat_available": true, "requires_manual_verification": false }
+    },
+    "FORMAT_C": {
+      "name": "Extended Numeric",
+      "regex": "^[A-Z]{3}\\d{10,}$",
+      "signals": { "likely_carelon": false, "chat_available": false, "requires_manual_verification": true }
+    },
+    "FORMAT_FEP": {
+      "name": "Federal Employee Program",
+      "regex": "^R\\d{8,}$",
+      "signals": { "likely_carelon": false, "chat_available": false, "requires_manual_verification": false }
+    },
+    "FORMAT_UNKNOWN": {
+      "name": "Unrecognized",
+      "regex": null,
+      "signals": { "likely_carelon": null, "chat_available": null, "requires_manual_verification": true }
+    }
+  },
+  "tool_availability_by_format": {
+    "chat":              { "FORMAT_A": false, "FORMAT_B": true,  "FORMAT_C": false, "FORMAT_FEP": false },
+    "phone":             { "FORMAT_A": true,  "FORMAT_B": true,  "FORMAT_C": true,  "FORMAT_FEP": true  },
+    "aim_carelon_portal":{ "FORMAT_A": "sometimes", "FORMAT_B": true,  "FORMAT_C": false, "FORMAT_FEP": false },
+    "fax_form":          { "FORMAT_A": true,  "FORMAT_B": true,  "FORMAT_C": false, "FORMAT_FEP": true  },
+    "availity":          { "FORMAT_A": true,  "FORMAT_B": true,  "FORMAT_C": false, "FORMAT_FEP": false }
+  },
+  "g0399_workaround": {
+    "applies_to": "Affiliates using Carelon portal EXCEPT IL and TX",
+    "excluded_affiliates": ["bcbs_il", "bcbs_tx"],
+    "condition": "Carelon portal doesn't accept G0399",
+    "steps": ["Submit as 95810 instead", "When not reviewed/denied for in-lab study", "Drop to G0399 to bypass"],
+    "portal_responses": {
+      "NotReviewed": "Truly no auth required",
+      "Authorized": "Authorization IS required"
+    }
+  },
+  "affiliate_profiles": {
+    "bcbs_il": {
+      "name": "BCBS IL",
+      "states": ["IL"],
+      "auth_pattern": "MIXED",
+      "default_hst_auth": false,
+      "default_inlab_auth": "LIKELY_REQUIRED",
+      "auth_method": "phone_or_carelon",
+      "phone": { "auth": "800-572-3089" },
+      "portal": "bcbsil.com",
+      "chat_available": false,
+      "notes": "Letter → Carelon; no letter → call IVR"
+    },
+    "bcbs_tx": {
+      "name": "BCBS TX",
+      "states": ["TX"],
+      "auth_pattern": "PARTIAL_INLAB_PHONE",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "phone",
+      "phone": { "auth": "800-441-9188" },
+      "portal": "bcbstx.com",
+      "chat_available": false,
+      "notes": "Same rules as IL, different phone"
+    },
+    "bcbs_ca": {
+      "name": "BCBS CA (Anthem)",
+      "states": ["CA"],
+      "auth_pattern": "AIM_PORTAL",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "aim_portal",
+      "fax_form": true,
+      "portal": "anthem.com/ca",
+      "chat_available": true,
+      "notes": "HST no auth; in-lab fax BCBS CA form; G0399 workaround applies"
+    },
+    "horizon_nj": {
+      "name": "Horizon BCBS NJ",
+      "states": ["NJ"],
+      "auth_pattern": "NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": null,
+      "portal": "horizonblue.com",
+      "chat_available": false,
+      "id_contains": "HZN",
+      "notes": "Verify via prior auth search tool"
+    },
+    "bcbs_fep": {
+      "name": "BCBS FEP (Federal)",
+      "states": ["Federal"],
+      "auth_pattern": "PARTIAL_INLAB_FAX",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "fax_to_bcbs_federal",
+      "phone": { "general": "800-727-4060" },
+      "chat_available": false,
+      "prefix_indicator": "R",
+      "notes": "Prefix = single R; HST no auth; in-lab fax; Medicare primary = no auth"
+    },
+    "bcbs_sc": {
+      "name": "BCBS SC",
+      "states": ["SC"],
+      "auth_pattern": "NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": null,
+      "phone": { "old_fallback": "800-868-2510" },
+      "portal": "coherehealth.com",
+      "chat_available": false,
+      "notes": "Verify via Cohere Health portal"
+    },
+    "bcbs_fl": {
+      "name": "BCBS FL",
+      "states": ["FL"],
+      "auth_pattern": "AUTH_ALL_CODES",
+      "default_hst_auth": true,
+      "default_inlab_auth": true,
+      "auth_method": "carecentrix_phone_fax",
+      "phone": { "benefits": "800-955-5692", "auth": "855-243-3326", "fax": "855-243-3335" },
+      "chat_available": false,
+      "notes": "Always auth; no portal; CareCentrix only"
+    },
+    "bcbs_mi": {
+      "name": "BCBS MI",
+      "states": ["MI"],
+      "auth_pattern": "NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": null,
+      "portal": "authorizations.bcbsm.com",
+      "chat_available": false,
+      "notes": "Code lookup PDF available"
+    },
+    "premera": {
+      "name": "Premera BCBS",
+      "states": ["WA", "AK"],
+      "auth_pattern": "PARTIAL_INLAB_CARELON",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "carelon",
+      "portal": "premera.com",
+      "chat_available": false,
+      "notes": "Check Availity payer space; Premera IDs have Carelon lookup issues (try ID variations)"
+    },
+    "carefirst": {
+      "name": "CareFirst BCBS",
+      "states": ["MD", "DC"],
+      "auth_pattern": "PORTAL_CHECK",
+      "default_hst_auth": false,
+      "default_inlab_auth": "LIKELY_REQUIRED",
+      "auth_method": "portal",
+      "portal": "provider.carefirst.com",
+      "chat_available": false,
+      "notes": "Free precert/preauth page → provider portal → fallback universal"
+    },
+    "hmsa": {
+      "name": "BCBS HI / HMSA",
+      "states": ["HI"],
+      "auth_pattern": "CONDITIONAL_5YR",
+      "default_hst_auth": false,
+      "default_inlab_auth": "CONDITIONAL",
+      "auth_method": "fax_form",
+      "chat_available": false,
+      "special_rule": {
+        "id": "five_year_lookback",
+        "no_testing_5yr_auth_required": false,
+        "testing_5yr_auth_required": true,
+        "method": "fax"
+      },
+      "known_prefixes": ["XLRR", "XLXR", "HFPF", "XLER", "XLPR"],
+      "notes": "Unique 5-year lookback rule; 4-char prefixes"
+    },
+    "bcbs_ma": {
+      "name": "BCBS MA",
+      "states": ["MA"],
+      "auth_pattern": "CARELON_PRIMARY",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "carelon",
+      "chat_available": false,
+      "notes": "Mostly Carelon regardless of ID format; few no-auth prefixes"
+    },
+    "regence": {
+      "name": "Regence BCBS",
+      "states": ["OR", "ID", "UT", "WA"],
+      "auth_pattern": "MIXED_CARELON_NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": "LIKELY_REQUIRED",
+      "auth_method": "carelon",
+      "carelon_note": "Call only — cannot submit via portal; up to 4hr hold",
+      "chat_available": false,
+      "portal": "regence.com",
+      "has_quantum_prefix": true,
+      "notes": "Cannot submit via Carelon portal — call only; up to 4hr hold; HST no auth; one Quantum prefix"
+    },
+    "bcbs_kc": {
+      "name": "BCBS KC",
+      "states": ["KC"],
+      "auth_pattern": "UNCERTAIN",
+      "default_hst_auth": "VERIFY",
+      "default_inlab_auth": "VERIFY",
+      "auth_method": "phone_only",
+      "portal": "bluekc.com",
+      "portal_note": "blocked OOS",
+      "chat_available": false,
+      "notes": "Portal unusable OOS; no hold queue; forced callback that never comes"
+    },
+    "bcbs_mn": {
+      "name": "BCBS MN",
+      "states": ["MN"],
+      "auth_pattern": "NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": null,
+      "portal": "bluecrossmn.com",
+      "chat_available": false,
+      "notes": "Prior auth lookup tool available"
+    },
+    "highmark": {
+      "name": "Highmark BCBS",
+      "states": ["PA"],
+      "auth_pattern": "PARTIAL_INLAB_FORM",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "fax_form",
+      "phone": { "phone1": "800-452-8507", "phone2": "800-547-3627", "fax": "888-236-6321" },
+      "portal": "highmarkbcbs.com",
+      "chat_available": false,
+      "notes": "Letter → Carelon; no letter → HST no auth, in-lab fax form"
+    },
+    "bcbs_al": {
+      "name": "BCBS AL",
+      "states": ["AL"],
+      "auth_pattern": "MOSTLY_NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": "phone_verify",
+      "chat_available": false,
+      "special_prefixes": {
+        "KIU": "Check HST coverage",
+        "KYI": "Check G0399 coverage"
+      },
+      "notes": "Letter → Carelon; watch KIU (HST coverage), KYI (G0399 coverage)"
+    },
+    "bcbs_va": {
+      "name": "BCBS VA (Anthem)",
+      "states": ["VA"],
+      "auth_pattern": "CARELON_PRIMARY",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "carelon",
+      "chat_available": true,
+      "notes": "High chat availability; separate from CareFirst"
+    },
+    "bcbs_nv": {
+      "name": "BCBS NV (Anthem)",
+      "states": ["NV"],
+      "auth_pattern": "AIM_PORTAL",
+      "default_hst_auth": true,
+      "default_inlab_auth": true,
+      "auth_method": "aim_portal",
+      "portal": "providers.anthem.com/nevada-provider",
+      "chat_available": true,
+      "notes": "Home state; most complex; union exceptions (ICM, NHS); Caremore OON; VirtuOx (UMQ); Medicaid (VNV); Ameriben (N2G)"
+    },
+    "independence": {
+      "name": "Independence BCBS",
+      "states": ["PA"],
+      "auth_pattern": "CARELON_PRIMARY",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "carelon",
+      "chat_available": false,
+      "notes": "All known prefixes → Carelon; still building data"
+    },
+    "wellmark": {
+      "name": "Wellmark BCBS",
+      "states": ["IA", "SD"],
+      "auth_pattern": "PARTIAL_INLAB_FAX",
+      "default_hst_auth": false,
+      "default_inlab_auth": true,
+      "auth_method": "fax_form",
+      "phone": { "fax": "515-376-9104" },
+      "portal": "Availity",
+      "chat_available": false,
+      "special_prefixes": {
+        "BTZ": "Needs letter of medical necessity for HST"
+      },
+      "notes": "Availity → Wellmark lookup tool; BTZ needs letter of medical necessity for HST"
+    },
+    "bcbs_ne": {
+      "name": "BCBS NE",
+      "states": ["NE"],
+      "auth_pattern": "NO_AUTH",
+      "default_hst_auth": false,
+      "default_inlab_auth": false,
+      "auth_method": "availity_form",
+      "portal": "Availity",
+      "chat_available": false,
+      "notes": "Online form, email confirmation"
+    }
+  },
+  "global_default": {
+    "description": "Tier 3 — nothing matched, global BCBS fallback",
+    "confidence": "PRESUMED_GENERAL",
+    "auto_proceed": false,
+    "staff_action": "CALL_PAYER_TO_VERIFY",
+    "um_fallback_phone": "800-336-7767",
+    "default_hst_auth": "VERIFY",
+    "default_inlab_auth": "VERIFY"
+  },
+  "auth_handler_tools": {
+    "carelon": { "portal": "https://providerportal.carelon.com", "formerly": "AIM" },
+    "availity": { "portal": "https://www.availity.com", "high_chat_states": ["NV", "VA", "CA"] },
+    "carecentrix": { "auth_phone": "855-243-3326", "fax": "855-243-3335" },
+    "cohere_health": { "portal": "https://login.coherehealth.com/" },
+    "horizon_tool": { "url": "https://www.horizonblue.com/providers/resources/provider-self-service-tools/prior-authorization-search" },
+    "carefirst_precert": { "url": "https://provider.carefirst.com/providers/medical/out-of-area-precertification-preauthorization.page" },
+    "bcbs_mi_code_lookup": { "url": "https://authorizations.bcbsm.com/index.shtml" },
+    "bcbs_mn_lookup": { "url": "https://www.bluecrossmn.com/providers/medical-management/prior-authorization-lookup-tool" }
+  }
+}

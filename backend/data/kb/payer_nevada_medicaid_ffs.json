@@ -1,0 +1,63 @@
+{
+  "_meta": {
+    "payer_id": "nevada_medicaid_ffs",
+    "payer_name": "Nevada Medicaid FFS",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "HST NEVER allowed. Questionnaire FORM required (not just chart notes). Process-strict, clinically-lenient."
+  },
+  "criteria_source": {
+    "criteria_id": "nevada_medicaid",
+    "criteria_file": "criteria_nevada_medicaid.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "HST": {
+      "covered": false,
+      "notes": "NEVER allowed"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "N/A",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Nevada Medicaid",
+    "notes": "Follow exact submission procedures"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_NV_MEDICAID_HST_NOT_ALLOWED",
+      "trigger": "nevada_medicaid AND order_type == hst",
+      "message": "HST never allowed for NV Medicaid -- need new RX for PSG",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_NV_MEDICAID_QUESTIONNAIRE_REQUIRED",
+      "trigger": "nevada_medicaid AND no_questionnaire_form",
+      "message": "Actual questionnaire form required (not just chart notes)",
+      "severity": "medium",
+      "blocking": true
+    }
+  ],
+  "cost": {
+    "patient_responsibility": "none",
+    "coverage_percent": 100
+  }
+}

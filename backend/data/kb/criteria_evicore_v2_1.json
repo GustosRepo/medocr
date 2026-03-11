@@ -1,0 +1,476 @@
+{
+  "_meta": {
+    "criteria_id": "evicore",
+    "criteria_name": "Evicore Healthcare",
+    "version": "2.1",
+    "effective_date": "2021-02-01",
+    "source_document": "evicore_sleep_final_v10_eff020121_pub100920.pdf",
+    "strictness_tier": 1,
+    "strictness_label": "STRICTEST",
+    "notes": "Used by Cigna, Aetna, Meritain. Requires symptoms + comorbidities for PSG. Updated: keyword arrays added to all contraindications and symptom definitions for OCR matching.",
+    "last_updated": "2026-02-27"
+  },
+  "general_requirements": {
+    "clinical_eval_within_days": 60,
+    "established_patient_contact_within_days": 90,
+    "symptoms_duration_minimum_weeks": 4,
+    "symptoms_not_from": "respiratory_infection",
+    "questionnaire_or_equivalent_required": true,
+    "questionnaire_note": "Actual form NOT required -- chart notes documenting questionnaire elements satisfy this",
+    "acceptable_questionnaires": [
+      "ESS",
+      "Berlin",
+      "STOP-BANG",
+      "ISI"
+    ],
+    "acceptable_proxies": [
+      "witnessed_apnea_by_bed_partner",
+      "previous_confirmed_osa",
+      "hp_elements_permitting_stopbang_calculation"
+    ]
+  },
+  "osa_diagnosis": {
+    "option_a": {
+      "ahi_threshold": 15,
+      "symptoms_required": false,
+      "description": "AHI/RDI/REI >= 15"
+    },
+    "option_b": {
+      "ahi_min": 5,
+      "ahi_max": 14,
+      "symptoms_required": true,
+      "qualifying_symptoms_or_comorbidities": [
+        "sleepiness",
+        "nonrestorative_sleep",
+        "fatigue",
+        "insomnia",
+        "breath_holding_gasping_choking_on_awakening",
+        "bed_partner_reports_snoring_or_interruptions",
+        "hypertension",
+        "mood_disorder",
+        "cognitive_dysfunction",
+        "coronary_artery_disease",
+        "chf",
+        "atrial_fibrillation",
+        "type_2_diabetes",
+        "stroke"
+      ]
+    }
+  },
+  "hst_eligibility": {
+    "description": "Approved when ALL THREE conditions met",
+    "requires_all": true,
+    "conditions": [
+      {
+        "id": "high_pretest_probability",
+        "description": "Validated questionnaire positive OR EDS + 2 of 3 symptoms",
+        "option_a": "validated_questionnaire_positive",
+        "option_b": {
+          "requires": "excessive_daytime_sleepiness",
+          "plus_2_of_3": [
+            "habitual_loud_snoring",
+            "witnessed_apnea_gasping_choking",
+            "diagnosed_hypertension"
+          ]
+        }
+      },
+      {
+        "id": "patient_capable",
+        "description": "Has mobility, dexterity, cognitive ability for home equipment"
+      },
+      {
+        "id": "no_psg_comorbidities",
+        "description": "No comorbid conditions requiring PSG"
+      }
+    ],
+    "also_approved_for": [
+      "post_osa_surgery",
+      "post_oral_appliance",
+      "post_positional_therapy"
+    ],
+    "symptom_definitions": {
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_loud_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping_choking": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      },
+      "diagnosed_hypertension": {
+        "keywords": [
+          "hypertension",
+          "HTN",
+          "high blood pressure",
+          "resistant hypertension",
+          "antihypertensive",
+          "blood pressure medication"
+        ]
+      },
+      "validated_questionnaire": {
+        "keywords": [
+          "STOP-BANG",
+          "Berlin questionnaire",
+          "ESS",
+          "Epworth Sleepiness Scale",
+          "sleep questionnaire",
+          "screening questionnaire"
+        ],
+        "note": "Positive validated questionnaire can substitute for symptom criteria"
+      }
+    }
+  },
+  "hst_contraindications": {
+    "description": "These conditions require PSG instead of HST",
+    "conditions": [
+      {
+        "id": "morbid_obesity",
+        "condition": "BMI >= 45",
+        "bmi_threshold": 45,
+        "keywords": [
+          "morbid obesity",
+          "BMI >50",
+          "BMI 50",
+          "super obesity"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "ohs",
+        "condition": "BMI >= 30 + PCO2 >= 45 or bicarb >= 27",
+        "bmi_threshold": 30,
+        "pco2_threshold": 45,
+        "bicarb_threshold": 27,
+        "keywords": [
+          "obesity hypoventilation",
+          "OHS",
+          "Pickwickian",
+          "hypoventilation syndrome"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "pulmonary_disease",
+        "condition": "Nocturnal O2 OR PO2 < 60 OR PCO2 > 45 OR FEV1 <= 69%",
+        "fev1_threshold": 69,
+        "keywords": [
+          "nocturnal oxygen",
+          "nocturnal O2",
+          "PO2",
+          "PCO2",
+          "FEV1",
+          "pulmonary disease",
+          "restrictive lung",
+          "COPD",
+          "chronic lung disease"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "neuromuscular",
+        "keywords": [
+          "Parkinson",
+          "stroke with residua",
+          "epilepsy",
+          "myotonic dystrophy",
+          "ALS"
+        ]
+      },
+      {
+        "id": "chf",
+        "condition": "Moderate-severe with pulmonary congestion OR LVEF < 45%",
+        "lvef_threshold": 45,
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "pulmonary_htn",
+        "condition": "mPAP >= 25 OR TRV >= 2.9 m/s",
+        "keywords": [
+          "pulmonary hypertension",
+          "pulmonary HTN",
+          "PAH",
+          "right heart failure"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "severe_insomnia",
+        "condition": "ISI >= 22",
+        "isi_threshold": 22,
+        "keywords": [
+          "severe insomnia",
+          "chronic insomnia",
+          "ISI",
+          "insomnia severity index"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chronic_opioid",
+        "keywords": [
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "daily high-potency opioid"
+        ]
+      },
+      {
+        "id": "pediatric",
+        "condition": "age < 18",
+        "action": "route_to_psg"
+      },
+      {
+        "id": "bpap_asv_needed",
+        "condition": "CPAP tried and failed/not tolerated",
+        "keywords": [
+          "BiPAP",
+          "BPAP",
+          "ASV",
+          "adaptive servo",
+          "CPAP failure",
+          "CPAP intolerance",
+          "PAP failure"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "sleep_related_hypoxemia",
+        "condition": "SpO2 <= 88% for >= 5 consecutive minutes without events",
+        "keywords": [
+          "SpO2",
+          "oxygen saturation",
+          "desaturation",
+          "hypoxemia",
+          "nocturnal hypoxemia",
+          "oxygen drops"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "failed_autopap",
+        "condition": ">30 days use with AHI > 5 (symptoms) or > 15 (regardless)",
+        "keywords": [
+          "APAP failure",
+          "auto-PAP failure",
+          "AutoPAP",
+          "auto-titration failed",
+          "APAP inadequate"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "central_sleep_apnea",
+        "condition": "Centrals > 50% AND central index >= 5/hr",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea",
+          "central index"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "treatment_emergent_csa",
+        "condition": "OSA treated, centrals emerge",
+        "keywords": [
+          "treatment emergent",
+          "CompSA",
+          "complex sleep apnea",
+          "centrals emerged",
+          "treatment-emergent CSA"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "low_pretest_probability",
+        "description": "Still need symptoms, but HST less accurate",
+        "keywords": [
+          "low probability",
+          "low suspicion",
+          "low risk OSA",
+          "unlikely OSA"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "patient_incapable",
+        "description": "Lacks mobility/dexterity/cognitive ability",
+        "keywords": [
+          "dementia",
+          "cognitive impairment",
+          "unable to operate",
+          "physical limitation",
+          "dexterity",
+          "mobility impairment",
+          "bedridden",
+          "incapable"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "failed_hst",
+        "description": "Negative, inconclusive, or technically inadequate",
+        "keywords": [
+          "failed HST",
+          "inadequate HST",
+          "HST failure",
+          "inconclusive HST",
+          "failed HSAT",
+          "HSAT failure",
+          "negative HSAT"
+        ],
+        "action": "route_to_psg"
+      }
+    ]
+  },
+  "psg_criteria": {
+    "critical_rule": "PSG requires ALL HST criteria PLUS comorbidity or HST failure",
+    "requires": "hst_eligible AND (comorbidity OR hst_failed)"
+  },
+  "split_night_criteria": {
+    "ahi_threshold": 15,
+    "ahi_measurement_window_hours": 2,
+    "minimum_titration_hours_remaining": 3,
+    "description": "AHI >= 15/hr during >= 2 hours AND >= 3 hours for titration"
+  },
+  "titration_criteria": {
+    "initial": "Same comorbidities as PSG determine attended vs unattended APAP",
+    "no_comorbidities": "Unattended APAP trial first",
+    "repeat_approved_when": [
+      "weight_gain_gte_10_percent_with_symptoms",
+      "weight_loss_bmi_drops_10_or_below_30_with_pressure_intolerance",
+      "insufficient_response_despite_treatment",
+      "symptoms_return_after_good_response",
+      "pap_ahi_gt_5_with_symptoms_or_gt_15",
+      "compliance_demonstrated_with_continued_symptoms"
+    ],
+    "not_approved_for": [
+      "efficacy_assessment_without_changed_symptoms",
+      "new_pap_equipment"
+    ]
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "hst_rule": "Home/portable studies investigational in children",
+    "cpt_codes": {
+      "under_6": "95782",
+      "6_and_over": "95810"
+    },
+    "psg_indications": [
+      "sleep_related_breathing_disorders",
+      "narcolepsy_hypersomnia_with_mslt",
+      "central_hypoventilation_syndrome",
+      "nocturnal_seizures",
+      "rem_behavior_disorder",
+      "post_adenotonsillectomy_residual_symptoms",
+      "periodic_limb_movement_disorder"
+    ],
+    "snoring_plus_any": [
+      "restless_disturbed_sleep",
+      "behavioral_learning_adhd",
+      "unexplained_enuresis",
+      "frequent_awakenings",
+      "failure_to_thrive",
+      "witnessed_apnea",
+      "labored_breathing",
+      "morning_headaches",
+      "hypertension",
+      "weight_abnormality",
+      "secondary_enuresis",
+      "excessive_daytime_sleepiness",
+      "polycythemia",
+      "cor_pulmonale",
+      "tonsillar_hypertrophy",
+      "adenoidal_facies"
+    ]
+  },
+  "compliance_requirements": {
+    "hours_per_night": 4,
+    "percentage_of_nights": 70,
+    "required_for_repeat_titration": true
+  },
+  "not_covered": {
+    "indications": [
+      "circadian_rhythm_disorders",
+      "common_parasomnias_bruxism_enuresis_nightmares_sleep_talking",
+      "insomnia",
+      "restless_legs_syndrome"
+    ],
+    "technologies": [
+      "ai_sleep_testing",
+      "pap_nap",
+      "uars_titration",
+      "prescreening_devices",
+      "standalone_actigraphy",
+      "otc_devices"
+    ],
+    "mslt_mwt_not_covered": [
+      "following_positive_psg",
+      "single_nap_studies",
+      "unattended_home_mslt"
+    ]
+  },
+  "thresholds": {
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_eligible": 15,
+    "bmi_morbid_obesity": 45,
+    "bmi_ohs": 30,
+    "pco2_ohs": 45,
+    "bicarb_ohs": 27,
+    "isi_severe_insomnia": 22,
+    "lvef_chf": 45,
+    "fev1_copd": 69,
+    "ess_threshold": 10,
+    "weight_change_significant_percent": 10,
+    "clinical_eval_days": 60,
+    "split_ahi_threshold": 15,
+    "split_titration_minimum_hours": 3,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

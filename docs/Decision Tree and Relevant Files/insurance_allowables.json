@@ -1,0 +1,330 @@
+{
+  "_version": "1.0",
+  "_updated": "2026-02-24",
+  "_description": "PIN-5: Insurance allowable rates by payer and CPT code. These are the contracted reimbursement amounts. Where user-stated rates conflict with this spreadsheet, user-stated rates take precedence.",
+  "_note_umr": "UMR: We charge patients at HPN rates (lower) but actually get reimbursed at $900 for HSTs. Prioritize HST for UMR unless clinical reason for in-lab.",
+
+  "payers": {
+    "Medicare FFS": {
+      "aliases": ["Medicare", "Traditional Medicare", "Medicare Part B"],
+      "rates": {
+        "95806": 102.95,
+        "95810": 673.50,
+        "95811": 707.49
+      }
+    },
+    "Medi-Share": {
+      "aliases": [],
+      "rates": {
+        "95810": 568.11,
+        "95811": 597.11
+      }
+    },
+    "Aetna": {
+      "aliases": ["Aetna Commercial"],
+      "rates": {
+        "G0399": 117.32,
+        "95782": 1047.27,
+        "95810": 624.74,
+        "95811": 652.21
+      }
+    },
+    "Aetna Medicare": {
+      "aliases": ["Aetna Medicare Advantage", "Aetna MA"],
+      "rates": {
+        "G0399": 180.00,
+        "95810": 591.28,
+        "95811": 617.69
+      }
+    },
+    "Ambetter": {
+      "aliases": ["Silversummit Commercial", "Silver Summit Commercial", "AM Better"],
+      "rates": {
+        "G0399": 102.68,
+        "95782": 963.49,
+        "95810": 622.40,
+        "95811": 652.21
+      }
+    },
+    "Anthem Medicaid": {
+      "aliases": [],
+      "rates": {
+        "G0399": 157.72,
+        "95782": 916.52,
+        "95810": 553.25,
+        "95811": 580.41
+      }
+    },
+    "BCBS": {
+      "aliases": ["BCBS Commercial", "Anthem BCBS"],
+      "rates": {
+        "G0399": 203.17,
+        "95782": 1039.63,
+        "95810": 835.31,
+        "95811": 877.95
+      }
+    },
+    "BCBS Medicare Advantage": {
+      "aliases": ["BCBS MA", "Anthem Medicare"],
+      "rates": {
+        "95810": 719.86,
+        "95811": 799.54
+      }
+    },
+    "Multiplan": {
+      "aliases": ["Beechstreet", "PHCS", "UFCW 711", "Beechstreet / Multiplan / PHCS"],
+      "rates": {
+        "95806": 140.55,
+        "95810": 655.55,
+        "95811": 671.03
+      }
+    },
+    "Cigna": {
+      "aliases": ["Health Partners", "Cigna / Health Partners"],
+      "rates": {
+        "95806": 155.00,
+        "95782": 1100.00,
+        "95810": 650.00,
+        "95811": 685.00
+      }
+    },
+    "UMR_CCSF": {
+      "aliases": ["CCSF", "Clark County School Flex"],
+      "plan_note": "UMR sub-plan. Charge patient at HPN rates, actual reimbursement differs.",
+      "rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 401.40,
+        "95811": 495.00
+      }
+    },
+    "Coventry": {
+      "aliases": [],
+      "rates": {
+        "95810": 729.58,
+        "95811": 799.54
+      }
+    },
+    "EBMS": {
+      "aliases": [],
+      "rates": {
+        "G0399": 193.44,
+        "95810": 645.54,
+        "95811": 677.27
+      }
+    },
+    "Electrical Workers 357": {
+      "aliases": ["ELECTRICAL WORKERS LOCAL 357", "IBEW 357"],
+      "rates": {
+        "G0399": 203.17,
+        "95810": 835.31,
+        "95811": 877.95
+      }
+    },
+    "GEHA": {
+      "aliases": [],
+      "rates": {
+        "G0399": 193.44,
+        "95810": 622.40,
+        "95811": 650.20
+      }
+    },
+    "HealthSmart": {
+      "aliases": [],
+      "rates": {
+        "95810": 631.28,
+        "95811": 663.22
+      }
+    },
+    "Hometown Health": {
+      "aliases": [],
+      "rates": {
+        "95806": 175.56,
+        "95810": 615.00,
+        "95811": 685.00
+      }
+    },
+    "HPN": {
+      "aliases": ["HPN PPO", "HPN POS", "HPN HMO", "SHL", "SHO", "SHL/SHO"],
+      "rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 374.40,
+        "95811": 495.24
+      }
+    },
+    "Sierra Health": {
+      "aliases": ["SHL", "SHO", "SHL/SHO", "Sierra Healthcare Options"],
+      "note": "Same rates as HPN -- same network.",
+      "rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 374.40,
+        "95811": 495.24
+      }
+    },
+    "Humana": {
+      "aliases": ["Humana PPO", "Humana HMO"],
+      "rates": {
+        "G0399": 165.65,
+        "95810": 529.04,
+        "95811": 588.59
+      }
+    },
+    "Loomis": {
+      "aliases": ["LOOMIS"],
+      "plan_note": "UMR sub-plan.",
+      "rates": {
+        "95806": 334.04,
+        "95810": 401.40,
+        "95811": 495.00
+      }
+    },
+    "Nevada Medicaid FFS": {
+      "aliases": ["Medicaid", "NV Medicaid"],
+      "rates": {
+        "95782": 916.52,
+        "95810": 553.25,
+        "95811": 580.41
+      },
+      "note": "HST is NEVER covered. No rate exists."
+    },
+    "MGM Direct": {
+      "aliases": ["MGM"],
+      "plan_note": "UMR sub-plan.",
+      "rates": {
+        "95806": 334.04,
+        "95810": 401.40,
+        "95811": 495.00
+      }
+    },
+    "OneHealth": {
+      "aliases": [],
+      "rates": {
+        "95806": 166.30,
+        "95782": 1022.52,
+        "95810": 615.00,
+        "95811": 665.00
+      }
+    },
+    "Optum": {
+      "aliases": ["UHC Optum", "Optum Medicare"],
+      "rates": {
+        "G0399": 128.02,
+        "95810": 570.40,
+        "95811": 598.02
+      }
+    },
+    "UMR_PEBP": {
+      "aliases": ["PEBP", "Public Employees Benefits Program"],
+      "plan_note": "UMR sub-plan. Charge patient at HPN rates.",
+      "rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 401.40,
+        "95811": 495.00
+      }
+    },
+    "Prominence": {
+      "aliases": [],
+      "rates": {
+        "G0399": 93.44,
+        "95810": 489.40,
+        "95811": 511.58
+      },
+      "note": "Contract sunset 2025-10-31. Verify contract status before using these rates."
+    },
+    "Silversummit Medicaid": {
+      "aliases": ["Silver Summit Medicaid"],
+      "rates": {
+        "G0399": 157.72,
+        "95810": 553.25,
+        "95811": 580.41
+      }
+    },
+    "UMR_Teachers": {
+      "aliases": ["Teachers", "CCSD Teachers"],
+      "plan_note": "UMR sub-plan. Charge patient at HPN rates.",
+      "rates": {
+        "95806": 334.04,
+        "95782": 734.40,
+        "95810": 401.40,
+        "95811": 495.00
+      }
+    },
+    "Tricare": {
+      "aliases": ["Tricare Prime", "Tricare Select"],
+      "rates": {
+        "95806": 140.98,
+        "95810": 527.05,
+        "95811": 553.97
+      }
+    },
+    "UHC": {
+      "aliases": ["United Healthcare", "United Health Care"],
+      "rates": {
+        "G0399": 126.71,
+        "95782": 679.67,
+        "95810": 430.76,
+        "95811": 459.30
+      }
+    },
+    "UMR": {
+      "aliases": ["UMR Generic"],
+      "plan_note": "[!] UMR BILLING RULE: Charge patient at HPN rates ($334.04 HST, $374.40 PSG, $495.24 CPAP) so patient is not overbilled. Actual HST reimbursement from Sierra UMR plans = $900.00. PRIORITIZE HST for UMR unless clinical reason for in-lab.",
+      "rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 401.40,
+        "95811": 495.00
+      },
+      "actual_hst_reimbursement": 900.00,
+      "patient_charge_rates": {
+        "95806": 334.04,
+        "95782": 881.91,
+        "95810": 374.40,
+        "95811": 495.24
+      },
+      "patient_charge_source": "HPN rates"
+    },
+    "VA": {
+      "aliases": ["VA Choice", "VA Community Care"],
+      "rates": {
+        "95806": 128.02,
+        "95810": 570.40,
+        "95811": 598.02
+      },
+      "note": "100% covered -- no patient cost."
+    },
+    "Self Pay": {
+      "aliases": ["Cash", "Cash Pay", "Private Pay", "Self-Pay"],
+      "rates": {
+        "95806": 250.00,
+        "95782": 1200.00,
+        "95810": 600.00,
+        "95811": 650.00
+      }
+    }
+  },
+
+  "umr_special_rules": {
+    "description": "UMR is a TPA with many sub-plans. All UMR sub-plans use the same base rates but patient is charged at HPN rates to avoid overbilling.",
+    "sub_plans": ["CCSF", "PEBP", "Teachers", "Loomis", "MGM Direct"],
+    "patient_charge_basis": "HPN rates",
+    "hst_strategy": "PRIORITIZE HST for all UMR plans -- actual reimbursement ($900) far exceeds allowable ($334.04). Only route to in-lab if clinical necessity.",
+    "hpn_charge_rates": {
+      "95806": 334.04,
+      "95782": 881.91,
+      "95810": 374.40,
+      "95811": 495.24
+    }
+  },
+
+  "code_descriptions": {
+    "95806": "Home Sleep Test (HST) -- standard CPT",
+    "G0399": "Home Sleep Test (HST) -- Medicare/payer-specific HCPCS",
+    "95810": "In-Lab Polysomnography (PSG) -- diagnostic",
+    "95811": "In-Lab Polysomnography -- CPAP/BiPAP titration",
+    "95782": "Pediatric In-Lab Polysomnography -- diagnostic (age 2-5, or 6+ per payer)"
+  }
+}

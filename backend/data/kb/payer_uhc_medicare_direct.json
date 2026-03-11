@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "payer_id": "uhc_medicare_direct",
+    "payer_name": "UHC Medicare (Direct-Managed)",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "No auth required for any code. HMO plans need PCP referral (PCP submits, not us)."
+  },
+  "criteria_source": {
+    "criteria_id": "uhc",
+    "criteria_file": "criteria_uhc.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": false
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "none_required",
+    "notes": "No auth required for any test. Submit anyway for confirmation reference."
+  },
+  "referral": {
+    "required": "hmo_only",
+    "notes": "HMO plans require PCP-submitted referral via uhcprovider.com. PPO plans do not."
+  },
+  "pain_level": "green"
+}

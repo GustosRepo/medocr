@@ -7,10 +7,10 @@ Last Updated: 2026-02-28 (VLM-primary architecture migration + frontend audit)
 Goal: Stable referral extraction + usable UI + basic analytics & export. Everything else defers.
 
 Must Have (ship-blocking)
-- [ ] Frontend error boundary + fallback screen (prevents blank app on crash)
-- [ ] API error taxonomy mapping applied to HTTP responses (consistent codes/messages)
-- [ ] Download JSON button (Raw JSON) for immediate data export
-- [ ] E2E sanity test: sample upload -> processed result (assert key fields present)
+- [x] Frontend error boundary + fallback screen (prevents blank app on crash)
+- [x] API error taxonomy mapping applied to HTTP responses (consistent codes/messages)
+- [x] Download JSON button (Raw JSON) for immediate data export
+- [x] E2E sanity test: sample upload -> processed result (assert key fields present)
 - [ ] README deployment snippet (start backend + frontend + sample doc walk-through)
 
 Nice-to-Have (only if Musts done early)
@@ -67,8 +67,8 @@ Legend:
 - [x] Add normalizers: name order swap fix, NPI validation, phone formatting, CPT/ICD coercion
 - [x] Smoke test on real 15-page medical referral PDF — successful extraction
 - [x] Git commit on vlm-experiment-2 (437b4ce)
-- [ ] Refine VLM prompt for CPT codes (currently returns "OSA" instead of "95810")
-- [ ] Refine VLM prompt for name order (still occasionally swaps first/last)
+- [x] Refine VLM prompt for CPT codes (rejects diagnosis names like "OSA", infers from description)
+- [x] Refine VLM prompt for name order (expanded swap detection: comma, combined, title-case normalization)
 - [ ] Side-by-side accuracy test: run same documents through regex vs VLM, compare field-by-field
 - [ ] Full pipeline test through UI with VLM_PRIMARY=true
 - [ ] Evaluate Qwen2.5-VL as alternative to MiniCPM-V (better accuracy on tables)
@@ -271,7 +271,7 @@ Legend:
 - [ ] Accessibility pass (focus rings, contrast ratios) (UI A11y)
 - [ ] Storybook stories for Section / StatCard / CollapsibleJson
 - [ ] Lazy-load Analytics & Legacy routes (bundle size)
-- [ ] Error boundary component + fallback UI
+- [x] Error boundary component + fallback UI
 
 ---
 ## 5. Longer-Term / Strategic
@@ -296,7 +296,7 @@ Legend:
 ## 7. Technical Debt / Hygiene
 - [x] Centralize regex patterns in a constants module
 - [x] Logging standardization (levels + correlation IDs)
-- [~] Error taxonomy (user vs system vs external OCR) (classification helper present; response mapping pending)
+- [x] Error taxonomy (user vs system vs external OCR) (classification helper + auto-category middleware + global error handler)
 - [x] Rate-limit / concurrency guard around OCR calls (basic + semaphore implemented)
 - [x] Normalize date parsing (single util with confidence rating)
 - [ ] Migrate inline style objects to theme-driven styles (reduce scattered CSS-in-JS)

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Paper, Title, Text, Button, Stack, Group, Badge, ScrollArea } from '../ui/primitives.jsx';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4387';
+const apiBase = '/api';
 
 export default function AIAnalysisPage() {
   const [documents, setDocuments] = useState([]);
@@ -16,7 +16,7 @@ export default function AIAnalysisPage() {
 
   const loadDocuments = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/ai-analysis/documents`);
+      const res = await fetch(`${apiBase}/ai-analysis/documents`);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch (error) {
@@ -29,7 +29,7 @@ export default function AIAnalysisPage() {
     setAnalysis(null);
     
     try {
-      const res = await fetch(`${API_BASE}/api/ai-analysis/document/${docId}`, {
+      const res = await fetch(`${apiBase}/ai-analysis/document/${docId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

@@ -20,13 +20,6 @@ export default function ValidationIssuesDrawer({
   extractedData = {},
   onUpdateField 
 }) {
-  console.log('🟢 ValidationIssuesDrawer render:', { 
-    isOpen, 
-    conflictsCount: conflicts.length,
-    conflicts: conflicts.slice(0, 3), // Show first 3
-    extractedDataKeys: Object.keys(extractedData)
-  });
-  
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [resolvedIssues, setResolvedIssues] = useState(new Set());

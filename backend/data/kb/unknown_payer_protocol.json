@@ -1,0 +1,166 @@
+{
+  "_meta": {
+    "id": "unknown_payer_protocol",
+    "name": "Unknown / Unidentified Insurance Protocol",
+    "version": "1.0",
+    "effective_date": "2026-03-12",
+    "source": "Unknown_Insurance_Protocol.md v1.1",
+    "notes": "Fallback protocol when payer cannot be identified. Key principle: process first, verify later. Uses Carelon baseline for clinical sufficiency assessment."
+  },
+  "key_principle": "PROCESS_FIRST_VERIFY_LATER",
+  "clinical_baseline": {
+    "source": "criteria_carelon_v1_0.json",
+    "description": "Carelon criteria serve as industry baseline. Unknown payers are checked against Carelon-level documentation to provide conditional readiness status.",
+    "conditional_outputs": {
+      "meets_baseline": "If auth required → likely meets criteria",
+      "does_not_meet_baseline": "If auth required → more information likely needed"
+    }
+  },
+  "workflow": [
+    {
+      "step": 1,
+      "action": "PROCESS_DOCUMENT",
+      "description": "Extract clinical data normally. Do NOT stop because payer is unknown."
+    },
+    {
+      "step": 2,
+      "action": "CHECK_CLINICAL_SUFFICIENCY",
+      "description": "Compare against Carelon baseline. Generate conditional readiness output."
+    },
+    {
+      "step": 3,
+      "action": "FLAG_FOR_VERIFICATION",
+      "description": "Set FLAG_UNKNOWN_PAYER. Must call to verify auth requirements."
+    },
+    {
+      "step": 4,
+      "action": "CALL_TO_VERIFY",
+      "description": "Use number on card. Determine: auth required? HST code? Submission method?"
+    },
+    {
+      "step": 5,
+      "action": "FINAL_OUTPUT",
+      "description": "Combine auth requirement + clinical readiness. Ready to schedule OR action needed."
+    }
+  ],
+  "identification_checklist": {
+    "step_1_check_card": [
+      "Payer name",
+      "Network logos (BCBS, UHC, Cigna, Aetna, etc.)",
+      "TPA indicators (EBMS, Meritain, etc.)",
+      "Phone numbers",
+      "Member ID format",
+      "Group number"
+    ],
+    "step_2_search_systems": [
+      "insurance.json accepted list",
+      "payer_criteria_map.json payer_aliases",
+      "nonbcbs_operational_rules.json",
+      "bcbs_prefix_database.json",
+      "Previous encounters with similar cards"
+    ],
+    "step_3_check_availity": "Try eligibility lookup in Availity — may route to correct payer"
+  },
+  "verification_call_script": {
+    "information_to_gather": [
+      "Who is the actual payer?",
+      "What network do they use?",
+      "Is authorization required?",
+      "For which codes?",
+      "What is the HST code (G0399 or 95806)?",
+      "How to submit auth if required?",
+      "What are the benefits?",
+      "Any special requirements?"
+    ],
+    "source": "Main phone number on back of card"
+  },
+  "minimum_scheduling_requirements": [
+    { "field": "payer_name", "required": true, "notes": "Who are we billing?" },
+    { "field": "auth_required", "required": true, "notes": "For each code type" },
+    { "field": "hst_code", "required": true, "notes": "G0399 or 95806" },
+    { "field": "benefits", "required": true, "notes": "Patient responsibility" },
+    { "field": "network_status", "required": true, "notes": "In-network or OON" },
+    { "field": "submission_method", "required": false, "notes": "Portal, phone, fax — if auth required" }
+  ],
+  "combining_results": [
+    { "auth_required": false, "clinical_readiness": "any", "final_status": "READY_TO_SCHEDULE" },
+    { "auth_required": true, "clinical_readiness": "meets_baseline", "final_status": "READY_FOR_AUTH_SUBMISSION" },
+    { "auth_required": true, "clinical_readiness": "does_not_meet_baseline", "final_status": "REQUEST_ADDITIONAL_DOCUMENTATION" }
+  ],
+  "common_scenarios": {
+    "unusual_card_with_network_logo": {
+      "description": "Card shows unfamiliar name BUT has BCBS/UHC/Cigna/Aetna logo",
+      "action": "Likely IBA/TPA using that network. Call card number (not network). Ask if standard network rules apply."
+    },
+    "self_funded_employer_plan": {
+      "description": "Card shows employer name, not insurance company",
+      "action": "Likely self-funded plan. May use TPA (EBMS, Meritain, etc.) or network (Multiplan, PHCS). Call to determine actual handler. Rules set by employer, not network."
+    },
+    "no_card_verbal_only": {
+      "description": "Patient provides insurance name verbally, no card",
+      "action": "Request card/ID number. Cannot proceed without verifiable information. FLAG_INSURANCE_UNVERIFIED. Schedule tentatively, verify before service."
+    },
+    "out_of_state_plan": {
+      "description": "Insurance from another state",
+      "action": "Check if BCBS (use prefix lookup). Verify network status. Call to verify auth requirements. Confirm OOS provider acceptance."
+    }
+  },
+  "flags": [
+    {
+      "flag_id": "FLAG_UNKNOWN_PAYER",
+      "trigger": "payer_not_found_in_system",
+      "message": "Insurance payer not recognized. Call using number on card to verify auth requirements.",
+      "severity": "medium",
+      "blocking_scheduling": true,
+      "blocking_clinical_processing": false
+    },
+    {
+      "flag_id": "FLAG_CLINICAL_BASELINE_MET",
+      "trigger": "unknown_payer AND clinical_data_meets_carelon_baseline",
+      "message": "If auth required → likely meets criteria",
+      "severity": "info",
+      "blocking": false
+    },
+    {
+      "flag_id": "FLAG_CLINICAL_BASELINE_NOT_MET",
+      "trigger": "unknown_payer AND clinical_data_does_not_meet_carelon_baseline",
+      "message": "If auth required → more information likely needed",
+      "severity": "medium",
+      "blocking": false
+    },
+    {
+      "flag_id": "FLAG_ADD_TO_SYSTEM",
+      "trigger": "new_payer_information_collected",
+      "message": "New payer identified — add to insurance.json and create criteria file",
+      "severity": "low",
+      "blocking": false
+    },
+    {
+      "flag_id": "FLAG_INSURANCE_UNVERIFIED",
+      "trigger": "no_card_verbal_only",
+      "message": "Insurance info provided verbally only — request card before service",
+      "severity": "high",
+      "blocking_scheduling": true
+    }
+  ],
+  "escalation": [
+    "Escalate to supervisor",
+    "Contact patient for additional information",
+    "Consider scheduling as self-pay pending verification",
+    "Document all attempts made"
+  ],
+  "new_payer_documentation_template": {
+    "required_fields": [
+      "payer_name",
+      "date_verified",
+      "verified_by",
+      "phone_number_called",
+      "auth_status_per_code",
+      "hst_code",
+      "network",
+      "clinical_criteria",
+      "special_requirements",
+      "notes"
+    ]
+  }
+}

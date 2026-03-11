@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "payer_id": "silversummit",
+    "payer_name": "Silversummit",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "No published criteria. Uses Carelon criteria as conservative default. Titration almost never approved for Medicaid."
+  },
+  "criteria_source": {
+    "criteria_id": "carelon",
+    "criteria_file": "criteria_carelon.json",
+    "confidence": "presumed"
+  },
+  "plan_types": [
+    "medicaid",
+    "ambetter"
+  ],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Almost never approved for Medicaid -- submit anyway"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Silversummit Provider",
+    "portal_url": "https://provider.silversummithealthplan.com"
+  },
+  "referral": {
+    "required": "ambetter_check_benefits",
+    "notes": "Never for Medicaid. Check benefits for Ambetter."
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_SILVERSUMMIT_TITRATION_WARNING",
+      "trigger": "silversummit_medicaid AND titration_requested",
+      "message": "Titration almost never approved for Medicaid -- submit anyway, document attempt, consider APAP alternative",
+      "severity": "high"
+    },
+    {
+      "flag_id": "FLAG_SILVERSUMMIT_AMBETTER_REFERRAL",
+      "trigger": "silversummit_ambetter",
+      "message": "Check benefits for referral requirement",
+      "severity": "medium"
+    }
+  ],
+  "cost": {
+    "medicaid": {
+      "patient_responsibility": "none",
+      "coverage_percent": 100
+    },
+    "ambetter": "check_benefits"
+  }
+}

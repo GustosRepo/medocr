@@ -294,6 +294,18 @@ export default function ChecklistPage() {
                         </Badge>
                       </Tooltip>
                     )}
+                    {r.routing?.kbAssessment?.status && (
+                      <Tooltip label={`KB: ${r.routing.kbAssessment.flagSummary || r.routing.kbAssessment.status}`}>
+                        <Badge size="xs" color={
+                          r.routing.kbAssessment.status === 'STOP' ? 'red' :
+                          r.routing.kbAssessment.status === 'PENDING' ? 'orange' :
+                          r.routing.kbAssessment.status === 'FLAG' ? 'yellow' :
+                          r.routing.kbAssessment.status === 'CLEAR' ? 'green' : 'blue'
+                        } variant="outline">
+                          KB: {r.routing.kbAssessment.status}
+                        </Badge>
+                      </Tooltip>
+                    )}
                     {r.confidence && <Badge size="xs" color="grape" variant="light">{r.confidence}</Badge>}
                     {r.verification && (() => {
                       const cfg = {

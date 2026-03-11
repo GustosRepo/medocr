@@ -1,0 +1,124 @@
+{
+  "_meta": {
+    "criteria_id": "silversummit",
+    "criteria_name": "Silversummit Health Plan",
+    "version": "1.0",
+    "effective_date": "2026-02-01",
+    "source_document": "Silversummit_Clinical_Criteria.md v2.0",
+    "strictness_tier": 1,
+    "strictness_label": "STRICTEST",
+    "notes": "Silversummit does not publish clear criteria. Uses Carelon-level criteria as conservative baseline. Covers Silversummit Medicaid and Silversummit Ambetter (Marketplace).",
+    "clinical_basis": "criteria_carelon_v1_0.json",
+    "clinical_basis_note": "All clinical criteria (HST eligibility, contraindications, PSG, titration, pediatric, split-night, APAP, compliance, MSLT/MWT) inherited from Carelon. Over-documenting never causes denials.",
+    "last_updated": "2026-02-27"
+  },
+  "inherits_clinical_from": "criteria_carelon_v1_0.json",
+  "payers_covered": [
+    "Silversummit Medicaid",
+    "Silversummit Ambetter"
+  ],
+  "authorization_status": {
+    "medicaid": {
+      "hst_g0399": {
+        "auth_required": false,
+        "note": "Schedule directly"
+      },
+      "psg_95810": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com"
+      },
+      "titration_95811": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com",
+        "warning": "Almost never approved for Medicaid — submit anyway and document the attempt"
+      },
+      "split_night": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com"
+      }
+    },
+    "ambetter": {
+      "hst_g0399": {
+        "auth_required": false,
+        "note": "Schedule directly"
+      },
+      "psg_95810": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com"
+      },
+      "titration_95811": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com"
+      },
+      "split_night": {
+        "auth_required": true,
+        "portal": "provider.silversummithealthplan.com"
+      }
+    }
+  },
+  "operational_details": {
+    "medicaid": {
+      "hst_code": "G0399",
+      "referral_required": false,
+      "auth_portal": "provider.silversummithealthplan.com",
+      "cost": "100% covered (Medicaid rule)",
+      "pain_level": "YELLOW"
+    },
+    "ambetter": {
+      "hst_code": "G0399",
+      "referral_required": "check_benefits",
+      "auth_portal": "provider.silversummithealthplan.com",
+      "cost": "check_benefits",
+      "pain_level": "YELLOW"
+    }
+  },
+  "flags": [
+    {
+      "id": "FLAG_SILVERSUMMIT_INLAB_AUTH",
+      "trigger": "Silversummit patient needs in-lab testing",
+      "action": "Submit auth via Silversummit portal",
+      "severity": "medium"
+    },
+    {
+      "id": "FLAG_SILVERSUMMIT_TITRATION_WARNING",
+      "trigger": "Silversummit Medicaid titration requested",
+      "action": "Submit but expect denial — document attempt, consider alternatives (APAP)",
+      "severity": "high"
+    },
+    {
+      "id": "FLAG_SILVERSUMMIT_AMBETTER_REFERRAL",
+      "trigger": "Silversummit Ambetter plan detected",
+      "action": "Check benefits for referral requirement",
+      "severity": "medium"
+    }
+  ],
+  "titration_warning_medicaid": {
+    "known_issue": true,
+    "description": "In-lab titrations almost never approved for Medicaid",
+    "action": "Still submit authorization and document the attempt",
+    "alternative": "Consider APAP trial if no APAP contraindications"
+  },
+  "submission_routing": {
+    "portal": "provider.silversummithealthplan.com",
+    "portal_name": "Silversummit Provider Portal",
+    "alt_portal": "availity.com",
+    "alt_portal_note": "May work in future"
+  },
+  "thresholds": {
+    "_note": "All clinical thresholds inherited from criteria_carelon_v1_0.json",
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": { "min": 5, "max": 14 },
+    "ahi_split_eligible": 20,
+    "ahi_pediatric_treatment": 1,
+    "bmi_obesity": 30,
+    "bmi_ohs_high_risk": 33,
+    "bicarb_ohs_high_risk": 28,
+    "fev1_fvc_ratio_copd": 0.7,
+    "fev1_percent_predicted_copd": 80,
+    "nyha_class_chf": 3,
+    "ess_threshold": 10,
+    "weight_change_significant_percent": 10,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

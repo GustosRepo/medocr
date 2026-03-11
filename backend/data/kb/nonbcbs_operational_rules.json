@@ -1,0 +1,571 @@
+{
+  "_meta": {
+    "file_id": "nonbcbs_operational_rules",
+    "version": "1.0",
+    "last_updated": "2026-03-11",
+    "source": "NonBCBS_Payer_Knowledge_Base_v015.md (855 lines)",
+    "purpose": "Operational workflows, universal rules, detection heuristics, cost models, and edge cases for all non-BCBS payers. Supplements individual payer_*.json files.",
+    "notes": "Individual payer JSONs have auth/coverage/referral data. This file adds: universal cross-payer rules, HST code routing, OON list, operational workflows, cost models, detection heuristics, escalation paths, and the portal directory."
+  },
+
+  "universal_rules": {
+    "call_when_in_doubt": {
+      "rule_id": "UNIVERSAL_CALL_FALLBACK",
+      "description": "If any payer's rules are unclear, auth requirement is uncertain, or the plan doesn't match known patterns — call the payer.",
+      "applies_to": "ALL_PAYERS",
+      "priority": "highest"
+    },
+    "medicare_supplement": {
+      "rule_id": "UNIVERSAL_MEDICARE_SUPPLEMENT",
+      "description": "True Medicare Supplement plans (Plan A through Plan N) require no authorization after Medicare pays. Applies regardless of carrier (BCBS, Aetna, UHC, Cigna, etc.).",
+      "does_not_apply_to": ["medicare_advantage", "retirement_plans"],
+      "detection_keywords": ["medicare supplement", "medigap", "plan a", "plan b", "plan c", "plan d", "plan f", "plan g", "plan k", "plan l", "plan m", "plan n"]
+    },
+    "referral_vs_authorization": {
+      "rule_id": "UNIVERSAL_REFERRAL_AUTH_DISTINCTION",
+      "description": "Some payers separate referral (PCP approval to see specialist) from authorization (payer approval for specific test). A plan may require one, both, or neither.",
+      "action": "Check benefits to determine which applies"
+    },
+    "universal_medicaid": {
+      "rule_id": "UNIVERSAL_MEDICAID_100PCT",
+      "description": "All Medicaid plans: 100% covered for approved charges, no patient cost.",
+      "applies_to": ["nevada_medicaid_ffs", "anthem_medicaid", "silversummit_medicaid", "molina_medicaid", "hpn_medicaid", "caresource_medicaid"]
+    },
+    "chart_notes": {
+      "rule_id": "UNIVERSAL_CHART_NOTES",
+      "description": "If chart notes are missing, request them upfront. Some payers allow submission to proceed while waiting.",
+      "payers_allow_submit_while_waiting": ["sierra_hpn"]
+    }
+  },
+
+  "hst_code_routing": {
+    "_description": "Master HST code routing table. Use primary insurance's code. ~1% exception may use secondary's code.",
+    "g0399_payers": [
+      "bcbs_all", "aetna", "uhc", "humana", "tricare", "va", "champva",
+      "geha", "lv_firefighters", "first_health", "anthem_medicaid",
+      "silversummit_medicaid", "silversummit_ambetter", "molina_medicaid",
+      "molina_marketplace", "caresource_medicaid"
+    ],
+    "95806_payers": [
+      "cigna", "medicare_ffs", "sierra_hpn", "workers_comp_dol",
+      "multiplan", "phcs"
+    ],
+    "special_rules": {
+      "nevada_medicaid_ffs": "Never allows HST as primary. As secondary, follows primary's code.",
+      "ebms": "TPA — depends on parent network. Always call to verify.",
+      "umr": "95806 (Sierra/standard) or G0399 (UHC plans). See UMR section.",
+      "sierra_hpn": "95806 unless primary insurance uses G0399."
+    }
+  },
+
+  "oon_plans": [
+    { "name": "Culinary Health Fund", "reason": "OON" },
+    { "name": "P3 Health Partners", "reason": "OON" },
+    { "name": "Intermountain Healthcare", "reason": "OON" },
+    { "name": "ApolloCare", "reason": "OON" },
+    { "name": "Select Health Plans", "reason": "OON" },
+    { "name": "Scan Health Plans", "reason": "OON" },
+    { "name": "Alignment Health Plans", "reason": "OON" },
+    { "name": "Prominence", "reason": "OON" },
+    { "name": "WellCare by Allwell Silversummit", "reason": "OON" },
+    { "name": "Cigna Medicare", "reason": "OON" },
+    { "name": "Kaiser Permanente", "reason": "OON" },
+    { "name": "Medi-Cal", "reason": "OON" },
+    { "name": "Motor Vehicle / PI", "reason": "N/A — doesn't apply to industry" }
+  ],
+
+  "payer_operational_supplements": {
+    "aetna": {
+      "plan_types": {
+        "commercial": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "availity",
+          "referral": "check_benefits_hmo_only",
+          "referral_npi_rule": "PCP NPI + Facility NPI ONLY. Do NOT use specialist/reading physician NPI.",
+          "notes_required": "only_if_requested",
+          "pain_level": "green"
+        },
+        "medicare": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "availity",
+          "referral": false,
+          "pain_level": "green"
+        },
+        "supplement": {
+          "auth": false,
+          "rule": "UNIVERSAL_MEDICARE_SUPPLEMENT",
+          "portal": "myproviderhq.com"
+        }
+      },
+      "workflow": [
+        "Check benefits via Availity → determines if PCP referral needed",
+        "If PCP referral required: submit ALL codes through Availity referral tool using PCP NPI + Facility NPI ONLY",
+        "If in-lab auth required: submit through Availity",
+        "Notes: Not required. Only submit if specifically requested."
+      ]
+    },
+
+    "cigna": {
+      "plan_types": {
+        "commercial": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "evicore",
+          "hst_code": "95806",
+          "referral": false,
+          "notes_required": "sometimes_requested",
+          "pain_level": "green"
+        },
+        "medicare": {
+          "status": "OON",
+          "action": "cannot_accept"
+        },
+        "supplement": {
+          "auth": false,
+          "rule": "UNIVERSAL_MEDICARE_SUPPLEMENT",
+          "portal": "myproviderhq.com",
+          "id_format": "Different from standard Cigna — TBD"
+        }
+      },
+      "portals": {
+        "benefits": { "name": "CignaforHCP", "url": "CignaforHCP.com" },
+        "auth": { "name": "Evicore", "url": "evicore.com" },
+        "supplement": { "name": "MyProviderHQ", "url": "myproviderhq.com" }
+      },
+      "detection_heuristics": {
+        "supplement": "ID format differs from standard OR card says 'Medicare Supplement'",
+        "tpa_managed": "Portal indicates during verification → call provided number",
+        "oon_commercial": "One Commercial plan (possibly Local Access Plus) self-identifies during benefits verification"
+      },
+      "workflow": [
+        "Check ID format/card: Supplement ID or card says 'Medicare Supplement'? → myproviderhq.com, no auth",
+        "Verify benefits via CignaforHCP.com → confirms network status, catches OON plan",
+        "If TPA-managed → call number provided by portal",
+        "Standard in-network Commercial: HST no auth, In-lab submit via Evicore, attach notes if requested"
+      ]
+    },
+
+    "uhc": {
+      "plan_types": {
+        "commercial": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "uhcprovider.com",
+          "referral": false,
+          "notes_required": "always_with_auth",
+          "pain_level": "green"
+        },
+        "medicare_direct": {
+          "hst_auth": false,
+          "inlab_auth": false,
+          "inlab_action": "get_printout",
+          "referral_hmo": true,
+          "referral_submit_to": "uhcprovider.com",
+          "portal": "uhcprovider.com",
+          "pain_level": "green"
+        },
+        "medicare_optum": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "curo.optum.com",
+          "referral_hmo": true,
+          "referral_submit_to": "curo.optum.com",
+          "benefits_portal": "providers.optumcaremw.com",
+          "allowables": "optum_not_humana",
+          "pain_level": "yellow",
+          "triple_portal_workflow": [
+            "Check BOTH uhcprovider.com AND Curo for referral requirements and PCP info",
+            "Benefits → providers.optumcaremw.com",
+            "In-lab auth → curo.optum.com"
+          ]
+        }
+      },
+      "special_variants": {
+        "surest": {
+          "description": "Location-based variable copays by ZIP code",
+          "action": "Must call or message to get accurate copay info",
+          "auth_rules": "Same as standard Commercial",
+          "warning": "NEVER quote copay from portal — always call/message"
+        }
+      },
+      "detection_heuristics": {
+        "direct_vs_optum": "Determined by contract name, card info, or during verification. No ID difference between paths."
+      }
+    },
+
+    "humana": {
+      "plan_types": {
+        "commercial": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "availity",
+          "referral": "check_via_availity",
+          "pain_level": "green",
+          "note": "Rare plan"
+        },
+        "medicare_ppo": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "inlab_submit_to": "availity",
+          "referral": false
+        },
+        "medicare_hmo": {
+          "ipa_routing": {
+            "none_or_standard": {
+              "hst_referral": true,
+              "hst_referral_submit_to": "availity",
+              "inlab_auth": true,
+              "inlab_submit_to": "availity",
+              "benefits": "availity"
+            },
+            "optum": {
+              "hst_referral": false,
+              "inlab_auth": true,
+              "inlab_submit_to": "curo.optum.com",
+              "benefits": "availity + confirm in Optum portal",
+              "allowables": "optum_rates",
+              "note": "Use Optum criteria, NOT Humana criteria"
+            },
+            "p3_health_partners": { "status": "OON", "blocking": true },
+            "intermountain": { "status": "OON", "blocking": true }
+          }
+        },
+        "supplement": {
+          "auth": false,
+          "rule": "UNIVERSAL_MEDICARE_SUPPLEMENT"
+        }
+      },
+      "detection_heuristics": {
+        "ipa_identification": "Availity shows IPA during benefits check. Card sometimes shows IPA.",
+        "ipa_verification": "If Availity shows an IPA, may need to call to verify (some 'IPAs' are just clinics/facilities).",
+        "no_ipa_rule": "No IPA listed on Availity = no IPA"
+      },
+      "pain_level_note": "YELLOW — IPA routing adds complexity"
+    },
+
+    "sierra_hpn": {
+      "plan_types": {
+        "commercial_employer": { "sierra": true, "hpn": true },
+        "medicaid": { "sierra": false, "hpn": true }
+      },
+      "operational": {
+        "hst_submit": "portal_all_codes",
+        "inlab_submit": "portal_all_codes",
+        "hst_code": "95806",
+        "hst_code_exception": "Unless primary uses G0399",
+        "notes_required": false,
+        "notes_action": "Can submit without notes, proceed while waiting",
+        "portal": "provider.healthplanofnevada.com",
+        "pain_level": "green",
+        "do_not_call": true,
+        "ownership": "Both managed under UHC umbrella (separate insurance, UHC-owned)"
+      },
+      "workflow": [
+        "If chart notes missing → request them (universal rule)",
+        "Submit ALL codes through provider.healthplanofnevada.com",
+        "Don't call to verify — just submit",
+        "Can proceed with submission even if notes not yet received",
+        "HST code: 95806 unless primary insurance uses G0399"
+      ],
+      "medicaid": {
+        "same_workflow": true,
+        "cost": "100% covered (Medicaid rule)"
+      }
+    },
+
+    "nevada_medicaid_ffs": {
+      "critical_rules": {
+        "hst_as_primary": "NEVER — always PSG",
+        "hst_as_secondary": "Allowed — follows primary's code",
+        "inlab_auth": true,
+        "portal": "medicaid.nv.gov/HCP/...",
+        "cost": "100% covered",
+        "pain_level": "yellow",
+        "pain_reason": "Easy submission, but extremely particular"
+      },
+      "required_with_submission": ["sleep_questionnaire_from_patient"],
+      "rx_rule": "If Medicaid is primary AND not a replacement → need new Rx if provider ordered HST only",
+      "workflow": [
+        "Medicaid primary? → HST NOT allowed, must be PSG",
+        "If Rx says HST only → request new Rx for PSG",
+        "Obtain sleep questionnaire from patient",
+        "Submit PSG auth via medicaid.nv.gov portal — include sleep questionnaire",
+        "Be thorough — they are extremely particular",
+        "If Medicaid is SECONDARY → HST allowed, follows primary's code"
+      ]
+    },
+
+    "tricare": {
+      "id_formats": {
+        "ssn_9_digit": { "digits": 9, "verifiable": true, "description": "Sponsor's SSN" },
+        "dbn_11_digit": { "digits": 11, "verifiable": true, "description": "Member's DBN" },
+        "dod_10_digit": { "digits": 10, "verifiable": false, "description": "DOD number — cannot verify, need SSN or DBN" }
+      },
+      "secondary_rule": {
+        "description": "Tricare is always secondary if patient has other insurance (except Medicaid)",
+        "priority_order": "Other insurance → Tricare → Medicaid",
+        "when_secondary": "No auth/referral required"
+      },
+      "tricare_for_life": {
+        "description": "Always secondary to Medicare",
+        "verification": "Must CALL to verify eligibility (portal won't work)",
+        "if_eligible": "100% covered after Medicare, no auth any codes"
+      },
+      "workflow": [
+        "Check ID format: 10-digit DOD? Cannot verify — need SSN or DBN",
+        "Verify eligibility via Availity → note plan name",
+        "Use Availity's Tricare code lookup tool: enter plan name + code",
+        "Tool indicates if auth/referral required",
+        "If required: Tricare payer space in Availity → redirects to Tricare's system (painful)"
+      ]
+    },
+
+    "va": {
+      "unique_workflow": {
+        "referral_is_auth": true,
+        "scheduling_deadline_days": 7,
+        "deadline_consequence": "VA cancels the referral/auth",
+        "cost": "100% covered",
+        "pain_level": "green",
+        "pain_note": "Very easy but time-sensitive"
+      },
+      "workflow": [
+        "Receive referral from VA (this IS the authorization)",
+        "Must schedule patient within 1 WEEK",
+        "If not scheduled in time → VA cancels the referral/auth",
+        "100% covered — no patient cost"
+      ]
+    },
+
+    "workers_comp_dol": {
+      "accepted_programs": [
+        { "name": "Federal Employees' Compensation", "code": "DFEC", "frequency": "rare" },
+        { "name": "Energy Employees Occupational Illness", "code": "DEEOIC", "frequency": "most_common", "note": "Atomic Workers, Electrical Workers" },
+        { "name": "Coal Mine Workers' Compensation", "code": "DCMWC", "frequency": "rare" },
+        { "name": "Longshore and Harbor Workers'", "code": "DLHWC", "frequency": "rare" }
+      ],
+      "detection_clues": ["white card", "test site", "NV test site", "atomic worker", "energy worker"],
+      "priority_rule": "Do NOT bother with commercial — use DOL only",
+      "portal": "owcpconnect.dol.gov",
+      "workflow": [
+        "Identify DOL coverage (notes clues or patient mention)",
+        "Verify ID via owcpconnect.dol.gov portal",
+        "If covered under DOL program: No auth required (any codes), 100% covered"
+      ]
+    },
+
+    "anthem_medicaid": {
+      "operational": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "referral": false,
+        "auth_submission": "Availity (preferred) or Fax (number on form)",
+        "cost": "100% covered",
+        "pain_level": "yellow"
+      }
+    },
+
+    "silversummit": {
+      "plan_types": {
+        "medicaid": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "referral": false,
+          "portal": "provider.silversummithealthplan.com",
+          "cost": "100% covered",
+          "titration_warning": "In-lab titrations almost never approved — still submit and try"
+        },
+        "ambetter_marketplace": {
+          "hst_auth": false,
+          "inlab_auth": true,
+          "referral": "check_benefits_varies",
+          "portal": "provider.silversummithealthplan.com"
+        }
+      }
+    },
+
+    "molina": {
+      "plan_types": {
+        "medicaid": {
+          "hst_auth": false,
+          "inlab_auth": false,
+          "inlab_note": "Submit via Availity for confirmation even though no auth required",
+          "referral": false,
+          "cost": "100% covered",
+          "pain_level": "green",
+          "guidelines_warning": "Guidelines change semi-frequently — always submit through Availity to get confirmation"
+        },
+        "marketplace": {
+          "hst_auth": false,
+          "inlab_auth": false,
+          "inlab_note": "Submit via Availity for confirmation",
+          "referral": "check_benefits_uncertain",
+          "pain_level": "green",
+          "note": "Rare plan — same workflow as Medicaid, but referral requirement uncertain"
+        }
+      }
+    },
+
+    "caresource_medicaid": {
+      "operational": {
+        "hst_auth": false,
+        "inlab_auth": false,
+        "referral": false,
+        "cost": "100% covered",
+        "pain_level": "green"
+      },
+      "verification_workflow": [
+        "Verify benefits on Availity",
+        "Confirm referring physician in-network: findadoctor.caresource.com",
+        "Use procedure code lookup tool to confirm no auth: caresource.com/.../prior-authorization/medicaid/"
+      ],
+      "new_plan_warning": "Brand new plan — verify referring physician network status"
+    },
+
+    "umr": {
+      "benefits_portal": "provider.umr.com",
+      "sub_variants": {
+        "standard": {
+          "hst_submit": "provider.healthplanofnevada.com",
+          "inlab_submit": "provider.healthplanofnevada.com",
+          "hst_code": "95806",
+          "allowables": "umr",
+          "pain_level": "green"
+        },
+        "clark_county_self_funded": {
+          "plans": ["100/0", "80/20"],
+          "hst_submit": "provider.healthplanofnevada.com",
+          "inlab_submit": "provider.healthplanofnevada.com",
+          "hst_code": "95806",
+          "allowables": "umr",
+          "portal_bug": "Portal quotes benefits incorrectly — always 80/20, never 90/10",
+          "pain_level": "green"
+        },
+        "mgm_direct": {
+          "hst_submit": "provider.healthplanofnevada.com",
+          "inlab_submit": "provider.healthplanofnevada.com",
+          "hst_code": "95806",
+          "cost": "100/0 — no out of pocket cost to patient",
+          "pain_level": "green"
+        },
+        "uhc_plans": {
+          "hst_code": "G0399",
+          "allowables": "uhc_not_umr",
+          "verification": "Verify via UMR portal, call if unable",
+          "pain_level": "red",
+          "note": "Only UMR variant that uses G0399 and UHC allowables"
+        },
+        "teachers_health_trust": {
+          "hst_auth": false,
+          "inlab_auth": false,
+          "no_submission_needed": true,
+          "hst_cost": "Deductible 80/20",
+          "inlab_cost": "Always $75 copay",
+          "pain_level": "green"
+        }
+      }
+    },
+
+    "champva": {
+      "coverage": {
+        "hst_auth": false,
+        "inlab_auth": false,
+        "referral": false,
+        "pain_level": "red",
+        "pain_reason": "4+ hour phone waits"
+      },
+      "cost_model": {
+        "primary": "75/25 after $50 deductible",
+        "secondary": "100% covered"
+      },
+      "coordination_of_benefits": {
+        "general": "Always secondary to other insurance",
+        "medicaid_exception": "Primary to Medicaid (if Medicaid present, ChampVA goes first)"
+      },
+      "id_format": "Patient's SSN",
+      "verification": "EHR (building) or call — phone wait times exceed 4 hours on average (worst of any payer)"
+    },
+
+    "ebms": {
+      "is_tpa": true,
+      "description": "Third party administrator — rules depend on parent network",
+      "hst_code": "depends_on_parent_network",
+      "verification": "Call only — need card for phone number",
+      "pain_level": "yellow",
+      "workflow": ["Always need the card to call for benefits and authorization requirements"]
+    },
+
+    "geha": {
+      "operational": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "referral": false,
+        "auth_submission": "Call GEHA directly",
+        "network": "uhc",
+        "allowables": "uhc",
+        "pain_level": "yellow"
+      },
+      "id_format": "Starts with 'G' followed by numbers",
+      "cost_model": {
+        "primary": "Deductible + coinsurance",
+        "secondary_to_medicare": "100% covered, no auth required",
+        "secondary_to_other": "Auth still required"
+      },
+      "warnings": ["Subsidiary of UMR — sometimes mislabeled. Uses UHC network and allowables."]
+    },
+
+    "lv_firefighters": {
+      "operational": {
+        "hst_auth": false,
+        "inlab_auth": false,
+        "referral": false,
+        "hst_code": "G0399",
+        "allowables": "uhc",
+        "portal": "uhss.umr.com",
+        "pain_level": "yellow"
+      },
+      "critical_rule": "Even though no auth required, must call to confirm each time",
+      "benefits_vary": true,
+      "workflow": ["Call to confirm auth requirements every time", "Benefits vary by patient — check each time"]
+    },
+
+    "multiplan_phcs_first_health": {
+      "networks": {
+        "multiplan": { "hst_code": "95806" },
+        "phcs": { "hst_code": "95806" },
+        "first_health": { "hst_code": "G0399" }
+      },
+      "verification": "Call IBA directly (not the network)",
+      "card_warning": "Cards are always random/obscure — almost always need the physical card to get correct contact number",
+      "pain_level": "yellow",
+      "workflow": [
+        "Call to verify — varies by plan",
+        "Contact the IBA, not the network directly, for auth/benefits"
+      ]
+    }
+  },
+
+  "portal_directory": {
+    "aetna_auth": { "name": "Availity", "url": "availity.com", "used_for": "Auth, benefits, referrals" },
+    "aetna_supplement": { "name": "MyProviderHQ", "url": "myproviderhq.com", "used_for": "Supplement benefits" },
+    "cigna_benefits": { "name": "CignaforHCP", "url": "CignaforHCP.com", "used_for": "Benefits verification" },
+    "cigna_auth": { "name": "Evicore", "url": "evicore.com", "used_for": "In-lab auth submission" },
+    "cigna_supplement": { "name": "MyProviderHQ", "url": "myproviderhq.com", "used_for": "Supplement benefits" },
+    "uhc_commercial": { "name": "UHC Provider", "url": "uhcprovider.com", "used_for": "Commercial auth/benefits, UHC-direct Medicare" },
+    "uhc_optum_auth": { "name": "Curo", "url": "curo.optum.com/login", "used_for": "Optum-managed Medicare auth/referrals" },
+    "uhc_optum_benefits": { "name": "Optum Care", "url": "providers.optumcaremw.com", "used_for": "Optum-managed Medicare benefits" },
+    "humana": { "name": "Availity", "url": "availity.com", "used_for": "Auth, benefits" },
+    "sierra_hpn": { "name": "HPN Provider", "url": "provider.healthplanofnevada.com", "used_for": "All submissions" },
+    "nevada_medicaid": { "name": "NV Medicaid", "url": "medicaid.nv.gov/HCP/...", "used_for": "PSG auth" },
+    "tricare": { "name": "Availity → Tricare", "url": "availity.com", "used_for": "Auth/referral (redirects to Tricare)" },
+    "workers_comp": { "name": "DOL OWCP", "url": "owcpconnect.dol.gov", "used_for": "ID verification" },
+    "silversummit": { "name": "Silversummit Provider", "url": "provider.silversummithealthplan.com", "used_for": "Auth submission" },
+    "caresource_lookup": { "name": "Caresource Find-a-Doctor", "url": "findadoctor.caresource.com", "used_for": "Provider lookup" },
+    "caresource_auth": { "name": "Caresource Auth", "url": "caresource.com/.../prior-authorization/medicaid/", "used_for": "Code lookup" },
+    "umr_benefits": { "name": "UMR Provider", "url": "provider.umr.com", "used_for": "Eligibility/benefits" },
+    "umr_auth": { "name": "HPN Provider", "url": "provider.healthplanofnevada.com", "used_for": "Auth submission (Sierra network)" },
+    "lv_firefighters": { "name": "UMR/UHSS", "url": "uhss.umr.com", "used_for": "Benefits" }
+  }
+}

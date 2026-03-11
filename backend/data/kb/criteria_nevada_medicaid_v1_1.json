@@ -1,0 +1,215 @@
+{
+  "_meta": {
+    "criteria_id": "nevada_medicaid",
+    "criteria_name": "Nevada Medicaid Fee-for-Service",
+    "version": "1.1",
+    "effective_date": "2026-02-01",
+    "strictness_tier": 3,
+    "strictness_label": "PROCESS_STRICT",
+    "notes": "Process-strict, clinically-lenient. HST NEVER allowed. Questionnaire form required (not just chart notes). Updated: keywords added for questionnaire detection, contraindication safety flags, and standard thresholds for M2C/M2D/M4."
+  },
+  "key_characteristic": "PROCESS_STRICT_CLINICALLY_LENIENT",
+  "hard_rules": {
+    "hst_never_allowed": {
+      "description": "HST is NEVER allowed for Nevada Medicaid FFS",
+      "action": "Need new RX for PSG if HST ordered",
+      "flag_id": "FLAG_NV_MEDICAID_HST_NOT_ALLOWED",
+      "blocking": true
+    },
+    "questionnaire_required": {
+      "description": "Actual questionnaire FORM required (not just chart notes)",
+      "acceptable_forms": [
+        "ESS",
+        "STOP-BANG",
+        "Berlin"
+      ],
+      "chart_notes_sufficient": false,
+      "flag_id": "FLAG_NV_MEDICAID_QUESTIONNAIRE_REQUIRED",
+      "blocking": true
+    }
+  },
+  "clinical_criteria": {
+    "psg_approval": "Clinically lenient -- not strict about specific documentation",
+    "what_they_care_about": [
+      "proper_submission_format",
+      "questionnaire_form_included",
+      "correct_procedure"
+    ],
+    "what_they_dont_scrutinize": [
+      "specific_symptom_thresholds",
+      "comorbidity_requirements",
+      "detailed_clinical_justification"
+    ]
+  },
+  "cost": {
+    "patient_responsibility": "none",
+    "coverage_percent": 100,
+    "notes": "Universal Medicaid rule"
+  },
+  "hst_eligibility": {
+    "clinical_required": false,
+    "description": "HST is NEVER allowed for Nevada Medicaid FFS. All sleep testing is in-lab PSG only.",
+    "auto_route_to_psg": true,
+    "symptom_definitions": {
+      "_notes": "NV Medicaid is clinically lenient \u2014 no specific symptom requirements for PSG approval. These keywords are for documentation quality assessment only.",
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      },
+      "obesity": {
+        "keywords": [
+          "obese",
+          "obesity",
+          "BMI",
+          "overweight",
+          "neck circumference",
+          "morbid obesity"
+        ],
+        "bmi_threshold": 30,
+        "neck_circumference_male_inches": 17,
+        "neck_circumference_female_inches": 16
+      }
+    }
+  },
+  "hst_contraindications": {
+    "description": "HST is never allowed for NV Medicaid \u2014 all patients route to PSG. These keywords detect conditions relevant for patient safety and scheduling.",
+    "universal_hst_block": true,
+    "conditions": [
+      {
+        "id": "home_oxygen",
+        "condition": "Supplemental oxygen -- flags additional safety considerations for in-lab",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "flag_safety_alert",
+        "severity": "info",
+        "notes": "Patient already routed to PSG. This flags O2 equipment needs for the lab."
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "May need additional staffing/assistance during in-lab study",
+        "keywords": [
+          "dementia",
+          "cognitive impairment",
+          "Alzheimer",
+          "unable to follow instructions"
+        ],
+        "action": "flag_safety_alert",
+        "severity": "info"
+      }
+    ]
+  },
+  "psg_criteria": {
+    "description": "All NV Medicaid testing is PSG. Clinically lenient \u2014 process compliance matters more than clinical justification.",
+    "indications": [
+      "all_sleep_testing_is_psg"
+    ],
+    "documentation_required": {
+      "questionnaire_form": {
+        "required": true,
+        "chart_notes_sufficient": false,
+        "acceptable_forms": [
+          "ESS",
+          "STOP-BANG",
+          "Berlin"
+        ],
+        "keywords": [
+          "Epworth",
+          "ESS",
+          "STOP-BANG",
+          "Berlin",
+          "sleep questionnaire",
+          "sleepiness questionnaire",
+          "screening questionnaire",
+          "sleep assessment form"
+        ],
+        "flag_if_missing": "FLAG_NV_MEDICAID_QUESTIONNAIRE_REQUIRED"
+      }
+    }
+  },
+  "titration_criteria": {
+    "requires": "confirmed_osa_diagnosis",
+    "notes": "Standard titration criteria apply. No special NV Medicaid requirements beyond the diagnostic study."
+  },
+  "split_night_criteria": {
+    "indicated": {
+      "ahi_threshold": 40,
+      "window_hours": 2
+    },
+    "may_consider": {
+      "ahi_min": 20,
+      "ahi_max": 40,
+      "window_hours": 2
+    },
+    "not_recommended": {
+      "ahi_below": 20
+    },
+    "minimum_titration_hours": 3,
+    "notes": "Standard split night criteria. NV Medicaid does not specify differently."
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "notes": "Pediatric = PSG only (same as adult for NV Medicaid, since all testing is PSG). Same questionnaire requirements apply.",
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    }
+  },
+  "thresholds": {
+    "_notes": "NV Medicaid does not publish specific clinical thresholds. Standard values for test selection logic.",
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_indicated": 40,
+    "ahi_split_may_consider": 20,
+    "ahi_pediatric_abnormal": 1,
+    "ess_threshold": 10,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

@@ -102,9 +102,8 @@ export default function OllamaMonitor() {
             // Auto-scroll to bottom if enabled
             if (autoScroll && logsScrollRef.current) {
               setTimeout(() => {
-                const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-                if (viewport) {
-                  viewport.scrollTop = viewport.scrollHeight;
+                if (logsScrollRef.current) {
+                  logsScrollRef.current.scrollTop = logsScrollRef.current.scrollHeight;
                 }
               }, 50);
             }
@@ -133,8 +132,7 @@ export default function OllamaMonitor() {
   useEffect(() => {
     if (!logsScrollRef.current) return;
     
-    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-    if (!viewport) return;
+    const viewport = logsScrollRef.current;
     
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
@@ -400,10 +398,7 @@ export default function OllamaMonitor() {
                     onClick={() => {
                       setAutoScroll(true);
                       if (logsScrollRef.current) {
-                        const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-                        if (viewport) {
-                          viewport.scrollTop = viewport.scrollHeight;
-                        }
+                        logsScrollRef.current.scrollTop = logsScrollRef.current.scrollHeight;
                       }
                     }}
                   >

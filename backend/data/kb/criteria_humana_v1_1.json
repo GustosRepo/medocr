@@ -1,0 +1,347 @@
+{
+  "_meta": {
+    "criteria_id": "humana",
+    "criteria_name": "Humana",
+    "version": "1.1",
+    "effective_date": "2024-02-29",
+    "source_document": "Humana HUM-0381-027 Sleep Studies Adult",
+    "strictness_tier": 2,
+    "strictness_label": "MODERATE",
+    "notes": "Requires EDS + at least one additional symptom. Comorbidities qualify for PSG but not HST. Updated: keywords added, split_night_criteria and pediatric_criteria added for M2C/M2D/M4."
+  },
+  "key_characteristic": "EDS required for ALL testing -- comorbidities alone qualify for PSG upgrade but not initial HST",
+  "hst_eligibility": {
+    "description": "Approved when ALL conditions met",
+    "symptom_requirement": {
+      "requires": "excessive_daytime_sleepiness",
+      "plus_any": [
+        "ess_gte_10",
+        "excessive_sleepiness_while_driving",
+        "loud_intense_snoring",
+        "witnessed_apnea_choking_gasping"
+      ]
+    },
+    "absence_of_comorbidities": true,
+    "patient_capable": true,
+    "equipment": "Type II, III, or IV device (min 3 channels) or PAT device",
+    "symptom_definitions": {
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "ess_gte_10": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "ESS score",
+          "Epworth score",
+          "sleepiness scale"
+        ],
+        "ess_threshold": 10
+      },
+      "excessive_sleepiness_while_driving": {
+        "keywords": [
+          "sleepy while driving",
+          "drowsy driving",
+          "falls asleep driving",
+          "near-miss accident",
+          "dozes off at wheel"
+        ]
+      },
+      "loud_intense_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_choking_gasping": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      }
+    }
+  },
+  "hst_contraindications": {
+    "conditions": [
+      {
+        "id": "copd",
+        "condition": "FEV1 <60%, home O2, or CO2 >=45",
+        "fev1_threshold": 60,
+        "co2_threshold": 45,
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "asthma",
+        "condition": "Nocturnal or uncontrolled asthma",
+        "keywords": [
+          "nocturnal asthma",
+          "uncontrolled asthma",
+          "severe asthma"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "neuromuscular",
+        "keywords": [
+          "ALS",
+          "MS",
+          "myotonic dystrophy",
+          "Parkinson",
+          "stroke with respiratory effects",
+          "spina bifida",
+          "uncontrolled epilepsy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chf",
+        "condition": "NYHA III/IV or LVEF <45%",
+        "lvef_threshold": 45,
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "pulmonary_htn",
+        "condition": "Any",
+        "keywords": [
+          "pulmonary hypertension",
+          "pulmonary HTN",
+          "PAH",
+          "right heart failure"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "cardiac_arrhythmia",
+        "condition": "Uncontrolled",
+        "keywords": [
+          "arrhythmia",
+          "atrial fibrillation",
+          "AFib",
+          "ventricular tachycardia",
+          "ventricular fibrillation"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "home_oxygen",
+        "condition": "Supplemental oxygen for any reason -- HARD STOP for HST",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": "Chronic opioid use >= 2 months",
+        "keywords": [
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine"
+        ],
+        "opioid_chronic_months": 2,
+        "action": "route_to_psg"
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Suspected central sleep apnea",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "ohs",
+        "condition": "BMI >= 30 + PaCO2 >= 45",
+        "keywords": [
+          "obesity hypoventilation",
+          "OHS",
+          "Pickwickian",
+          "hypoventilation syndrome"
+        ],
+        "bmi_threshold": 30,
+        "paco2_threshold": 45,
+        "action": "route_to_psg"
+      }
+    ]
+  },
+  "psg_criteria": {
+    "requires": "EDS + one symptom (same as HST)",
+    "plus_any_indication": [
+      "hgns_planning",
+      "central_sleep_apnea",
+      "narcolepsy",
+      "ohs",
+      "tbi",
+      "idiopathic_hypersomnia",
+      "cognitive_physical_impairment",
+      "mission_critical_occupation",
+      "pulmonary_disease",
+      "neuromuscular",
+      "parasomnias",
+      "seizure_related",
+      "plmd",
+      "cardiac_disease"
+    ],
+    "mission_critical": [
+      "airline_pilot",
+      "bus_driver",
+      "military",
+      "truck_driver"
+    ]
+  },
+  "titration_criteria": {
+    "requires": "confirmed_osa_diagnosis",
+    "plus_any": [
+      "apap_failure",
+      "central_sleep_apnea",
+      "ohs",
+      "cognitive_physical_impairment",
+      "comorbidities_degrading_home_accuracy",
+      "compliance_failure_with_persistent_symptoms"
+    ]
+  },
+  "mslt_mwt_criteria": {
+    "requires_all": [
+      "assessment_narcolepsy_features_or_treatment_response"
+    ],
+    "narcolepsy_features": [
+      "cataplexy",
+      "eds_hypersomnia",
+      "hypnagogic_hallucinations",
+      "sleep_paralysis"
+    ],
+    "testing_requirements": {
+      "nap_interval_hours": 2,
+      "initial_nap_after_psg": "90min_to_3hrs",
+      "psg_minimum_sleep_hours": 6,
+      "psg_must_be_negative": true
+    }
+  },
+  "not_covered": {
+    "indications": [
+      "circadian_rhythm_disorders",
+      "common_parasomnias",
+      "insomnia",
+      "rls"
+    ],
+    "technologies": [
+      "ai_sleep_testing",
+      "pap_nap",
+      "uars_titration",
+      "prescreening_devices",
+      "standalone_actigraphy",
+      "otc_devices"
+    ]
+  },
+  "repeat_testing": {
+    "hst_approved": [
+      "post_oral_appliance",
+      "post_osa_surgery",
+      "weight_change_gte_10_with_symptoms"
+    ],
+    "psg_approved": [
+      "hgns_planning",
+      "incapable_home_equipment",
+      "weight_change_gte_10",
+      "prior_hst_inadequate",
+      "post_hgns_titration",
+      "post_hgns_weight_gain_gte_10"
+    ]
+  },
+  "thresholds": {
+    "ess_threshold": 10,
+    "fev1_copd": 60,
+    "co2_threshold": 45,
+    "lvef_chf": 45,
+    "bmi_ohs": 30,
+    "paco2_ohs": 45,
+    "weight_change_significant_percent": 10,
+    "psg_minimum_sleep_hours": 6,
+    "opioid_chronic_months": 2
+  },
+  "split_night_criteria": {
+    "description": "Humana does not publish specific split night thresholds. Use standard AHI-based criteria.",
+    "indicated": {
+      "ahi_threshold": 40,
+      "window_hours": 2,
+      "notes": "Standard criteria applied -- Humana does not specify differently"
+    },
+    "may_consider": {
+      "ahi_min": 20,
+      "ahi_max": 40,
+      "window_hours": 2
+    },
+    "not_recommended": {
+      "ahi_below": 20
+    },
+    "minimum_titration_hours": 3
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    },
+    "notes": "Humana requires specific pediatric policy review. InterQual criteria may apply."
+  }
+}

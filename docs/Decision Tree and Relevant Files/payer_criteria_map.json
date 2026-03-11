@@ -1,0 +1,1595 @@
+{
+  "_version": "0.18.5",
+  "_updated": "2026-02-23",
+  "_description": "Complete payer criteria and submission map. Powers M1D (load criteria), M3 (insurance scope + auth), M5 (auth readiness + submission package), and M6 (output with HST code, cost basis, actions).",
+  "_output_usage": "M6 output includes: auth.required, auth.method, auth.portal, auth.phone, submission_guidance, suggested_actions, cost_basis, hst_code, units_to_request. All fields flow directly into the human-facing output.",
+  "payers": {
+    "Cigna": {
+      "criteria_file": "Evicore_Clinical_Criteria.md",
+      "strictness": 1,
+      "strictness_label": "STRICTEST",
+      "hst_code": "95806",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://www.evicore.com",
+        "portal_name": "Evicore",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": null
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "G0399": {
+          "covered": false,
+          "notes": "Cigna uses 95806 for HST, not G0399"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Prior positive diagnostic typically required"
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Pediatric PSG"
+        },
+        "95783": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Pediatric titration"
+        }
+      },
+      "suggested_actions": [
+        "Submit auth via Evicore portal",
+        "Ensure documentation meets Evicore strict requirements"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial",
+        "ppo",
+        "hmo"
+      ],
+      "notes": null
+    },
+    "Aetna": {
+      "criteria_file": "Evicore_Clinical_Criteria.md",
+      "strictness": 1,
+      "strictness_label": "STRICTEST",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://www.evicore.com",
+        "portal_name": "Evicore",
+        "phone": null,
+        "fax": null,
+        "alt_method": "check_availity",
+        "notes": "ALWAYS check both Evicore AND Availity for auth status"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Precert varies by product for split-night"
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "95783": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit auth via Evicore portal",
+        "CHECK AVAILITY for auth status too \u2014 Aetna uses dual systems",
+        "Some plans require in-lab criteria review before HSAT"
+      ],
+      "flags": [
+        "FLAG_AETNA_CHECK_DUAL_AVAILITY"
+      ],
+      "plan_types": [
+        "commercial",
+        "ppo",
+        "hmo",
+        "medicare_advantage"
+      ],
+      "notes": null
+    },
+    "Meritain Health": {
+      "criteria_file": "Evicore_Clinical_Criteria.md",
+      "strictness": 1,
+      "strictness_label": "STRICTEST",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call_then_portal",
+        "portal_url": "https://meritain.mednecessity.com",
+        "portal_name": "Meritain MedNecessity",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "CALL for benefits FIRST. Ask if auth is required. If yes, submit via meritain.mednecessity.com. Do NOT use Evicore portal."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call_then_portal",
+          "submit_to": "meritain",
+          "notes": "Call first to determine if auth needed"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call_then_portal",
+          "submit_to": "meritain",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call_then_portal",
+          "submit_to": "meritain",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "\u26a0\ufe0f CALL Meritain for benefits FIRST before submitting anything",
+        "Ask: is prior auth required for this code?",
+        "If auth required: submit via meritain.mednecessity.com (NOT Evicore)",
+        "Do NOT submit through Evicore portal \u2014 Meritain has separate workflow"
+      ],
+      "flags": [
+        "FLAG_MERITAIN_CALL_FIRST"
+      ],
+      "plan_types": [
+        "commercial"
+      ],
+      "notes": "Aetna subsidiary with completely different workflow."
+    },
+    "UHC": {
+      "criteria_file": "UHC_Clinical_Criteria.md",
+      "strictness": 2,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": true,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://www.evicore.com",
+        "portal_name": "Evicore",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Submit regardless of what eligibility says about auth requirement"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Submit regardless"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "Submit regardless"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": "May require prior diagnostic evidence"
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        },
+        "95783": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "evicore",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit auth via Evicore \u2014 submit REGARDLESS of what eligibility says",
+        "Check network status of sleep facility"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial",
+        "ppo",
+        "hmo",
+        "medicare_advantage"
+      ],
+      "notes": null
+    },
+    "UMR": {
+      "criteria_file": "UHC_Clinical_Criteria.md",
+      "strictness": 2,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "varies",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Check if UHC network or Sierra network"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "varies",
+          "submit_to": "varies",
+          "notes": "HST code may be G0399 or 95806 depending on network"
+        },
+        "95806": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "varies",
+          "submit_to": "varies",
+          "notes": "If through Sierra network"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "varies",
+          "submit_to": "varies",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "varies",
+          "submit_to": "varies",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "\u26a0\ufe0f CHECK which network UMR routes through: UHC or Sierra",
+        "If UHC network: submit via Evicore, use G0399 for HST",
+        "If Sierra network: submit via Sierra portal, use 95806 for HST",
+        "If (UM Only): auth through Sierra but benefits through provider.umr.com"
+      ],
+      "flags": [
+        "FLAG_UMR_CHECK_NETWORK"
+      ],
+      "plan_types": [
+        "commercial"
+      ],
+      "notes": null
+    },
+    "Sierra Health": {
+      "criteria_file": "Sierra_HPN_Clinical_Criteria.md",
+      "strictness": 4,
+      "strictness_label": "LENIENT",
+      "hst_code": "95806",
+      "submit_regardless": true,
+      "referral_required": false,
+      "units_to_request": 2,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://provider.healthplanofnevada.com",
+        "portal_name": "Sierra/HPN Provider Portal",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Most lenient payer. HST: no justification needed."
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "No clinical justification needed \u2014 just submit"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "Brief justification: comorbidity OR symptom alone sufficient"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "Prior positive AHI needed"
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "Same lenient criteria as adult"
+        }
+      },
+      "suggested_actions": [
+        "Submit via Sierra/HPN portal \u2014 request 2 units for ALL codes",
+        "HST: no clinical justification needed, just submit",
+        "PSG: include brief justification (1-2 sentences, comorbidity or symptom)",
+        "If eligibility shows (UM Only): this is UMR, NOT Sierra \u2014 find UMR ID for benefits"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial"
+      ],
+      "notes": null
+    },
+    "HPN": {
+      "criteria_file": "Sierra_HPN_Clinical_Criteria.md",
+      "strictness": 4,
+      "strictness_label": "LENIENT",
+      "hst_code": "95806",
+      "submit_regardless": true,
+      "referral_required": false,
+      "units_to_request": 2,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://provider.healthplanofnevada.com",
+        "portal_name": "Sierra/HPN Provider Portal",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Same portal and criteria as Sierra Health"
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "No justification needed"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit via Sierra/HPN portal \u2014 request 2 units for ALL codes",
+        "Same workflow as Sierra Health"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial",
+        "hmo",
+        "ppo",
+        "pos"
+      ],
+      "notes": null
+    },
+    "HPN Medicaid": {
+      "criteria_file": "Sierra_HPN_Clinical_Criteria.md",
+      "strictness": 4,
+      "strictness_label": "LENIENT",
+      "hst_code": "G0399",
+      "submit_regardless": true,
+      "referral_required": false,
+      "units_to_request": 2,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://provider.healthplanofnevada.com",
+        "portal_name": "Sierra/HPN Provider Portal",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Submit via portal. 100% covered. NOT no-auth \u2014 still submit."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": "HST code is G0399 (not 95806). Still submit through portal."
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": "sierra_portal",
+          "units": 2,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit via Sierra/HPN portal \u2014 request 2 units",
+        "100% covered \u2014 no patient cost share",
+        "\u26a0\ufe0f NOT no-auth: must still submit through portal"
+      ],
+      "flags": [
+        "FLAG_HPN_MEDICAID_SUBMIT_VIA_PORTAL",
+        "FLAG_100_PERCENT_COVERED"
+      ],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": "Uses G0399 for HST (commercial Sierra/HPN uses 95806). 100% covered."
+    },
+    "Medicare FFS": {
+      "criteria_file": "Medicare_FFS_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "PROCESS_STRICT",
+      "hst_code": "95806",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No prior auth required. Follow Medicare LCD guidelines."
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "Check AFib-only exclusion"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth submission needed \u2014 proceed to scheduling",
+        "Ensure documentation meets Medicare LCD medical necessity",
+        "Check AFib-only exclusion if applicable"
+      ],
+      "flags": [],
+      "plan_types": [
+        "medicare_ffs"
+      ],
+      "notes": null
+    },
+    "Nevada Medicaid FFS": {
+      "criteria_file": "Nevada_Medicaid_FFS_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "PROCESS_STRICT",
+      "hst_code": null,
+      "hst_note": "HST NEVER covered by NV Medicaid FFS",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Prior auth required for all in-lab studies"
+      },
+      "codes": {
+        "95806": {
+          "covered": false,
+          "notes": "HST NEVER covered"
+        },
+        "G0399": {
+          "covered": false,
+          "notes": "HST NEVER covered"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": null
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": "Pediatric PSG"
+        }
+      },
+      "suggested_actions": [
+        "Submit prior auth for in-lab study",
+        "\u26a0\ufe0f HST is NEVER an option \u2014 must be in-lab",
+        "Verify provider is in-state (out-of-state = Medicaid blocker)"
+      ],
+      "flags": [
+        "FLAG_NV_MEDICAID_NO_HST"
+      ],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": null
+    },
+    "Humana": {
+      "criteria_file": "Humana_Clinical_Criteria.md",
+      "strictness": 2,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": true,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Submit regardless of auth determination"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": "Submit regardless"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": "Submit regardless"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": "Submit regardless"
+        },
+        "95782": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": "Confirm auth for pediatric codes"
+        },
+        "95783": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit auth \u2014 submit REGARDLESS",
+        "Confirm pediatric code auth if applicable"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial",
+        "medicare_advantage"
+      ],
+      "notes": null
+    },
+    "VA": {
+      "criteria_file": null,
+      "criteria_reference": "NonBCBS_Payer_Knowledge_Base_v015.md \u00a711",
+      "strictness": 5,
+      "strictness_label": "REFERRAL_BASED",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": true,
+      "referral_note": "Referral IS the authorization.",
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "referral",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth submission. Referral itself is the authorization."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "Referral = auth"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "Referral = auth"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "Referral = auth"
+        }
+      },
+      "suggested_actions": [
+        "No auth submission needed \u2014 referral IS the authorization",
+        "\u26a0\ufe0f SCHEDULE WITHIN 1 WEEK of referral receipt",
+        "Verify referral is on file before scheduling"
+      ],
+      "flags": [
+        "FLAG_VA_REFERRAL_REQUIRED",
+        "FLAG_VA_1_WEEK_SCHEDULING"
+      ],
+      "plan_types": [
+        "va"
+      ],
+      "notes": null
+    },
+    "Tricare": {
+      "criteria_file": "Tricare_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": "varies",
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "varies",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Varies by Tricare plan type and region"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": "varies",
+          "submit_method": "varies",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "varies",
+          "submit_method": "varies",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "varies",
+          "submit_method": "varies",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Check specific Tricare plan type and region for auth requirements",
+        "Check referral requirements \u2014 some Tricare plans require PCP referral"
+      ],
+      "flags": [],
+      "plan_types": [
+        "tricare"
+      ],
+      "notes": null
+    },
+    "ChampVA": {
+      "criteria_file": "ChampVA_Clinical_Criteria.md",
+      "strictness": 6,
+      "strictness_label": "NO_REVIEW",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth required"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth required \u2014 proceed directly to scheduling"
+      ],
+      "flags": [],
+      "plan_types": [
+        "champva"
+      ],
+      "notes": null
+    },
+    "Silversummit": {
+      "criteria_file": "Silversummit_Clinical_Criteria.md",
+      "strictness": 6,
+      "strictness_label": "NO_REVIEW",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth required"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth required \u2014 proceed directly to scheduling"
+      ],
+      "flags": [],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": null
+    },
+    "Molina": {
+      "criteria_file": "Molina_Clinical_Criteria.md",
+      "strictness": 6,
+      "strictness_label": "NO_REVIEW",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth required"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth required \u2014 proceed directly to scheduling"
+      ],
+      "flags": [],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": null
+    },
+    "Caresource": {
+      "criteria_file": "Caresource_Clinical_Criteria.md",
+      "strictness": 6,
+      "strictness_label": "NO_REVIEW",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth required"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth required \u2014 proceed directly to scheduling"
+      ],
+      "flags": [],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": null
+    },
+    "LV Firefighters": {
+      "criteria_file": "LV_Firefighters_Clinical_Criteria.md",
+      "strictness": 6,
+      "strictness_label": "NO_REVIEW",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "none",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "No auth required"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "No auth required \u2014 proceed directly to scheduling"
+      ],
+      "flags": [],
+      "plan_types": [
+        "self_funded"
+      ],
+      "notes": null
+    },
+    "Anthem Medicaid": {
+      "criteria_file": "Carelon_Clinical_Criteria.md",
+      "strictness": 2,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal_or_fax",
+        "portal_url": "https://www.availity.com",
+        "portal_name": "Availity",
+        "phone": null,
+        "fax": true,
+        "alt_method": "fax",
+        "notes": "\u26a0\ufe0f Uses Carelon CRITERIA but submits via Availity or Fax. Do NOT submit through Carelon portal."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "HST: no auth required"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal_or_fax",
+          "submit_to": "availity",
+          "notes": "In-lab requires auth \u2014 submit via Availity or fax"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": true,
+          "submit_method": "portal_or_fax",
+          "submit_to": "availity",
+          "notes": "In-lab requires auth \u2014 submit via Availity or fax"
+        }
+      },
+      "suggested_actions": [
+        "HST: no auth needed \u2014 proceed to scheduling",
+        "In-lab: submit auth via Availity or fax",
+        "\u26a0\ufe0f Do NOT use Carelon portal for submission (even though criteria come from Carelon)",
+        "100% covered \u2014 no patient cost share"
+      ],
+      "flags": [
+        "FLAG_HST_NO_AUTH_INLAB_AUTH",
+        "FLAG_100_PERCENT_COVERED"
+      ],
+      "plan_types": [
+        "medicaid"
+      ],
+      "notes": "Easy to confuse: Carelon criteria, Availity submission."
+    },
+    "Workers Comp": {
+      "criteria_file": "Workers_Comp_DOL_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "95806",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Call for auth requirements. 100% employer-covered."
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Call to verify auth requirements",
+        "100% employer-covered \u2014 no patient cost share"
+      ],
+      "flags": [
+        "FLAG_100_PERCENT_COVERED"
+      ],
+      "plan_types": [
+        "workers_comp"
+      ],
+      "notes": null
+    },
+    "EBMS": {
+      "criteria_file": "EBMS_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "call_to_verify",
+      "hst_note": "TPA \u2014 HST code depends on parent network",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "TPA \u2014 rules vary by parent network. Must call."
+      },
+      "codes": {
+        "95806": {
+          "covered": "call_to_verify",
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "G0399": {
+          "covered": "call_to_verify",
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": "call_to_verify",
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": "call_to_verify",
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Call EBMS to determine parent network and auth requirements",
+        "Ask which HST code they accept (G0399 or 95806)"
+      ],
+      "flags": [],
+      "plan_types": [
+        "tpa"
+      ],
+      "notes": null
+    },
+    "GEHA": {
+      "criteria_file": "GEHA_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Call for in-lab auth requirements"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": false,
+          "submit_method": "none",
+          "submit_to": null,
+          "notes": "HST typically no auth"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": "Call for in-lab auth requirements"
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "HST: likely no auth \u2014 proceed to scheduling",
+        "In-lab: call GEHA to verify auth requirements"
+      ],
+      "flags": [],
+      "plan_types": [
+        "federal"
+      ],
+      "notes": null
+    },
+    "Multiplan": {
+      "criteria_file": "Multiplan_PHCS_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "95806",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Call-based workflow"
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Call Multiplan to verify auth requirements and submission method"
+      ],
+      "flags": [],
+      "plan_types": [
+        "network"
+      ],
+      "notes": null
+    },
+    "PHCS": {
+      "criteria_file": "Multiplan_PHCS_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "95806",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Call-based workflow"
+      },
+      "codes": {
+        "95806": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Call PHCS to verify auth requirements and submission method"
+      ],
+      "flags": [],
+      "plan_types": [
+        "network"
+      ],
+      "notes": null
+    },
+    "First Health": {
+      "criteria_file": "First_Health_Network_Clinical_Criteria.md",
+      "strictness": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "call",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Call-based workflow"
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "call_to_verify",
+          "submit_method": "call",
+          "submit_to": null,
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Call First Health to verify auth requirements and submission method"
+      ],
+      "flags": [],
+      "plan_types": [
+        "network"
+      ],
+      "notes": null
+    },
+    "BCBS": {
+      "criteria_file": "VARIES_BY_AFFILIATE",
+      "strictness": "VARIES",
+      "strictness_label": "VARIES",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": "varies_by_plan_type",
+      "referral_note": "HMO plans typically require PCP referral \u2014 verify during benefits check",
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "varies",
+        "portal_url": null,
+        "portal_name": null,
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "Route through BCBS 4-step hierarchy. Use bcbs_prefix_database.json for prefix lookup."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": "varies_by_prefix",
+          "submit_method": "varies_by_prefix",
+          "submit_to": "varies_by_prefix",
+          "notes": "Check bcbs_prefix_database.json"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "varies_by_prefix",
+          "submit_method": "varies_by_prefix",
+          "submit_to": "varies_by_prefix",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "varies_by_prefix",
+          "submit_method": "varies_by_prefix",
+          "submit_to": "varies_by_prefix",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Look up prefix in bcbs_prefix_database.json for affiliate + auth method",
+        "If Carelon affiliate: submit via Carelon portal",
+        "If no-auth prefix: proceed to scheduling",
+        "If specific phone/fax listed: use that method",
+        "If HMO plan: verify PCP referral is on file"
+      ],
+      "flags": [],
+      "plan_types": [
+        "commercial",
+        "ppo",
+        "hmo",
+        "medicare_advantage",
+        "fep"
+      ],
+      "notes": "All BCBS goes through 4-step hierarchy regardless of plan type."
+    },
+    "Carelon": {
+      "criteria_file": "Carelon_Clinical_Criteria.md",
+      "strictness": 2,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "submit_regardless": false,
+      "referral_required": false,
+      "units_to_request": null,
+      "submission": {
+        "primary_method": "portal",
+        "portal_url": "https://www.carelon.com",
+        "portal_name": "Carelon",
+        "phone": null,
+        "fax": null,
+        "alt_method": null,
+        "notes": "BCBS affiliates with Carelon delegation route here. \u26a0\ufe0f Anthem Medicaid uses Carelon criteria but submits via Availity \u2014 NOT here."
+      },
+      "codes": {
+        "G0399": {
+          "covered": true,
+          "auth_required": "varies_by_affiliate",
+          "submit_method": "portal",
+          "submit_to": "carelon",
+          "notes": "Some affiliates: no auth for HST"
+        },
+        "95810": {
+          "covered": true,
+          "auth_required": "varies_by_affiliate",
+          "submit_method": "portal",
+          "submit_to": "carelon",
+          "notes": null
+        },
+        "95811": {
+          "covered": true,
+          "auth_required": "varies_by_affiliate",
+          "submit_method": "portal",
+          "submit_to": "carelon",
+          "notes": null
+        }
+      },
+      "suggested_actions": [
+        "Submit via Carelon portal",
+        "Check specific affiliate for auth requirements per code",
+        "\u26a0\ufe0f Anthem Medicaid: uses Carelon criteria but submits via Availity, NOT Carelon portal"
+      ],
+      "flags": [],
+      "plan_types": [
+        "bcbs_delegated"
+      ],
+      "notes": "Delegated auth for BCBS IL, TX, CA, VA, AL, Premera, Regence, Independence, Highmark."
+    }
+  },
+  "do_not_accept": [
+    {
+      "payer": "Culinary",
+      "reason": "Out of network",
+      "action": "STOP_OON \u2014 fax UTS to referring provider"
+    },
+    {
+      "payer": "Intermountain Health Plans",
+      "reason": "Out of network",
+      "action": "STOP_OON \u2014 fax UTS"
+    },
+    {
+      "payer": "P3 Health Partners",
+      "reason": "Out of network",
+      "action": "STOP_OON \u2014 fax UTS"
+    },
+    {
+      "payer": "Select Health",
+      "reason": "Out of network",
+      "action": "STOP_OON \u2014 fax UTS"
+    },
+    {
+      "payer": "WellCare",
+      "reason": "Out of network",
+      "action": "STOP_OON \u2014 fax UTS"
+    }
+  ],
+  "auto_flag_payers": [
+    {
+      "payer": "Culinary",
+      "flag": "FLAG_OON_AUTO"
+    },
+    {
+      "payer": "Intermountain",
+      "flag": "FLAG_OON_AUTO"
+    },
+    {
+      "payer": "P3 Health",
+      "flag": "FLAG_OON_AUTO"
+    },
+    {
+      "payer": "Select Health",
+      "flag": "FLAG_OON_AUTO"
+    },
+    {
+      "payer": "WellCare",
+      "flag": "FLAG_OON_AUTO"
+    }
+  ],
+  "contract_sunsets": {
+    "Prominence": {
+      "end_date": "2025-10-31",
+      "status": "EXPIRED",
+      "action": "STOP_OON \u2014 contract ended"
+    }
+  },
+  "strictness_hierarchy": {
+    "1": "STRICTEST \u2014 Evicore (Cigna, Aetna). Most documentation required.",
+    "2": "MODERATE \u2014 UHC, Humana, Carelon, Anthem Medicaid.",
+    "3": "PROCESS_STRICT \u2014 Medicare FFS, NV Medicaid, call-based payers.",
+    "4": "LENIENT \u2014 Sierra/HPN. Comorbidity alone sufficient for PSG.",
+    "5": "REFERRAL_BASED \u2014 VA. Referral IS the auth.",
+    "6": "NO_REVIEW \u2014 ChampVA, Silversummit, Molina, Caresource, LV Firefighters."
+  },
+  "cash_defaults": {
+    "hst_code": "95806",
+    "cost_basis": "facility_cash_rate",
+    "rates": {
+      "95806": 250,
+      "95810": 600,
+      "95811": 650,
+      "95782": 1200
+    },
+    "auth_required": false,
+    "suggested_actions": [
+      "Quote cash rate to patient",
+      "Collect consent and deposit",
+      "Proceed to scheduling \u2014 no auth needed"
+    ],
+    "notes": "Cash patients bypass M3 and M5. G0399 is payer-specific, cash always uses 95806."
+  },
+  "self_pay_identifiers": [
+    "Cash Pay",
+    "No Insurance",
+    "Uninsured",
+    "Self Pay",
+    "Self-Pay",
+    "Private Pay"
+  ]
+}

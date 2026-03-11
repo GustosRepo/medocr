@@ -1,0 +1,78 @@
+{
+  "_meta": {
+    "payer_id": "ebms",
+    "payer_name": "EBMS (Employee Benefit Management Services)",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "TPA -- everything varies by underlying plan. Must call for each patient."
+  },
+  "criteria_source": {
+    "criteria_id": "universal_baseline",
+    "criteria_file": "criteria_universal_baseline.json",
+    "confidence": "baseline",
+    "notes": "This payer has no published clinical criteria. Universal baseline provides contraindication checks for test TYPE selection (HST vs PSG) only. Does not gate authorization."
+  },
+  "plan_types": [
+    "tpa"
+  ],
+  "coverage": {
+    "95806": {
+      "covered": "call_to_verify",
+      "auth_required": "call_to_verify",
+      "notes": "If parent network uses 95806 (e.g., Cigna)"
+    },
+    "G0399": {
+      "covered": "call_to_verify",
+      "auth_required": "call_to_verify",
+      "notes": "If parent network uses G0399 (e.g., Aetna, BCBS, UHC)"
+    },
+    "95810": {
+      "covered": "call_to_verify",
+      "auth_required": "call_to_verify"
+    },
+    "95811": {
+      "covered": "call_to_verify",
+      "auth_required": "call_to_verify"
+    }
+  },
+  "hst_code": "call_to_verify",
+  "parent_network_inheritance": {
+    "_description": "EBMS is a TPA. When a parent network is identified (e.g., 'EBMS - Aetna', 'EBMS - Cigna'), EBMS inherits the parent's HST code, criteria, and submission rules. If no parent is identified, call to verify.",
+    "detection": "OCR may extract parent network name alongside EBMS. Common patterns: 'EBMS - [Parent]', 'Administered by EBMS / [Parent] network', or parent network logo on card.",
+    "known_parents": {
+      "aetna": {
+        "inherit_from": "payer_aetna.json",
+        "hst_code": "G0399",
+        "criteria_id": "evicore",
+        "submit_to": "Evicore"
+      },
+      "cigna": {
+        "inherit_from": "payer_cigna.json",
+        "hst_code": "95806",
+        "criteria_id": "evicore",
+        "submit_to": "Evicore"
+      },
+      "uhc": {
+        "inherit_from": "payer_uhc_commercial.json",
+        "hst_code": "G0399",
+        "criteria_id": "uhc",
+        "submit_to": "Evicore"
+      },
+      "bcbs": {
+        "inherit_from": "payer_bcbs_carelon.json",
+        "hst_code": "G0399",
+        "criteria_id": "carelon",
+        "submit_to": "Carelon portal"
+      }
+    },
+    "fallback": "If no parent network identified, call EBMS directly to determine auth requirements, HST code, and submission method."
+  },
+  "submission": {
+    "primary_method": "call",
+    "notes": "TPA with variable rules. Must call to verify auth requirements, HST code, and submission method."
+  },
+  "referral": {
+    "required": "call_to_verify"
+  },
+  "pain_level": "yellow"
+}

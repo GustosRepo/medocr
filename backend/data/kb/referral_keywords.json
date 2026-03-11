@@ -1,0 +1,152 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "Valid referral language patterns for document validation. Used to determine if a document contains a valid referral/order for sleep testing. Organized by validation path (A = e-signed referral, B = wet ink order, C = chart notes with embedded order).",
+  "_used_by": "M1E (Provider & Chart Notes), Document Validation",
+  "_source": "Referral Processing Keywords & Contexts V1, Visual Tree v0.19.0 M1E, Codified Logic Tree v0.16.5 Stage 1.2B",
+
+  "referral_indicators": {
+    "explicit_referral": [
+      "referral",
+      "refer to",
+      "referring to",
+      "referred for",
+      "referral for",
+      "sleep study referral",
+      "please schedule",
+      "please evaluate",
+      "requesting evaluation"
+    ],
+    "order_language": [
+      "order for sleep study",
+      "order sleep study",
+      "order psg",
+      "order polysomnography",
+      "order home sleep test",
+      "order hst",
+      "order titration",
+      "ordering sleep study",
+      "prescription for",
+      "rx for sleep study",
+      "rx sleep study"
+    ],
+    "implicit_order": [
+      "evaluate for sleep apnea",
+      "evaluate for osa",
+      "rule out sleep apnea",
+      "rule out osa",
+      "r/o osa",
+      "r/o sleep apnea",
+      "evaluate and treat",
+      "eval and treat",
+      "eval & treat",
+      "complete sleep study",
+      "comprehensive sleep study",
+      "sleep evaluation",
+      "sleep medicine evaluation",
+      "sleep disorder evaluation"
+    ],
+    "test_type_language": {
+      "diagnostic": [
+        "diagnostic study",
+        "diagnostic sleep study",
+        "baseline study",
+        "initial evaluation",
+        "diagnostic polysomnography"
+      ],
+      "titration": [
+        "cpap titration",
+        "pap titration",
+        "bipap titration",
+        "titration study",
+        "pressure titration"
+      ],
+      "split_night": [
+        "split night",
+        "split-night",
+        "diagnostic with titration",
+        "eval and treat"
+      ],
+      "hst": [
+        "home sleep test",
+        "home sleep apnea test",
+        "hsat",
+        "portable study",
+        "unattended study",
+        "home study"
+      ],
+      "complete": [
+        "complete study",
+        "comprehensive study",
+        "full evaluation",
+        "all testing"
+      ]
+    }
+  },
+
+  "scope_interpretation": {
+    "_description": "How order language maps to CPT scope. Used in M2A Order Scope determination.",
+    "diagnostic_only": {
+      "keywords": ["diagnostic only", "baseline only", "initial study only", "diagnostic psg only"],
+      "scope": ["95810"],
+      "scope_label": "DIAGNOSTIC",
+      "notes": "Scope never expands. Even if titration clinically indicated, system flags but does not add."
+    },
+    "titration_only": {
+      "keywords": ["titration only", "cpap titration", "pap study", "pressure study"],
+      "scope": ["95811"],
+      "scope_label": "TITRATION",
+      "notes": "Requires prior positive diagnostic study. M2B validates."
+    },
+    "hst_only": {
+      "keywords": ["hst only", "home study only", "home sleep test"],
+      "scope": ["95806"],
+      "scope_label": "HST"
+    },
+    "full_scope": {
+      "keywords": ["eval and treat", "evaluate and treat", "complete study", "comprehensive", "all testing"],
+      "scope": ["95806", "95810", "95811"],
+      "scope_label": "FULL",
+      "notes": "All tests available. M3 insurance scope and M4 tiebreaker determine final selection."
+    },
+    "ambiguous": {
+      "keywords": ["sleep study", "polysomnography", "sleep evaluation"],
+      "scope_label": "AMBIGUOUS",
+      "flag": "FLAG_AMBIGUOUS_ORDER",
+      "notes": "Order language unclear about specific test type. Default to diagnostic scope, flag for review."
+    }
+  },
+
+  "checkbox_interpretation": {
+    "_description": "Standard referral forms use checkboxes. Map checkbox labels to scope.",
+    "complete_sleep_study": { "scope": ["95810", "95811"], "scope_label": "FULL" },
+    "split_night": { "scope": ["95810", "95811"], "scope_label": "FULL" },
+    "polysomnogram": { "scope": ["95810"], "scope_label": "DIAGNOSTIC" },
+    "diagnostic_psg": { "scope": ["95810"], "scope_label": "DIAGNOSTIC" },
+    "home_sleep_test": { "scope": ["95806"], "scope_label": "HST" },
+    "hst": { "scope": ["95806"], "scope_label": "HST" },
+    "titration": { "scope": ["95811"], "scope_label": "TITRATION" },
+    "cpap_titration": { "scope": ["95811"], "scope_label": "TITRATION" }
+  },
+
+  "non_referral_indicators": {
+    "_description": "Language that indicates this is NOT a valid order/referral.",
+    "template_language": [
+      "check all that apply",
+      "circle one",
+      "mark if present",
+      "instructions:",
+      "please indicate",
+      "rate from 1-10",
+      "for office use only",
+      "sample form"
+    ],
+    "negative_indicators": [
+      "referral denied",
+      "order cancelled",
+      "study not recommended",
+      "not medically necessary",
+      "patient declined"
+    ]
+  }
+}

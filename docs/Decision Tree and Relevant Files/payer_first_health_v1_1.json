@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "payer_id": "first_health",
+    "payer_name": "First Health Network",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "Must call IBA for everything. No self-service portal for auth."
+  },
+  "criteria_source": {
+    "criteria_id": "universal_baseline",
+    "criteria_file": "criteria_universal_baseline.json",
+    "confidence": "baseline",
+    "notes": "This payer has no published clinical criteria. Universal baseline provides contraindication checks for test TYPE selection (HST vs PSG) only. Does not gate authorization."
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": "call_iba"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": "call_iba"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": "call_iba"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": "call_iba"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "call_iba",
+    "notes": "Call IBA (Independent Benefit Administrators) for all auth/benefits questions."
+  },
+  "referral": {
+    "required": "call_to_verify"
+  },
+  "pain_level": "yellow"
+}

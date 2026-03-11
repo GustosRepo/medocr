@@ -1,0 +1,74 @@
+{
+  "_meta": {
+    "payer_id": "tricare",
+    "payer_name": "TRICARE",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Plan type determines everything. Prime = auth + referral. Select/TFL/Reserve = no auth, no referral. Need SSN or DBN to verify."
+  },
+  "criteria_source": {
+    "criteria_id": "tricare",
+    "criteria_file": "criteria_tricare.json",
+    "confidence": "verified"
+  },
+  "plan_types": [
+    "prime_active_duty",
+    "prime_other",
+    "select",
+    "select_overseas",
+    "reserve_select",
+    "retired_reserve",
+    "young_adult_select",
+    "for_life"
+  ],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": "prime_only"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": "prime_only"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "regional_contractor",
+    "notes": "PCM works with regional contractor for Prime plans. No submission needed for Select/TFL."
+  },
+  "referral": {
+    "required": "prime_only",
+    "notes": "Prime plans require PCM referral. Select/TFL/Reserve do not."
+  },
+  "pain_level": "red",
+  "flags": [
+    {
+      "flag_id": "FLAG_TRICARE_PRIME_AUTH",
+      "trigger": "tricare_prime",
+      "message": "Patient needs referral from PCM + pre-auth for specialty care",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_TRICARE_SSN_REQUIRED",
+      "trigger": "tricare AND no_ssn_dbn",
+      "message": "Need SSN or DBN to verify eligibility",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_TRICARE_FOR_LIFE",
+      "trigger": "tricare_for_life",
+      "message": "CALL to verify (portal won't work). 100% covered after Medicare.",
+      "severity": "low"
+    }
+  ]
+}

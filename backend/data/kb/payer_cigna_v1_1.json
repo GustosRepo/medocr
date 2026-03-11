@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "payer_id": "cigna",
+    "payer_name": "Cigna",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "Cigna routes all sleep auth through Evicore. v1.1: HST code corrected to 95806, coverage entries fixed, pediatric codes added."
+  },
+  "criteria_source": {
+    "criteria_id": "evicore",
+    "criteria_file": "criteria_evicore.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "95806": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore",
+      "notes": "Cigna uses 95806 for HST, not G0399"
+    },
+    "G0399": {
+      "covered": false,
+      "notes": "Cigna does NOT use G0399 -- use 95806"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore",
+      "notes": "Prior positive diagnostic typically required"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore"
+    },
+    "95782": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore",
+      "notes": "Pediatric PSG"
+    },
+    "95783": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore",
+      "notes": "Pediatric titration"
+    }
+  },
+  "hst_code": "95806",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Evicore",
+    "portal_url": "https://www.evicore.com"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green"
+}

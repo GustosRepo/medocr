@@ -1,0 +1,224 @@
+{
+  "_meta": {
+    "file_id": "ma_routing_rules",
+    "version": "1.0",
+    "last_updated": "2026-03-11",
+    "source": "Medicare_Advantage_Routing_Guide.md (353 lines)",
+    "purpose": "Medicare Advantage plan identification flowchart, IPA routing, OON detection, certainty levels, carrier-specific MA routing tables."
+  },
+
+  "certainty_levels": {
+    "GREEN": { "meaning": "Can determine from card/Availity immediately", "action": "Proceed with routing" },
+    "YELLOW": { "meaning": "Need additional verification", "action": "Follow verification steps" },
+    "RED": { "meaning": "Can't determine without calling", "action": "Call payer, document findings" }
+  },
+
+  "step_1_carrier_identification": {
+    "card_signals": [
+      { "text": "Humana", "carrier": "humana", "certainty": "GREEN" },
+      { "text": "UnitedHealthcare", "carrier": "uhc", "certainty": "GREEN" },
+      { "text": "UHC", "carrier": "uhc", "certainty": "GREEN" },
+      { "text": "Aetna", "carrier": "aetna", "certainty": "GREEN" },
+      { "text": "Cigna", "carrier": "cigna", "certainty": "GREEN" },
+      { "text": "Anthem", "carrier": "bcbs_ma", "certainty": "YELLOW" },
+      { "text": "BCBS", "carrier": "bcbs_ma", "certainty": "YELLOW" }
+    ],
+    "fallback": [
+      "Check Availity — may route to correct payer",
+      "Look for network logos (UHC, Humana, etc.)",
+      "If still unclear → Call number on card",
+      "Document what you learn for future reference"
+    ]
+  },
+
+  "step_2_oon_check": {
+    "known_oon_ma_plans": [
+      { "plan": "Cigna Medicare", "status": "OON", "blocking": true },
+      { "plan": "Humana P3 IPA", "status": "OON", "blocking": true },
+      { "plan": "Humana Intermountain IPA", "status": "OON", "blocking": true },
+      { "plan": "Anthem Mediblue P3 network", "status": "OON", "blocking": true },
+      { "plan": "Anthem Mediblue Caremore network", "status": "OON", "blocking": true }
+    ],
+    "known_inn_ma_plans": [
+      { "plan": "Anthem Mediblue Optum network", "status": "INN" }
+    ],
+    "fallback": [
+      "Check Availity for network status",
+      "If Availity unclear → Call payer",
+      "Ask: 'Is [our facility] in-network for this plan?'",
+      "Get reference number for the answer"
+    ]
+  },
+
+  "step_3_plan_type": {
+    "identification_sources": ["card", "availity_plan_name", "benefits_check"],
+    "ppo": { "referral_required": false },
+    "hmo": { "referral_required": true, "referral_by": "PCP submits (not us)" },
+    "unknown_fallback": "Assume HMO rules apply (more restrictive). Check benefits for referral requirement."
+  },
+
+  "step_4_ipa_identification": {
+    "known_ipas": {
+      "optum": {
+        "identification": "Availity shows 'Optum' during benefits",
+        "impact": "Different portal (Curo), different rates",
+        "status": "INN"
+      },
+      "p3": {
+        "identification": "Card or Availity shows P3",
+        "status": "OON",
+        "blocking": true
+      },
+      "intermountain": {
+        "identification": "Card or Availity shows Intermountain",
+        "status": "OON",
+        "blocking": true
+      },
+      "caremore": {
+        "identification": "Card or Availity shows Caremore",
+        "status": "OON",
+        "note": "OON for Anthem Mediblue",
+        "blocking": true
+      }
+    },
+    "no_ipa": "Nothing listed in Availity IPA field → use standard carrier workflow",
+    "challenges": [
+      "IPAs are often MISLABELED on referrals",
+      "Availity may show IPA that's actually a clinic, not a network",
+      "Card may not clearly indicate IPA",
+      "Some IPAs only visible during benefits check"
+    ],
+    "fallback": [
+      "Check Availity benefits — IPA usually shows here",
+      "If unfamiliar 'IPA' shown → may be a clinic, not network",
+      "Call to verify if unclear",
+      "Ask: 'Is this plan managed by an IPA? Which one?'",
+      "If no IPA mentioned anywhere → assume standard carrier workflow"
+    ]
+  },
+
+  "step_5_carrier_routing": {
+    "humana_ma": {
+      "ppo": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "portal": "availity",
+        "referral": false,
+        "criteria": "criteria_humana_v1_1.json"
+      },
+      "hmo_no_ipa": {
+        "hst_auth": "referral_required",
+        "inlab_auth": true,
+        "portal": "availity",
+        "referral": true,
+        "referral_by": "PCP",
+        "criteria": "criteria_humana_v1_1.json"
+      },
+      "hmo_optum": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "portal": "curo.optum.com",
+        "referral": false,
+        "criteria": "criteria_humana_v1_1.json"
+      },
+      "hmo_p3": { "status": "OON", "blocking": true },
+      "hmo_intermountain": { "status": "OON", "blocking": true }
+    },
+
+    "uhc_ma": {
+      "direct_ppo": {
+        "hst_auth": false,
+        "inlab_auth": false,
+        "portal": "uhcprovider.com",
+        "referral": false,
+        "criteria": "criteria_uhc_v2_2.json",
+        "note": "No auth needed — submit anyway for reference"
+      },
+      "direct_hmo": {
+        "hst_auth": false,
+        "inlab_auth": false,
+        "portal": "uhcprovider.com",
+        "referral": true,
+        "referral_by": "PCP",
+        "criteria": "criteria_uhc_v2_2.json"
+      },
+      "optum_ppo": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "portal": "curo.optum.com",
+        "referral": false,
+        "criteria": "criteria_uhc_v2_2.json"
+      },
+      "optum_hmo": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "portal": "curo.optum.com",
+        "referral": true,
+        "referral_by": "PCP",
+        "criteria": "criteria_uhc_v2_2.json",
+        "warning": "Optum often mislabeled — verify plan type"
+      }
+    },
+
+    "aetna_ma": {
+      "all": {
+        "hst_auth": false,
+        "inlab_auth": true,
+        "portal": "availity",
+        "referral": false,
+        "criteria": "criteria_evicore_v2_1.json",
+        "note": "No referral required (unlike Commercial). Same auth as Commercial. No IPA complexity."
+      }
+    },
+
+    "cigna_ma": {
+      "all": { "status": "OON", "blocking": true }
+    },
+
+    "bcbs_ma_anthem_mediblue": {
+      "optum_network": {
+        "status": "INN",
+        "action": "Follow Optum workflow",
+        "criteria": "criteria_uhc_v2_2.json"
+      },
+      "p3_network": { "status": "OON", "blocking": true },
+      "caremore_network": { "status": "OON", "blocking": true },
+      "unknown_network": {
+        "fallback": [
+          "Check Availity for network indication",
+          "If unclear → Call Anthem",
+          "Ask: 'Which network is this Mediblue plan in — Optum, P3, or Caremore?'",
+          "Only Optum = in-network"
+        ]
+      }
+    }
+  },
+
+  "flags": [
+    {
+      "flag_id": "FLAG_MA_OON",
+      "trigger": "ma_plan_in_oon_list",
+      "message": "This Medicare Advantage plan is OON — cannot accept patient",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_MA_IPA_UNKNOWN",
+      "trigger": "ma_hmo_ipa_not_recognized",
+      "message": "Unknown IPA detected — call payer to verify Optum/P3/Intermountain/Caremore/standard",
+      "severity": "medium"
+    },
+    {
+      "flag_id": "FLAG_MA_PLAN_TYPE_UNKNOWN",
+      "trigger": "ma_plan_ppo_hmo_undetermined",
+      "message": "Cannot determine PPO vs HMO — assume HMO rules (more restrictive). Verify with payer.",
+      "severity": "medium"
+    },
+    {
+      "flag_id": "FLAG_MA_OPTUM_MISLABEL",
+      "trigger": "uhc_ma_optum_suspected",
+      "message": "Optum Medicare plans are often mislabeled — verify plan type and use Curo portal",
+      "severity": "medium"
+    }
+  ]
+}

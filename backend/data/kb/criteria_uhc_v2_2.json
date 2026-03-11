@@ -1,0 +1,553 @@
+{
+  "_meta": {
+    "criteria_id": "uhc",
+    "criteria_name": "UnitedHealthcare",
+    "version": "2.2",
+    "effective_date": "2026-01-01",
+    "source_documents": [
+      "UHC Medical Policy 2026T0334RR (Sleep Studies)",
+      "UHC Medical Policy 2026T0525TT (OSA Treatment)",
+      "AASM 2017 Clinical Practice Guidelines (Optum Medicare)"
+    ],
+    "strictness_tier": 2,
+    "strictness_label": "MODERATE",
+    "notes": "Multiple plan types with different workflows but shared clinical criteria. Optum Medicare follows AASM guidelines. Updated v2.2→v2.3: added plan_type_routing (4 paths), Optum 3-portal workflow, Surest copay warning, referral matrix, surgical/HNS criteria, not-medically-necessary list. Expanded no-repeat-HSAT to all plan types. Added PSG indications (PLMD, RLS, RBD, narcolepsy)."
+  },
+  "hst_eligibility": {
+    "description": "Adult uncomplicated patients with high pre-test probability of moderate-to-severe OSA",
+    "requires": {
+      "age_minimum": 18,
+      "uncomplicated_patient": true,
+      "high_pretest_probability": {
+        "requires": "excessive_daytime_sleepiness",
+        "plus_2_of_3": [
+          "habitual_loud_snoring",
+          "witnessed_apnea_gasping_choking",
+          "diagnosed_hypertension"
+        ]
+      }
+    },
+    "technical_requirements": {
+      "minimum_oximetry_hours": 4,
+      "medicare_recording_hours": 6
+    },
+    "symptom_definitions": {
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_loud_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping_choking": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      },
+      "diagnosed_hypertension": {
+        "keywords": [
+          "hypertension",
+          "HTN",
+          "high blood pressure",
+          "resistant hypertension",
+          "antihypertensive",
+          "blood pressure medication"
+        ]
+      }
+    }
+  },
+  "hst_contraindications": {
+    "description": "Route to PSG when any present",
+    "conditions": [
+      {
+        "id": "chf",
+        "condition": "NYHA III-IV OR LVEF <=40%",
+        "lvef_threshold": 40,
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "copd",
+        "condition": "FEV1 <60% predicted",
+        "fev1_threshold": 60,
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": ">3 months duration",
+        "duration_months": 3,
+        "keywords": [
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "neuromuscular",
+        "condition": "Any progressive neuromuscular/neurodegenerative disorder",
+        "keywords": [
+          "ALS",
+          "amyotrophic lateral sclerosis",
+          "MS",
+          "multiple sclerosis",
+          "myotonic dystrophy",
+          "Parkinson",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "spinal muscular atrophy",
+          "neuropathy",
+          "Guillain-Barre"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "stroke",
+        "condition": "With persistent sequelae",
+        "keywords": [
+          "stroke",
+          "CVA",
+          "cerebrovascular accident",
+          "TIA",
+          "transient ischemic"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "morbid_obesity",
+        "condition": "BMI >50",
+        "bmi_threshold": 50,
+        "keywords": [
+          "morbid obesity",
+          "BMI >50",
+          "BMI 50",
+          "super obesity"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "ohs",
+        "condition": "Any",
+        "keywords": [
+          "obesity hypoventilation",
+          "OHS",
+          "Pickwickian",
+          "hypoventilation syndrome"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Any",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "home_oxygen",
+        "condition": "HARD STOP -- universal",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "route_to_psg"
+      },
+      {
+        "id": "pediatric",
+        "condition": "Age <18",
+        "action": "route_to_psg"
+      },
+      {
+        "id": "severe_insomnia",
+        "condition": "Documented severe insomnia",
+        "keywords": [
+          "severe insomnia",
+          "chronic insomnia",
+          "ISI",
+          "insomnia severity index"
+        ],
+        "action": "route_to_psg"
+      }
+    ]
+  },
+  "critical_rule_no_repeat_hsat": {
+    "description": "NEVER authorize second HSAT — applies to ALL UHC plan types",
+    "first_negative_inconclusive": "route_to_psg",
+    "first_technically_inadequate": "route_to_psg",
+    "applies_to": [
+      "uhc_commercial",
+      "medicare_direct",
+      "medicare_optum",
+      "surest",
+      "subsidiaries"
+    ],
+    "commercial_timeframe": "within 12 months of prior HSAT"
+  },
+  "psg_criteria": {
+    "indications": [
+      "hst_negative_inconclusive_inadequate",
+      "chf_nyha_iii_iv_or_lvef_lte_40",
+      "copd_fev1_lt_60",
+      "chronic_opioid_gt_3_months",
+      "neuromuscular_disease",
+      "stroke_history",
+      "suspected_hypoventilation_ohs",
+      "bmi_gt_50",
+      "suspected_central_sleep_apnea",
+      "pediatric",
+      "pre_hypoglossal_stimulator",
+      "epileptic_seizures_with_sleep_symptoms",
+      "plmd_periodic_limb_movement",
+      "rls_not_responding_treatment",
+      "parasomnia_violent_injurious_suspected_rbd",
+      "narcolepsy_evaluation",
+      "clinical_judgment"
+    ],
+    "not_medically_necessary_for_psg": [
+      "circadian_rhythm_disorders",
+      "depression",
+      "insomnia_alone"
+    ]
+  },
+  "titration_criteria": {
+    "osa_thresholds": {
+      "ahi_gte_15": {
+        "symptoms_required": false
+      },
+      "ahi_5_to_14": {
+        "symptoms_required": true,
+        "qualifying": [
+          "eds",
+          "impaired_cognition",
+          "mood_disorders",
+          "insomnia",
+          "hypertension",
+          "ihd",
+          "stroke_history"
+        ]
+      }
+    },
+    "inlab_required_when": [
+      "chf_present",
+      "significant_copd",
+      "ohs",
+      "central_sleep_apnea",
+      "post_palate_surgery",
+      "split_night_planned"
+    ],
+    "retitration_when": [
+      "prior_grade_adequate_or_unacceptable",
+      "split_titration_lte_3_hours",
+      "cpap_pressure_issues",
+      "weight_change_10_to_20_percent"
+    ],
+    "quality_grades": {
+      "optimal": "RDI <5 for >=15 min including supine REM",
+      "good": "RDI <=10 including supine REM",
+      "adequate": "RDI reduced 75% from baseline OR optimal/good except no supine REM",
+      "unacceptable": "Does not meet above -- repeat titration required"
+    }
+  },
+  "split_night_criteria": {
+    "indicated": {
+      "ahi_threshold": 40,
+      "window_hours": 2
+    },
+    "may_consider": {
+      "ahi_min": 20,
+      "ahi_max": 40,
+      "window_hours": 2
+    },
+    "not_recommended": {
+      "ahi_below": 20
+    },
+    "minimum_titration_hours": 3,
+    "success_requires": [
+      "titration_gt_3_hours",
+      "optimal_or_good_grade",
+      "events_controlled_rem_nrem"
+    ]
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    },
+    "scoring": {
+      "events_scored_at": "2_respiratory_cycles",
+      "abnormal_ahi": 1,
+      "co2_monitoring": "recommended"
+    },
+    "severity": {
+      "normal": "<1",
+      "mild": "1-5",
+      "moderate": "5-10",
+      "severe": ">=10"
+    }
+  },
+  "repeat_testing": {
+    "approved_when": [
+      "weight_change_10_to_20_percent",
+      "post_bariatric_surgery_gte_3_months",
+      "treatment_failure_despite_adherence",
+      "new_changed_cardiovascular_disease",
+      "clinical_suspicion_new_sleep_disorder"
+    ],
+    "not_approved": "routine_reassessment_asymptomatic_on_pap",
+    "post_treatment": [
+      "oral_appliance",
+      "upper_airway_surgery",
+      "hypoglossal_nerve_stimulation",
+      "weight_loss_interventions"
+    ]
+  },
+  "osa_severity": {
+    "mild": {
+      "ahi_min": 5,
+      "ahi_max": 14
+    },
+    "moderate": {
+      "ahi_min": 15,
+      "ahi_max": 30
+    },
+    "severe": {
+      "ahi_min": 31
+    }
+  },
+  "plan_type_routing": {
+    "description": "UHC has 4 distinct plan paths with different auth/submission rules",
+    "paths": {
+      "commercial": {
+        "identification": "Standard UHC card, no Medicare indicators",
+        "hst_auth": false,
+        "inlab_auth": true,
+        "auth_portal": "uhcprovider.com",
+        "clinical_notes_always_required": true,
+        "referral_required": false
+      },
+      "medicare_direct": {
+        "identification": "UHC card with Medicare indicators, NOT Optum-labeled",
+        "hst_auth": false,
+        "inlab_auth": false,
+        "auth_portal": null,
+        "clinical_notes_always_required": false,
+        "referral_required": {
+          "hmo": true,
+          "hmo_note": "PCP submits via uhcprovider.com — WE cannot submit referrals",
+          "ppo": false
+        },
+        "note": "Cannot distinguish from Optum by card format alone — check benefits"
+      },
+      "medicare_optum": {
+        "identification": "Optum-labeled card or benefits show Optum network",
+        "hst_auth": false,
+        "inlab_auth": true,
+        "auth_portal": "curo.optum.com/login",
+        "clinical_notes_always_required": true,
+        "referral_required": {
+          "hmo": true,
+          "hmo_note": "PCP submits via Curo — WE cannot submit referrals",
+          "ppo": false
+        },
+        "multi_portal_workflow": {
+          "curo": {
+            "url": "curo.optum.com/login",
+            "used_for": "Auth submission, HMO referrals"
+          },
+          "optum_care": {
+            "url": "providers.optumcaremw.com",
+            "used_for": "Benefits verification"
+          },
+          "uhc_provider": {
+            "url": "uhcprovider.com",
+            "used_for": "Initial ID lookup only — NOT for auth/benefits"
+          }
+        },
+        "warnings": [
+          "Optum is an IPA — mislabeled referral causes delays",
+          "Optum rates ≠ UHC rates ≠ Humana rates",
+          "Do NOT use UHC provider portal for Optum auth/benefits"
+        ]
+      },
+      "surest": {
+        "identification": "Surest-branded card or benefits indicate Surest plan",
+        "hst_auth": false,
+        "inlab_auth": true,
+        "auth_portal": "uhcprovider.com",
+        "clinical_notes_always_required": true,
+        "referral_required": false,
+        "variable_copay": {
+          "description": "Copays change by patient ZIP code",
+          "portal_copay_accurate": false,
+          "action": "CALL or MESSAGE for accurate copay — never quote portal copay to patient"
+        }
+      },
+      "subsidiaries": {
+        "identification": "UMR, All Savers, UHC Shared Services, etc.",
+        "hst_auth": false,
+        "inlab_auth": true,
+        "auth_portal": "uhcprovider.com",
+        "clinical_notes_always_required": true,
+        "referral_required": false
+      }
+    }
+  },
+  "surgical_criteria": {
+    "uppp_mo_mma": {
+      "description": "Upper airway surgery for OSA",
+      "requires_all": [
+        { "id": "ahi_by_psg", "condition": "AHI ≥ 15 by attended PSG", "ahi_min": 15 },
+        { "id": "ess_gt_10", "condition": "ESS > 10", "ess_min": 11 },
+        { "id": "pap_failure", "condition": "PAP failure, refusal, or intolerance documented" }
+      ],
+      "mma_additional": "Craniofacial disproportion documented",
+      "mo_additional": "Retrolingual obstruction documented",
+      "keywords": [
+        "UPPP", "uvulopalatopharyngoplasty",
+        "MMA", "maxillomandibular advancement",
+        "myotomy", "upper airway surgery",
+        "PAP failure", "CPAP intolerance"
+      ]
+    },
+    "hns_adult": {
+      "description": "Hypoglossal Nerve Stimulator (Inspire) — Adults",
+      "requires_all": [
+        { "id": "bmi", "condition": "BMI ≤ 40", "bmi_max": 40 },
+        { "id": "ahi_range", "condition": "AHI 15–100 by attended PSG", "ahi_min": 15, "ahi_max": 100 },
+        { "id": "central_apneas", "condition": "< 25% central or mixed apneas", "central_percent_max": 25 },
+        { "id": "no_concentric_collapse", "condition": "No concentric collapse on DISE", "dise_required": true },
+        { "id": "pap_failure", "condition": "PAP failure, refusal, or intolerance documented" }
+      ],
+      "keywords": [
+        "Inspire", "hypoglossal nerve stimulator", "HNS",
+        "upper airway stimulation", "DISE",
+        "drug-induced sleep endoscopy"
+      ]
+    },
+    "hns_adolescent_down_syndrome": {
+      "description": "HNS for adolescents with Down syndrome",
+      "requires_all": [
+        { "id": "age", "condition": "Age 10–18", "age_min": 10, "age_max": 18 },
+        { "id": "down_syndrome", "condition": "Down syndrome diagnosis" },
+        { "id": "ahi_range", "condition": "AHI ≥ 10, RDI ≤ 50", "ahi_min": 10, "rdi_max": 50 },
+        { "id": "bmi", "condition": "BMI < 95th percentile for age" },
+        { "id": "prior_adenotonsillectomy", "condition": "Prior adenotonsillectomy or contraindicated" },
+        { "id": "pap_failure", "condition": "PAP trial failure documented" }
+      ],
+      "keywords": [
+        "Down syndrome", "trisomy 21", "adolescent",
+        "Inspire", "HNS", "hypoglossal"
+      ]
+    }
+  },
+  "not_medically_necessary": {
+    "devices": [
+      "positional_therapy_devices",
+      "nasal_dilators",
+      "bongo_rx",
+      "prefab_oral_appliances",
+      "otc_oral_devices"
+    ],
+    "procedures": [
+      "laup_laser_assisted_uvulopalatoplasty",
+      "lingual_suspension",
+      "palatal_implants_pillar",
+      "tors_transoral_robotic_surgery",
+      "dome_distraction_osteogenesis",
+      "radiofrequency_tongue_base"
+    ],
+    "testing": [
+      "home_oximetry_alone",
+      "actigraphy_alone",
+      "ai_sleep_testing",
+      "pap_nap"
+    ]
+  },
+  "thresholds": {
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_indicated": 40,
+    "ahi_split_may_consider": 20,
+    "ahi_pediatric_abnormal": 1,
+    "bmi_morbid_obesity": 50,
+    "bmi_hns_max": 40,
+    "ahi_hns_min": 15,
+    "ahi_hns_max": 100,
+    "central_percent_hns_max": 25,
+    "lvef_chf": 40,
+    "fev1_copd": 60,
+    "opioid_chronic_months": 3,
+    "weight_change_significant_percent": 10,
+    "split_titration_minimum_hours": 3,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70,
+    "ess_threshold": 10,
+    "ess_surgical_min": 11
+  }
+}

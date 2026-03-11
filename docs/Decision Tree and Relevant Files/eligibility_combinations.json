@@ -1,0 +1,802 @@
+{
+  "_version": "1.0",
+  "_updated": "2026-02-24",
+  "_description": "PIN-1: Payer-by-payer eligibility lookup requirements. Each payer accepts specific combinations of patient info for eligibility verification. The system checks OCR-extracted fields against these combos and flags exactly what's missing.",
+  "_usage": "After M1B extracts patient fields and M1C identifies payer, check if any combo for that payer is fully satisfied by available data. If not, flag ALERT_INCOMPLETE_INSURANCE with the specific missing fields and the easiest combo to complete.",
+  "_global_notes": {
+    "medicaid_id_fallback": "For ALL Medicaids: if Medicaid ID unknown, look up in NV Medicaid FFS portal with other identifiers, then use retrieved ID for correct payer portal.",
+    "medicare_replacement_mbi": "For ALL Medicare Advantage plans: MBI can be used in place of Advantage/Plan ID and will pull eligibility.",
+    "ssn_handling": "SSN should never be stored in system. If SSN is the only option, flag for manual lookup by staff."
+  },
+  "payers": {
+    "Aetna": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "id_format_validation": {
+        "10_digits": "VALID \u2014 standard Aetna commercial ID. May or may not have 'W' prefix (W counts as part of the ID, not a separate prefix).",
+        "W_plus_9_digits": "VALID \u2014 same as 10-digit, the W is part of the ID.",
+        "12_digits": "\u26a0\ufe0f AMBIGUOUS \u2014 could be Aetna Medicare (ACCEPTED) or Aetna HMO/Intermountain (OON \u2014 do NOT accept). See disambiguation rules below."
+      },
+      "twelve_digit_disambiguation": {
+        "description": "12-digit Aetna IDs require disambiguation between Medicare Advantage (accepted) and Intermountain HMO (OON).",
+        "card_labels_that_suggest_medicare": [
+          "Aetna Medicare",
+          "Medicare Advantage",
+          "Aetna MA"
+        ],
+        "card_labels_that_suggest_oon_hmo": [
+          "Aetna CVS",
+          "Aetna HMO",
+          "Aetna CVS Health",
+          "CVS Aetna"
+        ],
+        "clues_favoring_medicare": [
+          "Patient age 65+",
+          "Referral from a Medicare-typical provider or geriatric office",
+          "Clinical notes mention Medicare, dual eligible, or age-related conditions",
+          "Card says 'Medicare' anywhere"
+        ],
+        "clues_favoring_oon_hmo": [
+          "Patient age under 65",
+          "Card says 'HMO' without 'Medicare'",
+          "Card says 'CVS' or 'Aetna CVS'",
+          "Employer group plan indicators",
+          "Intermountain Health Plan indicators"
+        ],
+        "action_if_uncertain": "Process the entire referral as if Medicare (ACCEPTED) but add FLAG_VERIFY_AETNA_12DIGIT: 'Confirm this is Aetna Medicare, not Aetna HMO/Intermountain (OON). 12-digit ID is ambiguous.' Staff verifies during benefits call before scheduling.",
+        "if_confirmed_oon": "STOP_OON \u2014 Intermountain HMO is in the doNotAccept list."
+      },
+      "notes": "Standard IDs are 10 digits (with or without W prefix). 12-digit IDs are ambiguous \u2014 could be Medicare (accepted) or Intermountain HMO (OON). Always flag 12-digit for verification."
+    },
+    "Aetna Supplement": {
+      "combos": [
+        [
+          "last_name",
+          "dob",
+          "policy_number"
+        ]
+      ],
+      "minimum_fields": [
+        "last_name",
+        "dob",
+        "policy_number"
+      ],
+      "minimum_with_fallback": null,
+      "notes": "Supplement IDs always start with 3 letters (often CLI) followed by numbers. Requires policy_number \u2014 not just member ID.",
+      "id_format_validation": {
+        "format": "Always starts with 3 letters followed by numbers",
+        "common_prefix": "CLI is the most common 3-letter prefix, but other letter combos exist",
+        "if_no_letter_prefix": "FLAG_VERIFY_AETNA_SUPPLEMENT_ID: ID does not start with 3 letters. May not be a supplement plan or may be OCR misread.",
+        "note": "The 3-letter prefix is part of the policy number, not a BCBS-style prefix."
+      }
+    },
+    "Anthem": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob",
+          "group_number"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": null,
+      "id_format_validation": {
+        "format": "Almost always follows the 3-letter BCBS prefix format",
+        "prefix_lookup": "First 3 characters of ID \u2192 look up in bcbs_prefix_database.json to identify affiliate, plan type, and auth routing",
+        "note": "Anthem IS a BCBS affiliate. The prefix database is the primary tool for Anthem ID validation and routing."
+      },
+      "notes": "Most flexible \u2014 patient_id + almost anything works. No name+DOB-only combo. IDs almost always follow BCBS 3-letter prefix format \u2014 use bcbs_prefix_database.json for identification and routing."
+    },
+    "Humana": {
+      "combos": [
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "dob",
+          "group_number"
+        ],
+        [
+          "medicaid_id",
+          "dob",
+          "state"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": null,
+      "id_format_validation": {
+        "format": "Always starts with the letter H",
+        "if_no_h_prefix": "FLAG_VERIFY_HUMANA_ID: ID does not start with H. May be a different payer's ID, a Medicaid ID, or OCR misread. Verify with patient.",
+        "medicaid_line": "Humana Medicaid uses Medicaid ID (11 digits, all numeric) \u2014 NOT the H-prefixed Humana ID."
+      },
+      "notes": "Humana IDs always start with H. If ID doesn't start with H, flag for verification. Medicaid line uses Medicaid ID + DOB + State instead."
+    },
+    "Medicare FFS": {
+      "combos": [
+        [
+          "mbi",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "mbi",
+          "last_name",
+          "dob"
+        ],
+        [
+          "mbi",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "mbi"
+      ],
+      "minimum_with_fallback": null,
+      "mbi_lookup": [
+        "last_name",
+        "first_name",
+        "dob",
+        "ssn"
+      ],
+      "id_format_validation": {
+        "format": "11 characters, mix of letters and numbers",
+        "last_4": "Always 2 letters followed by 2 numbers (e.g., AB12)",
+        "first_7": "Never more than 2 letters or 2 numbers in a row. If 3+ letters or 3+ numbers appear consecutively, the ID is INVALID.",
+        "example_valid": "1A2B3C4DE56",
+        "example_invalid_3_numbers": "123BC4DE567 \u2014 three numbers in a row (123) = invalid",
+        "example_invalid_3_letters": "1ABC34DE567 \u2014 three letters in a row (ABC) = invalid",
+        "validation_regex": "^(?!.*[0-9]{3})(?!.*[A-Za-z]{3})[A-Za-z0-9]{7}[A-Za-z]{2}[0-9]{2}$",
+        "if_invalid": "FLAG_INVALID_MBI: ID does not match MBI format. May be an old HICN, a Medicare Advantage plan ID, or a data entry error. Verify with patient."
+      },
+      "notes": "MBI required. 11 chars, alternating pattern with no 3+ consecutive letters or numbers. Last 4 = 2 letters + 2 numbers. If MBI unknown, can look up with last+first+DOB+SSN."
+    },
+    "Nevada Medicaid FFS": {
+      "combos": [
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "medicaid_id"
+        ],
+        [
+          "ssn",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "medicaid_id"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "id_format_validation": {
+        "format": "11 digits, numbers only \u2014 no letters",
+        "pattern_legacy": "Typically starts with several leading zeros (e.g., 00012345678)",
+        "pattern_newer": "Some newer IDs have a few numbers, then zeros, then more numbers (e.g., 12300045678)",
+        "always": "Always exactly 11 digits. Always all numeric. If letters present, it is NOT a Medicaid ID.",
+        "if_invalid": "FLAG_INVALID_MEDICAID_ID: ID contains letters or is not 11 digits. May be a different payer's ID placed in wrong field."
+      },
+      "notes": "Always 11 digits, all numeric. Legacy IDs start with leading zeros, newer ones may have zeros in the middle. Can look up in NV Medicaid portal using name+DOB if ID unknown."
+    },
+    "Cigna": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "ssn",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "ssn",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "dob",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "dob",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "ssn",
+          "dob",
+          "last_name",
+          "first_name"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": "IDs are sometimes all numbers, sometimes start with U. Many subsidiaries with varying formats. SSN accepted as alternative to Patient ID.",
+      "id_format_validation": {
+        "format_variant_1": "All numbers \u2014 most common format",
+        "format_variant_2": "Starts with single U followed by numbers",
+        "subsidiaries": "Cigna has many random subsidiaries \u2014 ID format may vary. If unsure, process and flag for verification.",
+        "note": "No single reliable format. Accept and verify."
+      }
+    },
+    "Cigna Supplement": {
+      "combos": [
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": null,
+      "id_format_validation": {
+        "format": "Same as Cigna commercial \u2014 all numbers or U-prefix",
+        "note": "Supplement plan \u2014 verify Medicare is primary."
+      }
+    },
+    "UMR": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "ssn",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": null,
+      "notes": "Very limited \u2014 must have ID (or SSN) + DOB. No name-only lookup."
+    },
+    "Sierra Health": {
+      "combos": [
+        [
+          "patient_id"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "ssn"
+        ],
+        [
+          "sma_mrn"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": "IDs are 11 digits, usually start with 1 or 2, often end 00/01/02. Very flexible lookup \u2014 patient ID alone works. SMA MRN = internal facility record number.",
+      "id_format_validation": {
+        "format": "11 numerical digits. Usually starts with 1 or 2. Often ends with 00, 01, or 02.",
+        "note": "Same format across Sierra Health, HPN Commercial, and HPN Medicaid."
+      }
+    },
+    "HPN": {
+      "combos": [
+        [
+          "patient_id"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "ssn"
+        ],
+        [
+          "sma_mrn"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": "IDs are 11 digits, usually start with 1 or 2, often end 00/01/02. Same portal as Sierra Health.",
+      "id_format_validation": {
+        "format": "11 numerical digits. Usually starts with 1 or 2. Often ends with 00, 01, or 02.",
+        "note": "Same format across Sierra Health, HPN Commercial, and HPN Medicaid."
+      }
+    },
+    "HPN Medicaid": {
+      "combos": [
+        [
+          "patient_id"
+        ],
+        [
+          "medicaid_id"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "ssn"
+        ],
+        [
+          "sma_mrn"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": "Accepts HPN plan ID (starts 1/2, ends 00/01/02) OR Medicaid ID (leading zeros). Also accepts name+DOB, SSN, or SMA MRN.",
+      "id_format_validation": {
+        "medicaid_id_format": "Medicaid ID format: always 11 digits, all numeric. Legacy IDs have leading zeros, newer ones may have zeros in the middle.",
+        "hpn_plan_id_format": "11 numerical digits. Usually starts with 1 or 2. Often ends with 00, 01, or 02. Same format as commercial HPN/Sierra.",
+        "note": "Accepts EITHER the HPN plan ID (11 digits, starts 1/2) OR the Medicaid ID (11 digits, leading zeros). Both work."
+      }
+    },
+    "Silversummit": {
+      "combos": [
+        [
+          "member_id",
+          "dob"
+        ],
+        [
+          "last_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "member_id",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "dob"
+      ],
+      "notes": "Covers Medicaid and AmBetter. Medicaid: 11-digit numeric. Ambetter: usually 2 letters (often UZ) + numbers, older plans may be 1 letter + numbers. Last name + DOB works without ID.",
+      "id_format_validation": {
+        "medicaid_id_format": "Medicaid ID format: always 11 digits, all numeric. Legacy IDs have leading zeros, newer ones may have zeros in the middle.",
+        "ambetter_format": "Ambetter IDs usually start with 2 letters followed by numbers (often UZ, but not limited to UZ). Older plans may have single letter prefix followed by numbers.",
+        "note": "Silversummit covers both Medicaid and Ambetter lines. Check which line based on ID format."
+      }
+    },
+    "Tricare": {
+      "combos": [
+        [
+          "sponsor_ssn",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_dbn",
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "sponsor_ssn",
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "patient_dbn",
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "id_note": "\u26a0\ufe0f The DBN is typically found in the Member ID field on referral documents. If OCR extracts a member_id for a Tricare patient, treat it as patient_dbn \u2014 it satisfies the DBN combo.",
+      "id_format_validation": {
+        "9_digits": "VALID \u2014 this is the SSN (sponsor_ssn)",
+        "11_digits": "VALID \u2014 this is the DBN (patient_dbn)",
+        "10_digits": "\u26a0\ufe0f INVALID \u2014 this is the DOD ID, which does NOT work for eligibility verification. Flag for staff to obtain correct 9-digit SSN or 11-digit DBN."
+      },
+      "notes": "\u26a0\ufe0f Cannot verify with Member ID alone \u2014 but what's labeled 'Member ID' on referrals is usually the DBN, which DOES work. Need DBN (11 digits) or SSN (9 digits). If 10 digits found, that's the DOD ID \u2014 flag as invalid. Tricare For Life must CALL to verify \u2014 portal won't work."
+    },
+    "Caresource": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "first_name",
+          "dob"
+        ],
+        [
+          "medicaid_id",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "medicaid_id",
+        "dob"
+      ],
+      "notes": "Medicaid plan. Can use Medicaid ID if plan ID unknown.",
+      "id_format_validation": {
+        "medicaid_id_format": "Medicaid ID format: always 11 digits, all numeric. Legacy IDs have leading zeros, newer ones may have zeros in the middle."
+      }
+    },
+    "Molina": {
+      "combos": [
+        [
+          "patient_id",
+          "dob",
+          "state"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "dob",
+          "state"
+        ],
+        [
+          "patient_id",
+          "dob",
+          "gender",
+          "state"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob",
+          "state"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob",
+        "state"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob",
+        "state"
+      ],
+      "notes": "\u26a0\ufe0f State is REQUIRED in all combos. Nevada = 'NV'.",
+      "id_format_validation": {
+        "medicaid_id_format": "Medicaid ID format: always 11 digits, all numeric. Legacy IDs have leading zeros, newer ones may have zeros in the middle.",
+        "note": "State is REQUIRED in all combos."
+      }
+    },
+    "UHC": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": [
+        "last_name",
+        "first_name",
+        "dob"
+      ],
+      "notes": "Commercial: 9 digits starting with 9. Surest: 12 digits starting with 771/777. Medicare: 9-11 digits.",
+      "id_format_validation": {
+        "commercial": "Almost always 9 digits starting with 9. Sometimes starts with other numbers but 9 is most common.",
+        "surest": "Always 12 digits. Almost always starts with 771 or 777. If 12-digit ID starting with 771/777 on a UHC card \u2192 Surest plan.",
+        "medicare": "Usually 9-11 numerical digits.",
+        "note": "All UHC ID types are numeric. If letters present (other than MBI format), may be misidentified payer."
+      }
+    },
+    "AARP UHC Supplement": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": null,
+      "notes": "Patient ID required for all combos. No name+DOB-only option.",
+      "id_format_validation": {
+        "format": "Numeric, follows UHC Medicare format (9-11 digits)",
+        "note": "Supplement plan \u2014 verify Medicare is primary."
+      }
+    },
+    "BCBS": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id"
+      ],
+      "minimum_with_fallback": null,
+      "notes": "Generic BCBS. Specific affiliates may have additional or different combos. Prefix determines affiliate routing."
+    },
+    "GEHA": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": null,
+      "id_format_validation": {
+        "format": "Always starts with G followed by numbers",
+        "if_no_g_prefix": "FLAG_VERIFY_GEHA_ID: ID does not start with G. May not be GEHA or may be OCR misread."
+      },
+      "notes": "GEHA IDs always start with G followed by numbers."
+    },
+    "LV Firefighters": {
+      "combos": [
+        [
+          "patient_id",
+          "dob"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name"
+        ],
+        [
+          "patient_id",
+          "last_name",
+          "first_name",
+          "dob"
+        ]
+      ],
+      "minimum_fields": [
+        "patient_id",
+        "dob"
+      ],
+      "minimum_with_fallback": null,
+      "id_format_validation": {
+        "format": "UHSS plan IDs always start with 800 followed by numbers",
+        "if_no_800_prefix": "FLAG_VERIFY_LVFF_ID: ID does not start with 800. May not be the correct UHSS plan."
+      },
+      "notes": "LV Firefighters UHSS plan. IDs always start with 800 followed by numbers."
+    }
+  },
+  "field_definitions": {
+    "patient_id": "Insurance member/subscriber ID from card",
+    "member_id": "Alias for patient_id (some payers use this term)",
+    "policy_number": "Policy/plan number (distinct from member ID, used by some supplements)",
+    "last_name": "Patient last name",
+    "first_name": "Patient first name",
+    "dob": "Date of birth",
+    "group_number": "Employer group number from card",
+    "ssn": "Social Security Number \u2014 \u26a0\ufe0f flag for manual staff lookup, never store",
+    "mbi": "Medicare Beneficiary Identifier (11-char alphanumeric, format: 1A23-B45-CD67)",
+    "medicaid_id": "State Medicaid ID number",
+    "state": "State of residence (required by some Medicaid plans)",
+    "gender": "Patient gender (required by Molina)",
+    "sma_mrn": "Sleep Medicine Associates internal medical record number",
+    "sponsor_ssn": "Tricare sponsor's SSN (service member, not necessarily patient)",
+    "patient_dbn": "Tricare Defense Benefits Number (alternative to SSN)"
+  },
+  "ocr_field_mapping": {
+    "_description": "Maps OCR-extracted fields to eligibility field names",
+    "patient.name": [
+      "last_name",
+      "first_name"
+    ],
+    "patient.dob": [
+      "dob"
+    ],
+    "insurance.member_id": [
+      "patient_id",
+      "member_id",
+      "patient_dbn"
+    ],
+    "insurance.group": [
+      "group_number"
+    ],
+    "insurance.policy_number": [
+      "policy_number"
+    ],
+    "insurance.medicaid_id": [
+      "medicaid_id"
+    ],
+    "insurance.mbi": [
+      "mbi"
+    ],
+    "patient.ssn": [
+      "ssn",
+      "sponsor_ssn"
+    ],
+    "patient.gender": [
+      "gender"
+    ],
+    "patient.state": [
+      "state"
+    ]
+  }
+}

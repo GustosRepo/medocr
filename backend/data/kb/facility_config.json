@@ -1,0 +1,232 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "Facility-specific configuration values. Everything in this file would need to change if the lab moved, opened a second location, changed its supervising physician, or adjusted operational parameters. Extracted from hardcoded values found in the v0.19.0 decision tree to make them maintainable. ALSO used by OCR/LLM extraction as an exclusion filter to prevent the system from confusing the facility's own contact info with referring provider data.",
+  "_used_by": "M1A (duplicate check window, OCR exclusion filter), M1B (age calc offsets), M1E (OCR exclusion filter, supervising physician OON workaround), M4 (split night distance), M5 (auth package facility fields), M6 (output facility info)",
+
+  "facility": {
+    "_description": "Lab identity -- used in M5 auth submission packages and M6 output.",
+    "name": "PLACEHOLDER -- Enter facility legal name",
+    "dba": "PLACEHOLDER -- Enter DBA if different",
+    "npi": "PLACEHOLDER -- Enter 10-digit facility NPI",
+    "tax_id": "PLACEHOLDER -- Enter facility Tax ID / EIN",
+    "taxonomy_code": "PLACEHOLDER -- Enter taxonomy (e.g., 261QS1200X for sleep disorder center)",
+    "address": {
+      "street": "PLACEHOLDER",
+      "suite": null,
+      "city": "Las Vegas",
+      "state": "NV",
+      "zip": "PLACEHOLDER",
+      "county": "Clark"
+    },
+    "phone": "PLACEHOLDER -- Main office phone",
+    "fax": "PLACEHOLDER -- Facility fax number",
+    "email": "PLACEHOLDER -- Facility email if used for correspondence",
+    "place_of_service_code": "12",
+    "place_of_service_description": "Home (for HST) / 22 On Campus-Outpatient (for PSG)",
+    "hst_pos_code": "12",
+    "psg_pos_code": "22"
+  },
+
+  "ocr_exclusion_filter": {
+    "_description": "CRITICAL: During OCR/LLM extraction, the system encounters phone numbers, fax numbers, NPIs, and addresses belonging to BOTH the referring provider AND this facility. Fax cover sheets have our fax number in the 'To:' field. Fax headers stamp our phone number. Some referrals include our facility name in 'Referred To:' fields. Without filtering, the system could assign our own fax number to the referring physician's fax field, our NPI to the ordering provider, or our address to the practice address.",
+    "_used_in": "Step 0 (OCR + LLM extraction), M1E (provider validation)",
+    "_logic": "After OCR extracts all contact fields, compare every extracted phone, fax, NPI, address, and name against this filter. Any match is excluded from referring provider / ordering physician fields. Matches are tagged as 'facility_self' and not assigned to external entity fields.",
+
+    "exclude_from_provider_fields": {
+      "phone_numbers": [
+        "PLACEHOLDER -- facility main phone",
+        "PLACEHOLDER -- facility alternate phone (if any)",
+        "PLACEHOLDER -- facility scheduling line (if different)"
+      ],
+      "fax_numbers": [
+        "PLACEHOLDER -- facility main fax",
+        "PLACEHOLDER -- facility alternate fax (if any)"
+      ],
+      "npi_numbers": [
+        "PLACEHOLDER -- facility NPI",
+        "PLACEHOLDER -- supervising physician NPI",
+        "PLACEHOLDER -- interpreting physician NPI(s)"
+      ],
+      "addresses": [
+        "PLACEHOLDER -- facility street address (partial match OK -- street number + street name)"
+      ],
+      "entity_names": [
+        "PLACEHOLDER -- facility legal name",
+        "PLACEHOLDER -- facility DBA name",
+        "PLACEHOLDER -- common abbreviations/variants patients or offices use for your facility"
+      ]
+    },
+
+    "matching_rules": {
+      "phone_fax": "Normalize to 10 digits (strip +1, dashes, spaces, parens) then exact match",
+      "npi": "Exact 10-digit match",
+      "address": "Fuzzy match on street number + street name. Ignore suite/unit differences.",
+      "entity_name": "Case-insensitive substring match. 'Sleep Center' in extracted text matching 'Las Vegas Sleep Center' in filter -> exclude."
+    },
+
+    "what_happens_on_match": {
+      "phone_match": "Do NOT assign to data.provider.phone or data.provider.fax. Tag field as 'facility_self'.",
+      "npi_match": "Do NOT assign to data.provider.npi. Tag as 'facility_self'. The referring provider NPI is still needed -- flag ALERT_MISSING_NPI if no non-facility NPI found.",
+      "address_match": "Do NOT assign to data.provider.address. Tag as 'facility_self'.",
+      "name_match": "Do NOT assign to data.provider.practice_name. Useful for distinguishing 'Referred TO' (us) from 'Referred BY' (them)."
+    },
+
+    "developer_notes": "This filter runs BEFORE provider validation (M1E). It prevents a class of false extractions that would otherwise require manual correction on nearly every faxed referral. The filter values auto-populate from the facility, supervising_physician, and interpreting_physicians sections above -- the developer should build the exclusion list dynamically from those sections rather than maintaining a separate hardcoded list."
+  },
+
+  "supervising_physician": {
+    "_description": "Facility's supervising/interpreting physician. Used in M1E (OON workaround -- when referring MD is OON, this physician is listed on the auth). Also used in M5 auth packages when a supervising physician is needed.",
+    "name": {
+      "first": "PLACEHOLDER",
+      "last": "PLACEHOLDER",
+      "suffix": null
+    },
+    "credentials": "MD",
+    "npi": "PLACEHOLDER -- Enter supervising physician's 10-digit NPI",
+    "specialty": "Sleep Medicine",
+    "state_license": "NV",
+    "_note": "If multiple supervising physicians rotate, add entries here and the system can match by availability or payer preference."
+  },
+
+  "interpreting_physicians": {
+    "_description": "Physicians who interpret sleep studies. May be needed on some auth submissions or results documentation. Add all physicians who interpret at this facility.",
+    "physicians": [
+      {
+        "name": { "first": "PLACEHOLDER", "last": "PLACEHOLDER" },
+        "credentials": "MD",
+        "npi": "PLACEHOLDER",
+        "specialty": "Sleep Medicine",
+        "active": true
+      }
+    ]
+  },
+
+  "service_area": {
+    "_description": "Cities considered 'local' for M4 split night distance evaluation. Patients outside these cities get FAVOR_SPLIT to minimize travel. Update if lab opens a satellite location or service area changes.",
+    "local_cities": [
+      "Las Vegas",
+      "Henderson",
+      "North Las Vegas",
+      "Boulder City"
+    ],
+    "local_zip_prefixes": ["890", "891"],
+    "state": "NV",
+    "_notes": "The split night logic checks: if patient city is NOT in local_cities -> FAVOR_SPLIT (reason: DISTANCE). Zip prefixes are an alternative check when city isn't parsed cleanly from the address."
+  },
+
+  "operational_parameters": {
+    "_description": "Operational thresholds used throughout the tree. Changing these adjusts system behavior without touching code.",
+
+    "anticipated_service_date_offset_days": {
+      "value": 21,
+      "unit": "days",
+      "description": "M1B age calculation uses 'anticipated service date' = today + this offset. Tree says '~2-4 weeks from today'. Default 21 days (3 weeks) is the midpoint.",
+      "used_in": "M1B_AGE_CALC"
+    },
+
+    "age_transition_alert_window_days": {
+      "value": 60,
+      "unit": "days",
+      "description": "M1B generates AGE_ALERT_TURNING_X when patient's birthday is within this many days. Tree says 'within 2 months'.",
+      "used_in": "M1B_AGE_ALERTS"
+    },
+
+    "duplicate_check_window_days": {
+      "value": 30,
+      "unit": "days",
+      "description": "M1A duplicate detection: same patient + physician + test within this window = INFO_POSSIBLE_DUPLICATE.",
+      "used_in": "M1A_DUP_CHK"
+    },
+
+    "signature_stale_threshold_days": {
+      "value": 365,
+      "unit": "days",
+      "description": "Orders older than this = FLAG_SIGNATURE_STALE. Also in signature_patterns.json but kept here for centralized reference.",
+      "used_in": "M1E signature freshness"
+    },
+
+    "signature_aging_threshold_days": {
+      "value": 180,
+      "unit": "days",
+      "description": "Orders between this and stale threshold = INFO_ORDER_AGING.",
+      "used_in": "M1E signature freshness"
+    },
+
+    "prior_study_absolute_max_years": {
+      "value": 5,
+      "unit": "years",
+      "description": "M2B: Any prior study older than this = STOP_TITRATION_EXPIRED.",
+      "used_in": "M2B_RECENCY"
+    },
+
+    "prior_study_aging_threshold_years": {
+      "value": 1,
+      "unit": "years",
+      "description": "M2B: Prior study 1-5 years old = FLAG_TITRATION_PRIOR_STUDY_AGING (circumstantial).",
+      "used_in": "M2B_RECENCY"
+    },
+
+    "split_night_ahi_threshold": {
+      "value": 20,
+      "unit": "events/hour",
+      "description": "Technical split night criteria: AHI must exceed this in first 2 hours of study for technician to initiate titration portion.",
+      "used_in": "M4_SPLIT_SELECT_SPLIT (informational -- tech decision, not system decision)"
+    },
+
+    "split_night_minimum_titration_hours": {
+      "value": 3,
+      "unit": "hours",
+      "description": "Minimum remaining study time needed for valid titration after diagnostic portion.",
+      "used_in": "M4_SPLIT_SELECT_SPLIT (informational)"
+    },
+
+    "va_scheduling_window_days": {
+      "value": 7,
+      "unit": "days",
+      "description": "VA patients: FLAG_VA_1_WEEK_SCHEDULING -- schedule within this many days of referral receipt.",
+      "used_in": "PAYER_VA"
+    }
+  },
+
+  "cash_rates": {
+    "_description": "Facility self-pay rates. ALSO stored in insurance_allowables.json under 'Self Pay' payer. This is a cross-reference for convenience -- insurance_allowables.json is the authoritative source for all rates including cash. If rates change, update insurance_allowables.json.",
+    "_authoritative_source": "insurance_allowables.json -> payers -> Self Pay -> rates",
+    "reference_rates": {
+      "95806": 250.00,
+      "95810": 600.00,
+      "95811": 650.00,
+      "95782": 1200.00
+    },
+    "_note_split_night_savings": "Split night (1 night @ $650) vs separate diagnostic + titration (2 nights @ $600 + $650 = $1,250). Split saves patient $600."
+  },
+
+  "do_not_accept": {
+    "_description": "Payers the facility does not accept. ALSO in insurance.json 'do_not_accept' field. Cross-reference only -- insurance.json is authoritative.",
+    "_authoritative_source": "insurance.json",
+    "reference_list": [
+      "Culinary",
+      "Intermountain Health Plans",
+      "P3 Health Partners",
+      "Select Health",
+      "WellCare"
+    ],
+    "contract_expiring": {
+      "Prominence": {
+        "sunset_date": "2025-10-31",
+        "note": "Verify contract status before accepting new patients."
+      }
+    }
+  },
+
+  "maintenance_notes": {
+    "when_to_update": [
+      "Facility moves or opens new location -> update facility.address, service_area.local_cities",
+      "New supervising physician -> update supervising_physician section",
+      "Cash rates change -> update insurance_allowables.json Self Pay entry (authoritative source)",
+      "New payer contract signed -> update insurance.json + payer_criteria_map.json (not this file)",
+      "VA scheduling window changes -> update operational_parameters.va_scheduling_window_days",
+      "Service area expands (e.g., open Pahrump satellite) -> add cities to service_area.local_cities"
+    ]
+  }
+}

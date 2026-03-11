@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "payer_id": "meritain",
+    "payer_name": "Meritain Health (Aetna Subsidiary)",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Aetna subsidiary with unique workflow: CALL for benefits (not portal), then portal for auth if required. May be discovered during Aetna benefits check."
+  },
+  "criteria_source": {
+    "criteria_id": "evicore",
+    "criteria_file": "criteria_evicore.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal_if_auth_required",
+    "portal_name": "Meritain",
+    "portal_url": "https://meritain.mednecessity.com/",
+    "benefits_method": "phone_call_only",
+    "notes": "MUST call for benefits -- no portal lookup. Auth submission IS portal-based when required."
+  },
+  "referral": {
+    "required": "call_to_verify"
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_MERITAIN_CALL_REQUIRED",
+      "trigger": "payer == meritain",
+      "message": "Meritain requires PHONE CALL for benefits -- do not use Aetna portal",
+      "severity": "high"
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "E-signature patterns, credential validation, and signature freshness rules for document validation. Used in M1E provider validation and document validation (Path A: e-signed, Path B: wet ink, Path C: chart notes).",
+  "_used_by": "M1E (Provider & Chart Notes), Document Validation Path A/B/C",
+  "_source": "Visual Tree v0.19.0 M1E, Codified Logic Tree v0.16.5 Stage 1, Master Assumptions v0.16",
+
+  "electronic_signature_patterns": {
+    "_description": "Patterns that indicate an electronic/digital signature is present.",
+    "explicit_e_sig": [
+      "electronically signed by",
+      "e-signed by",
+      "digitally signed by",
+      "signed electronically by",
+      "electronic signature of",
+      "verified by electronic signature"
+    ],
+    "format_patterns": [
+      "/s/",
+      "/es/",
+      "//signed//",
+      "[electronically signed]",
+      "[e-signed]"
+    ],
+    "system_generated": [
+      "signed via EHR",
+      "authenticated by",
+      "approved by",
+      "finalized by",
+      "signed in Epic",
+      "signed in Cerner",
+      "signed in Athena",
+      "signed in eClinicalWorks",
+      "signed in NextGen",
+      "signed in Allscripts"
+    ]
+  },
+
+  "wet_ink_indicators": {
+    "_description": "Indicators of a physical (wet ink) signature. LLM/OCR must detect these from image analysis.",
+    "positive": [
+      "handwritten signature detected",
+      "ink signature present",
+      "manual signature"
+    ],
+    "notes": "Wet ink detection is primarily an OCR/vision task. The LLM should flag whether a physical signature appears to be present in the signature block area of the document."
+  },
+
+  "credentials": {
+    "can_order_independently": {
+      "titles": ["MD", "DO", "DPM"],
+      "description": "Physicians who can independently order sleep studies for all payers.",
+      "flag": null
+    },
+    "mid_level_may_need_supervising": {
+      "titles": ["NP", "PA", "PA-C", "APRN", "ARNP", "DNP", "FNP", "CNP", "CRNP", "CNS"],
+      "description": "Mid-level providers. Some payers require supervising physician info for authorization.",
+      "flag": "FLAG_SUPERVISING_NEEDED",
+      "human_action": "Verify if supervising physician info is required for auth."
+    },
+    "requires_attending": {
+      "titles": ["RESIDENT", "FELLOW", "INTERN", "STUDENT", "MD CANDIDATE"],
+      "description": "Trainees cannot independently order. Attending/supervising physician REQUIRED.",
+      "flag": "FLAG_SUPERVISING_NEEDED",
+      "human_action": "Attending physician signature required for authorization.",
+      "blocking": true
+    },
+    "cannot_order": {
+      "titles": ["MA", "CMA", "RMA", "LPN", "LVN", "RN", "CNA", "PCT", "MEDICAL ASSISTANT"],
+      "description": "Support staff who cannot sign medical orders.",
+      "flag": "FLAG_MISSING_SIGNATURE",
+      "human_action": "Request signed order from physician. MA/RN signature alone is not valid.",
+      "blocking": true,
+      "exception": "If MA/RN signed but supervising physician is named on the document AND physician credentials are verified, treat as valid with FLAG_SUPERVISING_NEEDED."
+    },
+    "unknown": {
+      "description": "Credentials not parseable from document.",
+      "flag": "ALERT_UNKNOWN_CREDENTIALS",
+      "human_action": "Verify credentials during processing. Look up via NPI if available."
+    }
+  },
+
+  "signature_freshness": {
+    "_description": "Rules for signature/order date validity. Checked in M1E.",
+    "rules": {
+      "future_date": {
+        "condition": "signature_date > today",
+        "flag": "STOP_FUTURE_DATE",
+        "severity": "STOP",
+        "description": "Signature date is in the future -- likely data entry error.",
+        "human_action": "Contact provider to verify. Cannot process until resolved."
+      },
+      "stale": {
+        "condition": "signature_date < today - 365 days",
+        "flag": "FLAG_SIGNATURE_STALE",
+        "severity": "FLAG",
+        "description": "Order is more than 1 year old.",
+        "human_action": "Check payer-specific requirements. May need updated/re-signed order."
+      },
+      "aging": {
+        "condition": "signature_date < today - 180 days AND signature_date >= today - 365 days",
+        "flag": "INFO_ORDER_AGING",
+        "severity": "INFO",
+        "description": "Order is 6-12 months old. Still valid but aging.",
+        "human_action": "Note for awareness. Some payers have stricter freshness requirements."
+      },
+      "current": {
+        "condition": "signature_date >= today - 180 days",
+        "flag": null,
+        "description": "Order is within 6 months. No freshness concerns."
+      }
+    },
+    "payer_overrides": {
+      "_description": "Some payers have stricter freshness requirements than the default 1-year rule.",
+      "_note": "Check payer_criteria_map.json for payer-specific rules. Default rules above apply when no override exists."
+    }
+  },
+
+  "npi_validation": {
+    "format": {
+      "length": 10,
+      "type": "numeric",
+      "description": "NPI is exactly 10 digits, all numeric.",
+      "validation_regex": "^[0-9]{10}$"
+    },
+    "lookup_cascade": {
+      "_description": "When NPI is missing or invalid, follow this lookup order.",
+      "steps": [
+        { "step": 1, "source": "provider_databank", "description": "Check internal known provider database" },
+        { "step": 2, "source": "nppes_registry", "url": "https://npiregistry.cms.hhs.gov", "description": "CMS NPPES Registry API lookup by name" },
+        { "step": 3, "source": "manual", "flag": "FLAG_NPI_MANUAL_ENTRY", "description": "Flag for manual entry if all lookups fail" }
+      ]
+    },
+    "mismatch_handling": {
+      "npi_found_name_differs": {
+        "flag": "FLAG_NPI_NAME_MISMATCH",
+        "description": "NPI found in registry but name doesn't match document.",
+        "human_action": "Verify correct provider. May be name variant or wrong NPI."
+      },
+      "npi_not_in_registry": {
+        "flag": "FLAG_NEW_PROVIDER",
+        "description": "NPI not found in NPPES registry.",
+        "human_action": "Verify NPI. Add to provider databank if confirmed."
+      }
+    }
+  }
+}

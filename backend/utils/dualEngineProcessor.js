@@ -510,7 +510,7 @@ export async function processDualEngine(ocrProcessor, filePath, options = {}) {
     
     // Run decision tree analysis
     const decisionTreeStartTime = performance.now();
-    const routing = decisionTree.evaluate(mergeResult.merged, mergeResult.metadata);
+    const routing = await decisionTree.evaluate(mergeResult.merged, mergeResult.metadata);
     const decisionTreeDuration = performance.now() - decisionTreeStartTime;
     
     // Restore problemsList after rules engine processing (mergeResult.merged has the data)

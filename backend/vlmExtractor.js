@@ -129,11 +129,23 @@ CRITICAL RULES:
 7. If this page is a fax cover sheet with no patient data, set pageType to "cover_sheet" and all fields to null.
 8. Member IDs and group IDs: copy EXACTLY as printed, including letters, numbers, and dashes.
 9. If you see multiple insurance entries (primary/secondary), include both in the insurance array.
-10. For patient name: "first" means given name, "last" means family/surname. "LASTNAME, FIRSTNAME" = part BEFORE comma is last.
+10. PATIENT NAME — "first" = given/personal name, "last" = family/surname:
+    - "LASTNAME, FIRSTNAME" format: part BEFORE the comma is last.
+    - "FIRSTNAME LASTNAME" format: first word is first, last word is last.
+    - "Dr. Smith" is a PROVIDER name, not the patient. Do not confuse them.
+    - Middle names/initials go with first name (e.g., "John Michael" goes in first, "Smith" goes in last).
+    - If the document shows the name as "DOE, JOHN" then first="JOHN", last="DOE".
 11. NPI is ALWAYS a 10-digit number starting with 1 or 2. Phone/fax numbers are NOT NPIs.
 12. Every value in the JSON must be a simple string, number, or null — never nest objects inside string fields.
 13. Each diagnosis code must be a single string (e.g., "G47.33"), not an array.
-14. CPT code must be a single 5-digit string. If multiple CPT codes are present, use the primary/first one.`;
+14. CPT CODE RULES — THIS IS CRITICAL:
+    - procedure.cpt MUST be a 5-digit NUMERIC string like "95810", "95811", "95782".
+    - NEVER put a diagnosis name (like "OSA", "Insomnia", "Sleep Apnea") in the cpt field.
+    - NEVER put an ICD code (like "G47.33") in the cpt field.
+    - If you cannot find a 5-digit CPT code on the page, set cpt to null.
+    - Put the procedure NAME in the "description" field, not in "cpt".
+    - Common sleep study CPT codes: 95810 (PSG), 95811 (split-night/titration), 95800 (home sleep test), 95782 (pediatric PSG).
+    - If the document says "polysomnography" or "sleep study" but no numeric code, set cpt to null and put the text in description.`;
 
 /**
  * Multi-page merge prompt — sent after individual pages are extracted.
@@ -439,26 +451,45 @@ function mergePageExtractions(pages) {
  * Maps VLM output fields to the exact format downstream consumers expect.
  */
 export function normalizeVlmResult(vlm) {
-  // Fix name order: if first looks like a last name (all caps, followed by comma-style)
-  // and last looks like a first name, swap them
+  // Fix name order: VLMs often mix up first/last names.
+  // Common failure modes:
+  //   1. "LASTNAME, FIRSTNAME" split wrong — comma part placed in "first"
+  //   2. "LASTNAME FIRSTNAME" read left-to-right, first word placed in "first"
+  //   3. A comma in one of the fields indicates the VLM parsed a "Last, First" combined string
   let firstName = vlm.patient?.first || null;
   let lastName = vlm.patient?.last || null;
   
   if (firstName && lastName) {
-    // Check for "LASTNAME, FIRSTNAME" that got split wrong
-    // Heuristic: if "first" contains a comma or period suffix suggesting it's actually "LAST,"
     const firstTrimmed = firstName.replace(/[,.\s]+$/, '').trim();
     const lastTrimmed = lastName.replace(/[,.\s]+$/, '').trim();
     
-    // If what's labeled "first" looks like a surname (no spaces, all caps) 
-    // and "last" has a middle initial or lowercase — they're likely swapped
-    if (firstTrimmed && lastTrimmed && !firstTrimmed.includes(' ') && 
+    // Case 1: "first" field contains a comma — VLM likely put "LASTNAME," in the first field
+    if (firstName.includes(',') && !lastName.includes(',')) {
+      firstName = lastTrimmed;
+      lastName = firstTrimmed;
+    }
+    // Case 2: "last" field contains a comma — VLM put "LASTNAME, FIRSTNAME" all in last
+    else if (lastName.includes(',') && !firstName.includes(',')) {
+      const parts = lastName.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        lastName = parts[0];
+        firstName = parts[1].split(/\s+/)[0]; // Take first token after comma as given name
+      }
+    }
+    // Case 3: "first" looks like a single-word surname and "last" has a middle initial or space
+    else if (firstTrimmed && lastTrimmed && !firstTrimmed.includes(' ') && 
         (lastTrimmed.includes(' ') || lastTrimmed.includes('.'))) {
-      // Swap — VLM likely read "LASTNAME FIRSTNAME M." and put them in wrong fields
       firstName = lastTrimmed.split(/[\s.]+/)[0]; // Take first token as given name
       lastName = firstTrimmed;
     }
+    // Case 4: Both fields are single words but the format was likely "Last First" left-to-right
+    // We can't reliably detect this without more context, so leave as-is
   }
+  
+  // Normalize: capitalize names properly ("DOE" → "Doe", "JOHN" → "John")
+  const titleCase = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+  if (firstName && firstName === firstName.toUpperCase() && firstName.length > 1) firstName = titleCase(firstName);
+  if (lastName && lastName === lastName.toUpperCase() && lastName.length > 1) lastName = titleCase(lastName);
   
   // Normalize phone numbers to 10-digit strings
   const normalizePhone = (p) => {
@@ -477,12 +508,17 @@ export function normalizeVlmResult(vlm) {
   
   // ── CPT SPLITTING & NORMALIZATION ──
   // Handles concatenated CPT codes (e.g., "95801G03999580095806") and objects/arrays
+  // Also rejects diagnosis text that the VLM sometimes puts in the CPT field
+  const DIAGNOSIS_NAMES_REGEX = /^(OSA|obstructive\s+sleep|sleep\s+apnea|insomnia|narcolepsy|hypersomnia|restless\s+leg|snoring|parasomnia|bruxism|apnea|obesity|hypertension|copd|chf|afib|cpt|icd)$/i;
+
   const normalizeCpt = (cpt) => {
     if (!cpt) return null;
     let raw;
     if (typeof cpt === 'string') {
       // Treat "null", "NULL", "none", "N/A" as null
       if (/^(null|none|n\/?a|not\s*applicable)$/i.test(cpt.trim())) return null;
+      // Reject pure diagnosis names/abbreviations mistakenly placed in CPT field
+      if (DIAGNOSIS_NAMES_REGEX.test(cpt.trim())) return null;
       raw = cpt;
     } else if (Array.isArray(cpt) && cpt.length > 0) {
       const first = cpt[0];
@@ -495,6 +531,9 @@ export function normalizeVlmResult(vlm) {
     // Strip non-alphanumeric
     raw = raw.replace(/[^\dA-Za-z]/g, '').toUpperCase();
 
+    // Reject if it's all letters (no digits) — it's a diagnosis name, not a CPT code
+    if (/^[A-Z]+$/.test(raw)) return null;
+
     // If it's already a clean 5-digit code, return it
     if (/^\d{5}$/.test(raw)) return raw;
 
@@ -506,7 +545,7 @@ export function normalizeVlmResult(vlm) {
       return sleepCpts.length > 0 ? sleepCpts[0] : cptMatches[0];
     }
 
-    // Last resort: return raw if it's a valid short alphanumeric code (not garbage)
+    // Last resort: return raw if it's a valid short alphanumeric code with at least one digit (not garbage)
     if (raw.length <= 6 && /\d/.test(raw)) return raw;
     return null;
   };

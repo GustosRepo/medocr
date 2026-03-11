@@ -1,0 +1,340 @@
+{
+  "_meta": {
+    "criteria_id": "medicare_ffs",
+    "criteria_name": "Medicare Fee-for-Service",
+    "version": "1.1",
+    "effective_date": "2026-02-01",
+    "strictness_tier": 5,
+    "strictness_label": "NO_AUTH",
+    "notes": "No prior auth required. Billing rules only. AFib-only combination will deny. Updated: contraindication keywords and symptom definitions added for M2C/M2D test routing. AFib billing detection keywords added."
+  },
+  "auth_required": false,
+  "auth_required_any_code": false,
+  "billing_rules": {
+    "afib_only_denial": {
+      "description": "Claims denied if ONLY G47.30 + I48.91",
+      "denied_combination": [
+        "G47.30",
+        "I48.91"
+      ],
+      "requires_additional_code": true,
+      "acceptable_additions": [
+        "R06.83",
+        "R06.81",
+        "R40.0",
+        "E66.x",
+        "I10"
+      ],
+      "flag_id": "FLAG_MEDICARE_AFIB_ONLY",
+      "keywords": {
+        "afib_indicators": [
+          "atrial fibrillation",
+          "AFib",
+          "A-fib",
+          "AF",
+          "I48.91",
+          "atrial flutter"
+        ],
+        "sleep_apnea_indicators": [
+          "G47.30",
+          "sleep apnea",
+          "OSA",
+          "obstructive sleep apnea"
+        ],
+        "notes": "If ONLY AFib + sleep apnea codes present with no supporting symptoms, claim will deny. Add symptom ICD codes."
+      }
+    }
+  },
+  "coverage_criteria": {
+    "description": "No auth but LCD/NCD coverage criteria affect payment",
+    "requires": [
+      "symptoms_of_osa",
+      "clinical_evaluation_completed",
+      "testing_ordered_by_treating_physician"
+    ]
+  },
+  "osa_treatment_coverage": {
+    "ahi_gte_15": {
+      "symptoms_required": false
+    },
+    "ahi_5_to_14": {
+      "symptoms_required": true,
+      "qualifying": [
+        "eds",
+        "impaired_cognition",
+        "mood_disorder",
+        "insomnia",
+        "hypertension",
+        "ihd",
+        "stroke"
+      ]
+    }
+  },
+  "thresholds": {
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    }
+  },
+  "hst_contraindications": {
+    "description": "Medicare has no auth, but these conditions affect test TYPE selection. System must still route to PSG when clinically indicated.",
+    "conditions": [
+      {
+        "id": "home_oxygen",
+        "condition": "Supplemental oxygen -- HARD STOP for HST (universal)",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      },
+      {
+        "id": "copd",
+        "condition": "Significant COPD",
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "chf",
+        "condition": "Congestive heart failure",
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": "Chronic opioid use",
+        "keywords": [
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "neuromuscular",
+        "condition": "Neuromuscular disease",
+        "keywords": [
+          "ALS",
+          "amyotrophic lateral sclerosis",
+          "MS",
+          "multiple sclerosis",
+          "myotonic dystrophy",
+          "Parkinson",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "spinal muscular atrophy",
+          "neuropathy",
+          "Guillain-Barre"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Suspected central sleep apnea",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "Unable to operate home equipment",
+        "keywords": [
+          "dementia",
+          "cognitive impairment",
+          "Alzheimer",
+          "unable to follow instructions"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      },
+      {
+        "id": "physical_impairment",
+        "condition": "Unable to apply equipment",
+        "keywords": [
+          "physical impairment",
+          "unable to apply",
+          "dexterity",
+          "mobility limitation",
+          "bedridden"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      },
+      {
+        "id": "failed_hst",
+        "condition": "Prior HST failed or inconclusive",
+        "keywords": [
+          "failed HST",
+          "inadequate HST",
+          "HST failure",
+          "inconclusive HST",
+          "failed HSAT",
+          "HSAT failure",
+          "negative HSAT"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      }
+    ]
+  },
+  "hst_eligibility": {
+    "description": "Medicare does not gate HST with clinical review, but LCD/NCD coverage criteria must be met for payment. System checks these for billing compliance, not auth.",
+    "for_billing_compliance": true,
+    "symptom_definitions": {
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      },
+      "hypertension": {
+        "keywords": [
+          "hypertension",
+          "HTN",
+          "high blood pressure",
+          "resistant hypertension",
+          "antihypertensive",
+          "blood pressure medication"
+        ]
+      },
+      "obesity": {
+        "keywords": [
+          "obese",
+          "obesity",
+          "BMI",
+          "overweight",
+          "neck circumference",
+          "morbid obesity"
+        ],
+        "bmi_threshold": 30,
+        "neck_circumference_male_inches": 17,
+        "neck_circumference_female_inches": 16
+      }
+    }
+  },
+  "psg_criteria": {
+    "description": "No auth required for PSG. These are clinical indications for test type selection.",
+    "indications": [
+      "hst_contraindication_present",
+      "failed_hst",
+      "pediatric",
+      "clinical_judgment"
+    ]
+  },
+  "titration_criteria": {
+    "requires": "confirmed_osa_diagnosis",
+    "ahi_gte_15": {
+      "symptoms_required": false
+    },
+    "ahi_5_to_14": {
+      "symptoms_required": true,
+      "qualifying": [
+        "eds",
+        "impaired_cognition",
+        "mood_disorder",
+        "insomnia",
+        "hypertension",
+        "ihd",
+        "stroke"
+      ]
+    },
+    "notes": "Must meet CMS LCD treatment criteria for CPAP coverage. AHI thresholds affect treatment coverage, not test authorization."
+  },
+  "split_night_criteria": {
+    "indicated": {
+      "ahi_threshold": 40,
+      "window_hours": 2
+    },
+    "may_consider": {
+      "ahi_min": 20,
+      "ahi_max": 40,
+      "window_hours": 2
+    },
+    "not_recommended": {
+      "ahi_below": 20
+    },
+    "minimum_titration_hours": 3,
+    "notes": "No auth \u2014 standard AHI thresholds for clinical appropriateness"
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    }
+  }
+}

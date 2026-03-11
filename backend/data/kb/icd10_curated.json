@@ -1,0 +1,624 @@
+{
+  "_version": "0.18.5",
+  "_updated": "2026-02-23",
+  "_description": "Tier A: Curated sleep-relevant ICD-10 codes with custom keywords. Fast keyword matching covers ~80% of referrals. Grows organically via PIN-7 feedback loop (Tier B promotion).",
+  "_tier": "A",
+  "_usage": "M2A ICD Processing. OCR/LLM extracts text -> keyword match against this list first. If no match -> fall through to Tier B (full ICD-10 master).",
+
+  "codes": {
+
+    "G47.30": {
+      "description": "Sleep apnea, unspecified",
+      "keywords": ["sleep apnea", "suspected apnea", "apnea unspecified", "possible sleep apnea", "possible osa", "r/o sleep apnea", "rule out sleep apnea", "sleep disordered breathing", "sdb"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": "Most common referral code"
+    },
+    "G47.33": {
+      "description": "Obstructive sleep apnea (adult)",
+      "keywords": ["osa", "obstructive sleep apnea", "obstructive apnea", "diagnosed osa", "known osa", "established osa", "hx of osa", "history of osa"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": "Established diagnosis -- may be retitration or retest"
+    },
+    "G47.31": {
+      "description": "Primary central sleep apnea",
+      "keywords": ["central sleep apnea", "central apnea", "csa"],
+      "category": "sleep_primary",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Central apnea -- PSG strongly recommended, titration relevant"
+    },
+    "G47.37": {
+      "description": "Central sleep apnea in conditions classified elsewhere",
+      "keywords": ["central apnea secondary", "secondary central apnea"],
+      "category": "sleep_primary",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "G47.39": {
+      "description": "Other sleep apnea",
+      "keywords": ["other sleep apnea", "mixed apnea", "complex sleep apnea"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.10": {
+      "description": "Hypersomnia, unspecified",
+      "keywords": ["hypersomnia", "excessive sleepiness", "excessive daytime sleepiness", "eds", "hypersomnolence"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.11": {
+      "description": "Idiopathic hypersomnia with long sleep time",
+      "keywords": ["idiopathic hypersomnia", "long sleeper"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.19": {
+      "description": "Other hypersomnia",
+      "keywords": ["other hypersomnia"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.00": {
+      "description": "Insomnia, unspecified",
+      "keywords": ["insomnia", "can't sleep", "cannot sleep", "trouble sleeping", "difficulty sleeping", "sleep difficulty"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.01": {
+      "description": "Insomnia due to medical condition",
+      "keywords": ["insomnia medical", "medical insomnia"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.09": {
+      "description": "Other insomnia",
+      "keywords": ["other insomnia", "chronic insomnia"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.411": {
+      "description": "Narcolepsy with cataplexy",
+      "keywords": ["narcolepsy", "narcolepsy with cataplexy", "cataplexy"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": "May need MSLT"
+    },
+    "G47.419": {
+      "description": "Narcolepsy without cataplexy",
+      "keywords": ["narcolepsy without cataplexy"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.20": {
+      "description": "Circadian rhythm sleep disorder, unspecified",
+      "keywords": ["circadian rhythm", "circadian disorder", "sleep wake disorder"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.21": {
+      "description": "Circadian rhythm sleep disorder, delayed sleep phase type",
+      "keywords": ["delayed sleep phase", "dsps", "night owl"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.23": {
+      "description": "Circadian rhythm sleep disorder, irregular sleep-wake type",
+      "keywords": ["irregular sleep wake", "irregular sleep"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.24": {
+      "description": "Circadian rhythm sleep disorder, free running type",
+      "keywords": ["free running", "non-24"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.25": {
+      "description": "Circadian rhythm sleep disorder, jet lag type",
+      "keywords": ["jet lag"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.26": {
+      "description": "Circadian rhythm sleep disorder, shift work type",
+      "keywords": ["shift work", "shift work disorder", "night shift"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.50": {
+      "description": "Parasomnia, unspecified",
+      "keywords": ["parasomnia", "sleep behavior"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.51": {
+      "description": "Confusional arousals",
+      "keywords": ["confusional arousals", "sleep confusion"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.52": {
+      "description": "REM sleep behavior disorder",
+      "keywords": ["rem behavior disorder", "rbd", "rem sleep behavior", "acting out dreams"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.53": {
+      "description": "Recurrent isolated sleep paralysis",
+      "keywords": ["sleep paralysis"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.61": {
+      "description": "Periodic limb movement disorder",
+      "keywords": ["periodic limb movement", "plmd", "plms", "limb movements"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.63": {
+      "description": "Sleep related bruxism",
+      "keywords": ["bruxism", "teeth grinding", "tooth grinding", "jaw clenching sleep"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.8": {
+      "description": "Other sleep disorders",
+      "keywords": ["other sleep disorder", "sleep disorder nos"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G47.9": {
+      "description": "Sleep disorder, unspecified",
+      "keywords": ["sleep disorder", "sleep problem", "sleep disturbance"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G25.81": {
+      "description": "Restless legs syndrome",
+      "keywords": ["restless legs", "rls", "restless leg syndrome", "willis-ekbom"],
+      "category": "sleep_related",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+
+    "R06.83": {
+      "description": "Snoring",
+      "keywords": ["snoring", "loud snoring", "heavy snoring", "snores"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": "Very common referral symptom code"
+    },
+    "R06.00": {
+      "description": "Dyspnea, unspecified",
+      "keywords": ["dyspnea", "shortness of breath", "sob", "difficulty breathing"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R06.01": {
+      "description": "Orthopnea",
+      "keywords": ["orthopnea", "can't breathe lying down"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R06.09": {
+      "description": "Other forms of dyspnea",
+      "keywords": ["other dyspnea"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R06.3": {
+      "description": "Periodic breathing",
+      "keywords": ["periodic breathing", "cheyne-stokes"],
+      "category": "symptoms",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Cheyne-Stokes pattern -- central apnea indicator"
+    },
+    "R40.0": {
+      "description": "Somnolence",
+      "keywords": ["somnolence", "drowsiness", "drowsy", "sleepy", "fatigue", "tired", "daytime sleepiness", "daytime fatigue"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R53.83": {
+      "description": "Other fatigue",
+      "keywords": ["fatigue", "chronic fatigue", "tiredness", "exhaustion", "always tired"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R51.9": {
+      "description": "Headache, unspecified",
+      "keywords": ["morning headache", "headache", "morning headaches", "am headache"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": "Morning headaches associated with OSA"
+    },
+    "R41.82": {
+      "description": "Altered mental status, unspecified",
+      "keywords": ["brain fog", "cognitive impairment", "memory problems", "concentration problems"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+
+    "I50.9": {
+      "description": "Heart failure, unspecified",
+      "keywords": ["heart failure", "chf", "congestive heart failure", "hf"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "CHF -- central apnea risk, PSG recommended, titration relevant"
+    },
+    "I50.20": {
+      "description": "Unspecified systolic heart failure",
+      "keywords": ["systolic heart failure", "hfref"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "I50.30": {
+      "description": "Unspecified diastolic heart failure",
+      "keywords": ["diastolic heart failure", "hfpef"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "I51.9": {
+      "description": "Heart disease, unspecified",
+      "keywords": ["heart disease", "heart problems", "cardiac disease"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": "Unspecified -- may need more detail"
+    },
+    "I48.0": {
+      "description": "Paroxysmal atrial fibrillation",
+      "keywords": ["paroxysmal afib", "intermittent afib"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["medicare_afib_check"],
+      "notes": "Medicare: check AFib-only exclusion for HST"
+    },
+    "I48.1": {
+      "description": "Persistent atrial fibrillation",
+      "keywords": ["persistent afib"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["medicare_afib_check"],
+      "notes": null
+    },
+    "I48.2": {
+      "description": "Chronic atrial fibrillation",
+      "keywords": ["chronic afib", "permanent afib"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["medicare_afib_check"],
+      "notes": null
+    },
+    "I48.91": {
+      "description": "Unspecified atrial fibrillation",
+      "keywords": ["afib", "atrial fibrillation", "a-fib", "a fib"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["medicare_afib_check"],
+      "notes": "Medicare: check AFib-only exclusion for HST"
+    },
+    "I10": {
+      "description": "Essential hypertension",
+      "keywords": ["hypertension", "htn", "high blood pressure", "hbp"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": "Common comorbidity in sleep patients"
+    },
+    "I25.10": {
+      "description": "Atherosclerotic heart disease",
+      "keywords": ["cad", "coronary artery disease", "atherosclerotic heart"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+
+    "E66.01": {
+      "description": "Morbid (severe) obesity due to excess calories",
+      "keywords": ["morbid obesity", "severe obesity", "bmi 40", "bmi 50", "bmi over 40"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Morbid obesity -- hypoventilation risk, PSG recommended, titration relevant"
+    },
+    "E66.09": {
+      "description": "Other obesity due to excess calories",
+      "keywords": ["obesity", "obese", "overweight"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "E66.1": {
+      "description": "Drug-induced obesity",
+      "keywords": ["drug induced obesity", "medication weight gain"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "E66.2": {
+      "description": "Morbid (severe) obesity with alveolar hypoventilation",
+      "keywords": ["obesity hypoventilation", "ohs", "pickwickian"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Obesity hypoventilation syndrome -- PSG required"
+    },
+    "Z68.41": {
+      "description": "BMI 40.0-44.9, adult",
+      "keywords": ["bmi 40", "bmi 41", "bmi 42", "bmi 43", "bmi 44"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "Z68.42": {
+      "description": "BMI 45.0-49.9, adult",
+      "keywords": ["bmi 45", "bmi 46", "bmi 47", "bmi 48", "bmi 49"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "Z68.43": {
+      "description": "BMI 50.0-59.9, adult",
+      "keywords": ["bmi 50", "bmi 55", "bmi over 50"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "BMI > 50 -- FLAG_PSG_RECOMMENDED in M2C"
+    },
+    "Z68.44": {
+      "description": "BMI 60.0-69.9, adult",
+      "keywords": ["bmi 60", "bmi 65"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "Z68.45": {
+      "description": "BMI 70 or greater, adult",
+      "keywords": ["bmi 70", "bmi over 70"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+
+    "J44.1": {
+      "description": "COPD with acute exacerbation",
+      "keywords": ["copd exacerbation", "copd flare"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "COPD -- need FEV1 for severity, PSG recommended"
+    },
+    "J44.0": {
+      "description": "COPD with acute lower respiratory infection",
+      "keywords": ["copd with infection"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "J44.9": {
+      "description": "COPD, unspecified",
+      "keywords": ["copd", "chronic obstructive pulmonary", "emphysema", "chronic bronchitis"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+
+    "F11.10": {
+      "description": "Opioid abuse, uncomplicated",
+      "keywords": ["opioid abuse"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Opioid use -- central apnea risk, PSG recommended, titration relevant"
+    },
+    "F11.20": {
+      "description": "Opioid dependence, uncomplicated",
+      "keywords": ["opioid dependence", "opioid use disorder", "oud"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "F11.90": {
+      "description": "Opioid use, unspecified, uncomplicated",
+      "keywords": ["opioid use", "chronic opioid", "opioid therapy", "on opioids", "taking opioids"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+
+    "G20": {
+      "description": "Parkinson's disease",
+      "keywords": ["parkinson", "parkinsons", "parkinson's"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Neuromuscular -- PSG clinically preferred"
+    },
+    "G12.21": {
+      "description": "Amyotrophic lateral sclerosis",
+      "keywords": ["als", "amyotrophic lateral sclerosis", "lou gehrig"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Neuromuscular -- PSG clinically preferred"
+    },
+    "G35": {
+      "description": "Multiple sclerosis",
+      "keywords": ["multiple sclerosis", "ms"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Neuromuscular -- PSG clinically preferred"
+    },
+    "G71.0": {
+      "description": "Muscular dystrophy",
+      "keywords": ["muscular dystrophy", "md"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Neuromuscular -- PSG clinically preferred"
+    },
+    "G73.1": {
+      "description": "Lambert-Eaton syndrome",
+      "keywords": ["lambert eaton", "myasthenic syndrome"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": null
+    },
+    "G70.00": {
+      "description": "Myasthenia gravis without exacerbation",
+      "keywords": ["myasthenia gravis", "mg"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Neuromuscular -- PSG clinically preferred"
+    },
+
+    "E11.9": {
+      "description": "Type 2 diabetes mellitus without complications",
+      "keywords": ["diabetes", "type 2 diabetes", "dm2", "t2dm", "diabetic"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": "Common comorbidity"
+    },
+    "E03.9": {
+      "description": "Hypothyroidism, unspecified",
+      "keywords": ["hypothyroidism", "hypothyroid", "low thyroid"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "N39.0": {
+      "description": "Urinary tract infection, site not specified",
+      "keywords": ["nocturia", "frequent urination night"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": "Nocturia associated with OSA"
+    },
+    "R09.02": {
+      "description": "Hypoxemia",
+      "keywords": ["hypoxemia", "low oxygen", "desaturation", "oxygen desaturation", "low o2"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": "Oxygen desaturation noted -- relevant to HST contraindication check"
+    },
+    "Z99.81": {
+      "description": "Dependence on supplemental oxygen",
+      "keywords": ["home oxygen", "supplemental oxygen", "on oxygen", "o2 dependent", "oxygen therapy", "uses oxygen"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["hard_hst_contraindication"],
+      "notes": "HOME OXYGEN -- HARD HST STOP. Only condition that absolutely prevents home sleep testing."
+    },
+
+    "F32.9": {
+      "description": "Major depressive disorder, single episode, unspecified",
+      "keywords": ["depression", "depressed", "major depression"],
+      "category": "psych",
+      "comorbidity_flags": [],
+      "notes": "Common comorbidity in sleep patients"
+    },
+    "F41.1": {
+      "description": "Generalized anxiety disorder",
+      "keywords": ["anxiety", "gad", "generalized anxiety"],
+      "category": "psych",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "F51.01": {
+      "description": "Primary insomnia",
+      "keywords": ["primary insomnia"],
+      "category": "sleep_primary",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "G43.909": {
+      "description": "Migraine, unspecified",
+      "keywords": ["migraine", "migraines"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "M54.5": {
+      "description": "Low back pain",
+      "keywords": ["back pain", "low back pain"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": "May be on opioids -- check medication list"
+    },
+
+    "R05.9": {
+      "description": "Cough, unspecified",
+      "keywords": ["cough", "chronic cough", "nocturnal cough"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "J45.20": {
+      "description": "Mild intermittent asthma, uncomplicated",
+      "keywords": ["asthma"],
+      "category": "comorbidity",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R00.0": {
+      "description": "Tachycardia, unspecified",
+      "keywords": ["tachycardia", "fast heart rate", "racing heart"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "R00.1": {
+      "description": "Bradycardia, unspecified",
+      "keywords": ["bradycardia", "slow heart rate"],
+      "category": "symptoms",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+
+    "Z87.09": {
+      "description": "Personal history of other diseases of the respiratory system",
+      "keywords": ["history of respiratory", "prior respiratory"],
+      "category": "history",
+      "comorbidity_flags": [],
+      "notes": null
+    },
+    "Z79.891": {
+      "description": "Long term (current) use of opiate analgesic",
+      "keywords": ["long term opioid", "chronic opioid use", "current opioid", "opioid analgesic"],
+      "category": "comorbidity",
+      "comorbidity_flags": ["comorbidity_titration_relevant"],
+      "notes": "Chronic opioid use -- central apnea risk"
+    }
+  },
+
+  "categories": {
+    "sleep_primary": "Primary sleep disorder diagnosis -- the reason for the referral",
+    "sleep_related": "Sleep-related neurological conditions",
+    "symptoms": "Symptom codes commonly seen on sleep referrals",
+    "comorbidity": "Medical comorbidities relevant to sleep study type selection (M2C/M4)",
+    "psych": "Psychiatric comorbidities commonly co-occurring with sleep disorders",
+    "history": "Historical codes relevant to sleep evaluation"
+  },
+
+  "comorbidity_flag_definitions": {
+    "comorbidity_titration_relevant": "This condition suggests titration may be needed (CHF, COPD, opioids, neuromuscular, morbid obesity). Used in M2C comorbidity severity assessment.",
+    "medicare_afib_check": "Medicare-specific: if AFib is the ONLY diagnosis (no sleep complaint), HST may not be covered. Check in M3.",
+    "hard_hst_contraindication": "HARD STOP for HST -- home sleep testing physically cannot be performed. Currently only Z99.81 (home oxygen)."
+  }
+}

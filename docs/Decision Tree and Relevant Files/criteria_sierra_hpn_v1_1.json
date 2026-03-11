@@ -1,0 +1,375 @@
+{
+  "_meta": {
+    "criteria_id": "sierra_hpn",
+    "criteria_name": "Sierra Health / Health Plan of Nevada",
+    "version": "1.1",
+    "effective_date": "2026-02-01",
+    "strictness_tier": 4,
+    "strictness_label": "LENIENT",
+    "notes": "Most lenient payer. HST needs no justification. PSG needs only comorbidity OR symptom (not both). Comorbidity alone IS sufficient. Updated: hst_contraindications with keywords added for M2C test routing, pediatric_criteria and thresholds added."
+  },
+  "key_characteristic": "MOST_LENIENT",
+  "hst_eligibility": {
+    "clinical_required": false,
+    "description": "No clinical documentation required -- just submit through portal",
+    "auto_approve": true,
+    "symptom_definitions": {
+      "_notes": "Sierra requires no clinical documentation for HST auth. These keywords are for M2D documentation quality assessment and for M2C contraindication cross-reference.",
+      "excessive_daytime_sleepiness": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "habitual_snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea_gasping": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "bed partner reports"
+        ]
+      },
+      "obesity": {
+        "keywords": [
+          "obese",
+          "obesity",
+          "BMI",
+          "overweight",
+          "neck circumference"
+        ],
+        "bmi_threshold": 30
+      },
+      "hypertension": {
+        "keywords": [
+          "hypertension",
+          "HTN",
+          "high blood pressure",
+          "antihypertensive"
+        ]
+      }
+    }
+  },
+  "psg_criteria": {
+    "description": "Brief justification -- comorbidity alone OR symptom alone is sufficient",
+    "requires_symptoms_and_comorbidity": false,
+    "acceptable_justifications_any_one": [
+      "copd",
+      "chf",
+      "obesity_any_bmi",
+      "chronic_opioid",
+      "neuromuscular_disease",
+      "home_oxygen",
+      "severe_insomnia",
+      "any_documented_sleep_symptom",
+      "hst_failure_inconclusive",
+      "patient_cannot_use_home_equipment"
+    ],
+    "justification_length": "1-2 sentences sufficient",
+    "symptom_definitions": {
+      "any_comorbidity": {
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis",
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy",
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine",
+          "ALS",
+          "amyotrophic lateral sclerosis",
+          "MS",
+          "multiple sclerosis",
+          "myotonic dystrophy",
+          "Parkinson",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "spinal muscular atrophy",
+          "neuropathy",
+          "Guillain-Barre"
+        ],
+        "note": "Any single comorbidity keyword is sufficient PSG justification for Sierra"
+      },
+      "any_sleep_symptom": {
+        "keywords": [
+          "ESS",
+          "Epworth",
+          "excessive daytime sleepiness",
+          "EDS",
+          "inappropriate napping",
+          "sleepiness interfering with activities",
+          "hypersomnia",
+          "falls asleep during",
+          "unintentional sleep",
+          "excessive sleepiness"
+        ],
+        "ess_threshold": 10
+      },
+      "snoring": {
+        "keywords": [
+          "habitual snoring",
+          "loud snoring",
+          "heavy snoring",
+          "disruptive snoring",
+          "snoring",
+          "snores loudly"
+        ]
+      },
+      "witnessed_apnea": {
+        "keywords": [
+          "witnessed apnea",
+          "observed apnea",
+          "gasping",
+          "choking",
+          "stops breathing",
+          "breathing pauses",
+          "wakes up choking",
+          "bed partner reports"
+        ]
+      }
+    }
+  },
+  "titration_criteria": {
+    "requires": "prior_positive_diagnostic",
+    "ahi_threshold": "none_specified",
+    "compliance_required_for_initial": false
+  },
+  "split_night_criteria": {
+    "description": "Same as PSG or Titration -- either path qualifies",
+    "ahi_threshold": "none_specified"
+  },
+  "submission": {
+    "units_to_request": 2,
+    "portal": "provider.healthplanofnevada.com"
+  },
+  "strategic_note": "Default to HST first -- zero justification needed. If HST fails, PSG justification is automatic.",
+  "hst_contraindications": {
+    "description": "Sierra auto-approves auth, but these conditions should still route to PSG for clinical safety. The system uses these to select the right TEST TYPE, not for auth decisions.",
+    "conditions": [
+      {
+        "id": "home_oxygen",
+        "condition": "Supplemental oxygen -- HARD STOP for HST (universal, all payers)",
+        "keywords": [
+          "home oxygen",
+          "supplemental O2",
+          "supplemental oxygen",
+          "oxygen dependent",
+          "O2 therapy",
+          "home O2",
+          "continuous oxygen",
+          "nocturnal oxygen"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      },
+      {
+        "id": "copd",
+        "condition": "Any COPD documented (Sierra has no specific threshold)",
+        "keywords": [
+          "COPD",
+          "chronic obstructive",
+          "FEV1",
+          "emphysema",
+          "chronic bronchitis"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "notes": "Sierra does not specify FEV1 threshold -- any COPD mention flags for review"
+      },
+      {
+        "id": "chf",
+        "condition": "Any CHF documented",
+        "keywords": [
+          "CHF",
+          "heart failure",
+          "congestive heart failure",
+          "NYHA",
+          "ejection fraction",
+          "LVEF",
+          "cardiomyopathy"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": "Chronic opioid use",
+        "keywords": [
+          "opioid",
+          "oxycodone",
+          "morphine",
+          "fentanyl",
+          "hydrocodone",
+          "methadone",
+          "suboxone",
+          "dilaudid",
+          "tramadol",
+          "codeine",
+          "buprenorphine"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "neuromuscular",
+        "condition": "Neuromuscular disease",
+        "keywords": [
+          "ALS",
+          "amyotrophic lateral sclerosis",
+          "MS",
+          "multiple sclerosis",
+          "myotonic dystrophy",
+          "Parkinson",
+          "muscular dystrophy",
+          "myasthenia gravis",
+          "spinal muscular atrophy",
+          "neuropathy",
+          "Guillain-Barre"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Suspected central sleep apnea",
+        "keywords": [
+          "central sleep apnea",
+          "CSA",
+          "central apnea",
+          "Cheyne-Stokes",
+          "complex sleep apnea"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "morbid_obesity",
+        "condition": "BMI > 50 (Sierra does not specify threshold -- using standard)",
+        "keywords": [
+          "morbid obesity",
+          "BMI >50",
+          "BMI 50",
+          "super obesity"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "severe_insomnia",
+        "condition": "Documented severe insomnia",
+        "keywords": [
+          "severe insomnia",
+          "chronic insomnia",
+          "ISI",
+          "insomnia severity index"
+        ],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation"
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "Unable to operate home equipment",
+        "keywords": [
+          "dementia",
+          "cognitive impairment",
+          "Alzheimer",
+          "unable to follow instructions"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "notes": "Patient cannot use home equipment -- PSG required regardless of auth leniency"
+      },
+      {
+        "id": "physical_impairment",
+        "condition": "Unable to apply equipment, no one to assist",
+        "keywords": [
+          "physical impairment",
+          "unable to apply",
+          "dexterity",
+          "mobility limitation",
+          "bedridden"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      },
+      {
+        "id": "failed_hst",
+        "condition": "Prior HST failed or inconclusive",
+        "keywords": [
+          "failed HST",
+          "inadequate HST",
+          "HST failure",
+          "inconclusive HST",
+          "failed HSAT",
+          "HSAT failure",
+          "negative HSAT"
+        ],
+        "action": "route_to_psg",
+        "severity": "hard_block"
+      }
+    ]
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "notes": "Sierra applies same lenient criteria to pediatric -- but HST not available for any pediatric patient (universal rule). PSG required.",
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    },
+    "auth_approach": "Same portal, same lenient justification. Just note pediatric age."
+  },
+  "thresholds": {
+    "_notes": "Sierra does not publish specific clinical thresholds. These are standard values used for test selection logic, NOT for auth criteria.",
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {
+      "min": 5,
+      "max": 14
+    },
+    "ahi_split_indicated": 40,
+    "ahi_split_may_consider": 20,
+    "ahi_pediatric_abnormal": 1,
+    "bmi_obesity": 30,
+    "bmi_morbid_obesity": 50,
+    "ess_threshold": 10,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

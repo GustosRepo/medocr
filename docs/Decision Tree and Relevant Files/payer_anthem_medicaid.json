@@ -1,0 +1,95 @@
+{
+  "_meta": {
+    "payer_id": "anthem_medicaid",
+    "payer_name": "Anthem Medicaid",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Uses Carelon clinical criteria but submits via Availity/Fax -- NOT through Carelon portal."
+  },
+
+  "criteria_source": {
+    "criteria_id": "carelon",
+    "criteria_file": "criteria_carelon.json",
+    "confidence": "verified",
+    "confidence_notes": "Confirmed Carelon criteria via NonBCBS KB Section 13",
+    "fallback_criteria_id": null
+  },
+
+  "plan_types": ["medicaid"],
+
+  "coverage": {
+    "G0399": {
+      "description": "HST - Home Sleep Apnea Test",
+      "covered": true,
+      "auth_required": false,
+      "notes": "No auth required for HST"
+    },
+    "95810": {
+      "description": "PSG - Diagnostic Polysomnography",
+      "covered": true,
+      "auth_required": true,
+      "notes": "In-lab requires auth"
+    },
+    "95811": {
+      "description": "PAP Titration",
+      "covered": true,
+      "auth_required": true,
+      "notes": "In-lab requires auth"
+    },
+    "95810_95811": {
+      "description": "Split Night (diagnostic + titration)",
+      "covered": true,
+      "auth_required": true,
+      "notes": "In-lab requires auth"
+    }
+  },
+
+  "hst_code": "G0399",
+
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Availity",
+    "portal_url": "https://www.availity.com",
+    "alternate_method": "fax",
+    "fax_available": true,
+    "phone": null,
+    "warnings": [
+      "Do NOT submit through Carelon portal -- Anthem Medicaid uses Carelon CRITERIA but submits via Availity or Fax"
+    ]
+  },
+
+  "referral": {
+    "required": false,
+    "conditions": null,
+    "notes": "No referral required"
+  },
+
+  "cost": {
+    "patient_responsibility": "none",
+    "coverage_percent": 100,
+    "notes": "Medicaid rule -- 100% covered"
+  },
+
+  "special_rules": [
+    {
+      "rule_id": "anthem_medicaid_submission_routing",
+      "description": "Anthem Medicaid uses Carelon criteria for clinical decisions but does NOT submit to Carelon portal",
+      "action": "Submit auth via Availity or fax",
+      "severity": "high"
+    }
+  ],
+
+  "flags": [
+    {
+      "flag_id": "FLAG_ANTHEM_MEDICAID_NOT_CARELON_PORTAL",
+      "trigger": "payer == anthem_medicaid AND auth_required",
+      "message": "Submit via Availity/Fax -- NOT Carelon portal despite using Carelon criteria",
+      "severity": "high"
+    }
+  ],
+
+  "pain_level": {
+    "rating": "medium",
+    "notes": "Criteria are strict (Carelon) but submission is straightforward via Availity"
+  }
+}

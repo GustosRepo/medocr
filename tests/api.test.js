@@ -104,3 +104,49 @@ test('GET /api/documents/:id/fhir returns Bundle after processing', async () => 
   const dr = (res.body.entry||[]).find(e => e.resource && e.resource.resourceType === 'DiagnosticReport');
   assert.ok(dr, 'DiagnosticReport missing');
 });
+
+// E2E sanity: inject → retrieve result → assert key fields present
+test('E2E: inject document and retrieve result with key fields', async () => {
+  const sampleResult = {
+    patient: { first: 'John', last: 'Smith', dob: '03/15/1985', phones: ['5551234567'], email: 'john@example.com' },
+    insurance: [{ carrier: 'Blue Cross', memberId: 'BCX123456', groupId: 'GRP001', planType: 'PPO' }],
+    provider: { name: 'Dr. Sarah Jones MD', npi: '1234567890', phone: '5559876543', fax: '5559876544' },
+    procedure: { cpt: '95810', description: 'In-lab diagnostic polysomnography' },
+    diagnoses: [{ code: 'G47.33', description: 'Obstructive sleep apnea' }],
+    clinical: { primaryDiagnosis: { code: 'G47.33', description: 'Obstructive sleep apnea' }, reasonForReferral: 'Suspected OSA' },
+    confidence: 'High',
+    alerts: { actions: [] },
+    flags: { verifyManually: false, reasons: [] },
+    documentMeta: { suggestedFilename: 'Smith_John_03151985.pdf' }
+  };
+
+  const inj = await request(app).post('/api/test/inject').send({ id: 'doc_e2e_sanity', result: sampleResult });
+  assert.equal(inj.status, 200);
+  assert.equal(inj.body.ok, true);
+
+  // Retrieve the result
+  const res = await request(app).get('/api/documents/doc_e2e_sanity/result');
+  assert.equal(res.status, 200);
+
+  // Assert key fields are present
+  assert.equal(res.body.patient?.first, 'John');
+  assert.equal(res.body.patient?.last, 'Smith');
+  assert.equal(res.body.patient?.dob, '03/15/1985');
+  assert.ok(res.body.insurance?.[0]?.carrier, 'insurance carrier missing');
+  assert.ok(res.body.provider?.name, 'provider name missing');
+  assert.equal(res.body.procedure?.cpt, '95810');
+  assert.ok(res.body.diagnoses?.length > 0, 'diagnoses missing');
+  assert.ok(res.body.confidence, 'confidence missing');
+  assert.ok(res.body.documentMeta?.suggestedFilename, 'suggestedFilename missing');
+});
+
+// Error taxonomy: all error responses must include category field
+test('API error responses include category field', async () => {
+  // 404 error
+  const notFound = await request(app).get('/api/documents/nonexistent_id_xyz/result');
+  assert.equal(notFound.body.error?.category, 'user', 'not_found should be user category');
+
+  // 400 error (no file)
+  const noFile = await request(app).post('/api/documents');
+  assert.equal(noFile.body.error?.category, 'user', 'no_file should be user category');
+});

@@ -1,0 +1,212 @@
+{
+  "_meta": {
+    "criteria_id": "universal_baseline",
+    "criteria_name": "Universal Baseline (No Payer-Specific Criteria)",
+    "version": "1.0",
+    "effective_date": "2026-02-27",
+    "strictness_tier": 5,
+    "strictness_label": "BASELINE",
+    "notes": "Fallback criteria for payers with no published clinical criteria (no-auth payers, TPAs, call-based payers). Contains universal medical contraindications for test TYPE selection (HST vs PSG) that apply regardless of insurance. Does NOT gate authorization — only informs whether HST is safe/appropriate for this patient.",
+    "applies_to": [
+      "payer_champva.json",
+      "payer_workers_comp.json",
+      "payer_caresource.json",
+      "payer_lv_firefighters.json",
+      "payer_molina.json",
+      "payer_va.json",
+      "payer_geha.json",
+      "payer_ebms.json",
+      "payer_first_health.json",
+      "payer_multiplan_phcs.json"
+    ]
+  },
+  "hst_eligibility": {
+    "description": "No payer-specific eligibility requirements. These payers do not gate HST with clinical review. Universal baseline only checks: is the patient a safe candidate for unattended home testing?",
+    "clinical_required": false,
+    "purpose": "test_type_safety_only",
+    "symptom_definitions": {
+      "_notes": "No payer requires these for auth. Present for OCR documentation quality assessment and for downstream M5 criteria comparison if a future payer update adds requirements.",
+      "excessive_daytime_sleepiness": {
+        "keywords": ["ESS", "Epworth", "excessive daytime sleepiness", "EDS", "inappropriate napping", "sleepiness interfering with activities", "hypersomnia", "excessive sleepiness"],
+        "ess_threshold": 10
+      },
+      "habitual_snoring": {
+        "keywords": ["habitual snoring", "loud snoring", "heavy snoring", "disruptive snoring", "snoring", "snores loudly"]
+      },
+      "witnessed_apnea_gasping": {
+        "keywords": ["witnessed apnea", "observed apnea", "gasping", "choking", "stops breathing", "breathing pauses", "bed partner reports"]
+      },
+      "obesity": {
+        "keywords": ["obese", "obesity", "BMI", "overweight", "neck circumference"],
+        "bmi_threshold": 30
+      },
+      "hypertension": {
+        "keywords": ["hypertension", "HTN", "high blood pressure", "antihypertensive"]
+      }
+    }
+  },
+  "hst_contraindications": {
+    "description": "Universal medical contraindications that make HST unsafe or inappropriate regardless of insurance. These are patient safety checks, NOT payer requirements. Hard blocks mean 'do not send this patient home with an HST device.' Soft recommendations mean 'PSG would be more accurate but HST is not dangerous.'",
+    "conditions": [
+      {
+        "id": "home_oxygen",
+        "condition": "Patient on supplemental oxygen for any reason",
+        "keywords": ["home oxygen", "supplemental O2", "supplemental oxygen", "oxygen dependent", "O2 therapy", "home O2", "continuous oxygen", "nocturnal oxygen"],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "reason": "HST devices cannot function properly with supplemental O2. Oximetry readings will be unreliable. Universal rule — applies to ALL payers."
+      },
+      {
+        "id": "cognitive_impairment",
+        "condition": "Unable to follow instructions for home equipment, no caregiver available",
+        "keywords": ["dementia", "cognitive impairment", "Alzheimer", "unable to follow instructions", "cognitive decline"],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "reason": "Patient cannot self-administer HST equipment. In-lab monitoring required for safety and test validity."
+      },
+      {
+        "id": "physical_impairment",
+        "condition": "Unable to apply equipment, no one to assist",
+        "keywords": ["physical impairment", "unable to apply", "dexterity", "mobility limitation", "bedridden", "paralysis"],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "reason": "Patient cannot physically attach HST sensors. In-lab tech assistance required."
+      },
+      {
+        "id": "failed_hst",
+        "condition": "Prior HST failed, was inconclusive, or was technically inadequate",
+        "keywords": ["failed HST", "inadequate HST", "HST failure", "inconclusive HST", "failed HSAT", "HSAT failure", "negative HSAT", "technically inadequate"],
+        "action": "route_to_psg",
+        "severity": "hard_block",
+        "reason": "Second HST attempt is almost never appropriate. PSG is the standard next step after HST failure."
+      },
+      {
+        "id": "copd",
+        "condition": "Significant COPD (reduces HST accuracy for OSA detection)",
+        "keywords": ["COPD", "chronic obstructive", "FEV1", "emphysema", "chronic bronchitis"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "COPD causes independent desaturations that confound HST scoring. PSG provides more accurate differentiation."
+      },
+      {
+        "id": "chf",
+        "condition": "Congestive heart failure (complicates sleep-disordered breathing pattern)",
+        "keywords": ["CHF", "heart failure", "congestive heart failure", "NYHA", "ejection fraction", "LVEF", "cardiomyopathy"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "CHF can cause central apneas and Cheyne-Stokes breathing that HST cannot differentiate from OSA."
+      },
+      {
+        "id": "chronic_opioid",
+        "condition": "Chronic opioid use (causes central apneas that HST cannot detect)",
+        "keywords": ["opioid", "oxycodone", "morphine", "fentanyl", "hydrocodone", "methadone", "suboxone", "dilaudid", "tramadol", "codeine", "buprenorphine"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "Chronic opioids cause central respiratory depression and central apneas. HST cannot distinguish central from obstructive events."
+      },
+      {
+        "id": "neuromuscular",
+        "condition": "Neuromuscular disease (complex respiratory patterns require attended monitoring)",
+        "keywords": ["ALS", "amyotrophic lateral sclerosis", "MS", "multiple sclerosis", "myotonic dystrophy", "Parkinson", "muscular dystrophy", "myasthenia gravis", "spinal muscular atrophy", "Guillain-Barre"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "Neuromuscular diseases affect respiratory mechanics in ways HST cannot capture. Full polysomnography recommended."
+      },
+      {
+        "id": "central_apnea_suspected",
+        "condition": "Suspected central sleep apnea or complex sleep apnea",
+        "keywords": ["central sleep apnea", "CSA", "central apnea", "Cheyne-Stokes", "complex sleep apnea"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "HST cannot differentiate central from obstructive events. PSG with EEG is required for central apnea diagnosis."
+      },
+      {
+        "id": "morbid_obesity",
+        "condition": "BMI > 50 (obesity hypoventilation risk, HST accuracy reduced)",
+        "keywords": ["morbid obesity", "BMI >50", "BMI 50", "super obesity"],
+        "bmi_threshold": 50,
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "Extreme obesity increases risk of hypoventilation that HST cannot monitor (no CO2 channel)."
+      },
+      {
+        "id": "ohs",
+        "condition": "Obesity hypoventilation syndrome",
+        "keywords": ["obesity hypoventilation", "OHS", "Pickwickian", "hypoventilation syndrome"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "OHS requires CO2 monitoring during sleep which HST cannot provide."
+      },
+      {
+        "id": "severe_insomnia",
+        "condition": "Documented severe insomnia (patient may not sleep enough at home for valid HST)",
+        "keywords": ["severe insomnia", "chronic insomnia", "ISI", "insomnia severity index"],
+        "action": "flag_psg_recommended",
+        "severity": "soft_recommendation",
+        "reason": "Severe insomnia may prevent adequate recording time at home, leading to technically inadequate HST."
+      }
+    ]
+  },
+  "psg_criteria": {
+    "description": "No payer-specific PSG criteria. PSG is indicated when any HST contraindication is present, when HST has failed, or when clinical judgment warrants attended monitoring.",
+    "indications": [
+      "hst_contraindication_present",
+      "failed_hst",
+      "pediatric",
+      "clinical_judgment"
+    ]
+  },
+  "titration_criteria": {
+    "description": "Standard titration after confirmed OSA diagnosis. No payer-specific requirements.",
+    "requires": "confirmed_osa_diagnosis",
+    "ahi_thresholds": {
+      "ahi_gte_15": {"symptoms_required": false},
+      "ahi_5_to_14": {
+        "symptoms_required": true,
+        "qualifying": ["eds", "impaired_cognition", "mood_disorder", "insomnia", "hypertension", "ihd", "stroke"]
+      }
+    }
+  },
+  "split_night_criteria": {
+    "description": "Standard AHI-based split night thresholds. No payer-specific requirements.",
+    "indicated": {"ahi_threshold": 40, "window_hours": 2},
+    "may_consider": {"ahi_min": 20, "ahi_max": 40, "window_hours": 2},
+    "not_recommended": {"ahi_below": 20},
+    "minimum_titration_hours": 3
+  },
+  "pediatric_criteria": {
+    "age_maximum": 17,
+    "hst_allowed": false,
+    "notes": "HST is never appropriate for pediatric patients regardless of payer. All pediatric testing requires in-lab PSG with age-appropriate scoring.",
+    "cpt_codes": {
+      "under_6_diagnostic": "95782",
+      "under_6_titration": "95783",
+      "6_and_over_diagnostic": "95810",
+      "6_and_over_titration": "95811"
+    },
+    "scoring": {
+      "events_scored_at": "2_respiratory_cycles",
+      "abnormal_ahi": 1,
+      "co2_monitoring": "recommended"
+    },
+    "severity": {
+      "normal": "<1",
+      "mild": "1-5",
+      "moderate": "5-10",
+      "severe": ">=10"
+    }
+  },
+  "thresholds": {
+    "_notes": "Standard clinical thresholds. No payer publishes specific overrides for these values.",
+    "ahi_moderate_severe": 15,
+    "ahi_mild_with_symptoms": {"min": 5, "max": 14},
+    "ahi_split_indicated": 40,
+    "ahi_split_may_consider": 20,
+    "ahi_pediatric_abnormal": 1,
+    "bmi_obesity": 30,
+    "bmi_morbid_obesity": 50,
+    "ess_threshold": 10,
+    "compliance_hours": 4,
+    "compliance_nights_percent": 70
+  }
+}

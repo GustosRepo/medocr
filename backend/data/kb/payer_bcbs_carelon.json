@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "payer_id": "bcbs_carelon",
+    "payer_name": "BCBS (Carelon-Routed Plans)",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Template for all BCBS plans confirmed routing through Carelon. Prefix verified in bcbs_prefix_database.json."
+  },
+  "criteria_source": {
+    "criteria_id": "carelon",
+    "criteria_file": "criteria_carelon.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false,
+      "notes": "HST no auth"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "carelon_portal"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "carelon_portal"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "carelon_portal"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Carelon",
+    "portal_url": "https://providerportal.carelon.com",
+    "alternate_method": "fax"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "medium"
+}

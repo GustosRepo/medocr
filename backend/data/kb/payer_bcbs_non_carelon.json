@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "payer_id": "bcbs_non_carelon",
+    "payer_name": "BCBS (Non-Carelon / Unknown Plans)",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Conservative default for BCBS plans not confirmed as Carelon. Uses Carelon criteria with 'presumed' confidence. Staff should verify specific plan routing."
+  },
+  "criteria_source": {
+    "criteria_id": "carelon",
+    "criteria_file": "criteria_carelon.json",
+    "confidence": "presumed"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false,
+      "notes": "HST no auth -- verify with specific plan"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Auth likely required -- verify"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Auth likely required -- verify"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "call_to_verify",
+    "notes": "Submission method varies by specific BCBS plan. Check bcbs_prefix_database.json for known routing."
+  },
+  "referral": {
+    "required": false,
+    "notes": "Verify with specific plan"
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_BCBS_UNVERIFIED_PREFIX",
+      "trigger": "prefix not found in bcbs_prefix_database",
+      "message": "BCBS plan routing unverified -- using Carelon criteria as conservative default",
+      "severity": "medium"
+    }
+  ]
+}

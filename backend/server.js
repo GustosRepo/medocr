@@ -38,6 +38,7 @@ import { normalizeFields, getClientConfig } from './utils/fieldNormalizer.js';
 import { extractDocument as vlmExtractDocument, crossValidate as vlmCrossValidate, checkVlmHealth } from './vlmExtractor.js';
 import { extractFromOcrText, computeOcrConfidence } from './textLlmExtractor.js';
 import { verifyExtraction } from './verifyExtraction.js';
+import { validateKbAtStartup } from './kbLoader.js';
 import { convertPdfPagesToImages, cleanupTempImages } from './utils/imageResizer.js';
 import { selectInformationRichPages } from './pageSelector.js';
 import aiAnalysisRoutes from './routes/aiAnalysis.js';
@@ -200,6 +201,18 @@ function applyCorrectionsPostprocess(mappedResult, trace = [], context = {}) {
 // Correlation ID middleware
 let _ridCounter = 0;
 app.use((req, res, next) => { req.id = `r${Date.now().toString(36)}_${(_ridCounter++).toString(36)}`; next(); });
+
+// Error taxonomy middleware: intercept res.json() to auto-add category to error responses
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function(body) {
+    if (body?.error?.code && !body.error.category) {
+      body.error.category = classifyError(body.error.code);
+    }
+    return origJson(body);
+  };
+  next();
+});
 // Detect test environment either via NODE_ENV or node --test runner flag
 const IS_TEST = process.env.NODE_ENV === 'test' || process.argv.some(a => a.includes('--test'));
 // Basic in-memory rate limiter (sliding window) to protect OCR endpoint fan-out
@@ -2407,7 +2420,7 @@ async function processDocument(id) {
       
       // Run decision tree on normalized data with dual-engine metadata
       const decisionTree = new DecisionTreeEngine();
-      decisionTreeResult = decisionTree.evaluate(
+      decisionTreeResult = await decisionTree.evaluate(
         normalizedData,
         {
           agreementScore: dualResult.agreementScore,
@@ -2978,7 +2991,16 @@ app.post('/api/documents/bulk-export.zip', express.json({ limit: '256kb' }), asy
 
 // (reverted) retry-failed endpoint removed
 
+// Global error handler — catches unhandled errors in route handlers
+app.use((err, req, res, _next) => {
+  log('error', 'unhandled_route_error', { method: req.method, url: req.originalUrl, err: String(err?.message || err) });
+  if (!res.headersSent) {
+    res.status(500).json({ error: { code: 'internal_error', message: 'An unexpected error occurred' } });
+  }
+});
+
 if (!IS_TEST) {
+  validateKbAtStartup();
   app.listen(port, () => console.log(`MEDOCR API listening on http://127.0.0.1:${port}`));
 }
 

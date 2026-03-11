@@ -1,0 +1,80 @@
+{
+  "_meta": {
+    "payer_id": "humana",
+    "payer_name": "Humana",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Non-Optum Humana plans. Check if Optum IPA during benefits -- if so, use Optum criteria via Curo portal instead."
+  },
+  "criteria_source": {
+    "criteria_id": "humana",
+    "criteria_file": "criteria_humana.json",
+    "confidence": "verified"
+  },
+  "plan_types": [
+    "commercial",
+    "medicare_ppo",
+    "medicare_hmo_no_ipa"
+  ],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95805": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "MSLT/MWT"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Availity",
+    "portal_url": "https://www.availity.com"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green",
+  "special_rules": [
+    {
+      "rule_id": "humana_optum_check",
+      "description": "If Availity shows Optum IPA, this is NOT a Humana-criteria plan",
+      "action": "Use Optum criteria, submit via Curo portal"
+    },
+    {
+      "rule_id": "humana_oon_check",
+      "description": "P3 Health Partners or Intermountain IPA = OON",
+      "action": "Cannot accept patient",
+      "blocking": true
+    }
+  ],
+  "flags": [
+    {
+      "flag_id": "FLAG_HUMANA_OPTUM_IPA",
+      "trigger": "availity_shows_optum_ipa",
+      "message": "Use Optum criteria via Curo -- NOT Humana criteria",
+      "severity": "high"
+    },
+    {
+      "flag_id": "FLAG_HUMANA_OON_IPA",
+      "trigger": "p3_or_intermountain_ipa",
+      "message": "Patient is OON -- cannot accept",
+      "severity": "high",
+      "blocking": true
+    }
+  ]
+}

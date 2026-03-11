@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEDOCR Visual Decision Tree v0.19.3</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        :root { --bg: #0b0f19; --bg2: #111827; --bg3: #1a2332; --border: #2a3548; --text: #e1e7ef; --text2: #8b99ad; --blue: #4d8ef7; --green: #34d399; --red: #f87171; --yellow: #fbbf24; --purple: #a78bfa; --cyan: #22d3ee; --orange: #fb923c; --pink: #f472b6; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+        .page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .hdr { background: linear-gradient(135deg, #0f172a, #1e1b4b, #172554); border: 1px solid var(--border); border-radius: 14px; padding: 36px 40px; margin-bottom: 28px; position: relative; }
+        .hdr::after { content: ''; position: absolute; bottom: 0; left: 24px; right: 24px; height: 2px; background: linear-gradient(90deg, var(--blue), var(--purple), var(--cyan), transparent); }
+        .hdr h1 { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 700; background: linear-gradient(90deg, #93c5fd, #c4b5fd, #67e8f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 6px; }
+        .hdr p { color: var(--text2); font-size: 14px; }
+        .hdr .tags { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .hdr .tag { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); padding: 4px 10px; border-radius: 5px; color: var(--text2); }
+        .hdr .tag-new { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); padding: 4px 10px; border-radius: 5px; color: var(--green); }
+        .mod-nav { display: flex; gap: 6px; margin-bottom: 24px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; background: var(--bg); padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .mod-nav a { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 6px 14px; border-radius: 6px; text-decoration: none; color: var(--text2); background: var(--bg2); border: 1px solid var(--border); transition: all 0.15s; white-space: nowrap; }
+        .mod-nav a:hover { border-color: var(--blue); color: var(--blue); }
+        .mod-nav a.new { border-color: rgba(52,211,153,0.4); color: var(--green); background: rgba(52,211,153,0.05); }
+        .section { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 28px; overflow: hidden; }
+        .section-head { padding: 20px 28px; border-bottom: 1px solid var(--border); position: relative; }
+        .section-head::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+        .section-head h2 { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .section-head .sub { color: var(--text2); font-size: 13px; margin-top: 4px; }
+        .section-head .fix-badge { font-size: 10px; background: rgba(52,211,153,0.15); color: var(--green); padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+        .s-blue .section-head::before { background: var(--blue); } .s-blue .section-head h2 { color: var(--blue); }
+        .s-green .section-head::before { background: var(--green); } .s-green .section-head h2 { color: var(--green); }
+        .s-purple .section-head::before { background: var(--purple); } .s-purple .section-head h2 { color: var(--purple); }
+        .s-orange .section-head::before { background: var(--orange); } .s-orange .section-head h2 { color: var(--orange); }
+        .s-cyan .section-head::before { background: var(--cyan); } .s-cyan .section-head h2 { color: var(--cyan); }
+        .s-pink .section-head::before { background: var(--pink); } .s-pink .section-head h2 { color: var(--pink); }
+        .s-yellow .section-head::before { background: var(--yellow); } .s-yellow .section-head h2 { color: var(--yellow); }
+        .s-red .section-head::before { background: var(--red); } .s-red .section-head h2 { color: var(--red); }
+        .section-body { padding: 24px 28px; }
+        .diagram-wrap { background: #0d1220; border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; overflow-x: auto; }
+        .dia-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text2); margin-bottom: 8px; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; display: inline-block; }
+        .note { font-size: 12px; color: var(--text2); background: rgba(255,255,255,0.03); border-left: 3px solid var(--border); padding: 10px 14px; margin: 12px 0; border-radius: 0 6px 6px 0; line-height: 1.7; }
+        .note-red { border-left-color: var(--red); } .note-yellow { border-left-color: var(--yellow); }
+        .note-green { border-left-color: var(--green); } .note-blue { border-left-color: var(--blue); }
+        .note-purple { border-left-color: var(--purple); } .note-cyan { border-left-color: var(--cyan); }
+        .note strong { color: var(--text); }
+        .detail-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; }
+        .detail-table th { background: rgba(255,255,255,0.05); padding: 8px 12px; text-align: left; border: 1px solid var(--border); color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+        .detail-table td { padding: 8px 12px; border: 1px solid var(--border); color: var(--text2); }
+        .detail-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+        .pin-box { background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.3); border-radius: 8px; padding: 14px 18px; margin: 12px 0; }
+        .pin-box strong { color: var(--purple); }
+        .footer { text-align: center; padding: 32px; color: var(--text2); font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="hdr">
+        <h1>MEDOCR VISUAL DECISION TREE v0.19.3</h1>
+        <p>Complete decision tree -- all stubs resolved, all PINs closed. File-trace audit: 16 findings fixed across v0.19.0-v0.19.3. M1C sequential payer flow, approaching-2 soft stop, missing-name age fix, split night payment gate fix, format validation no-ID path.</p>
+        <div class="tags">
+            <span class="tag">? Feb 27, 2026</span>
+            <span class="tag">[FACILITY] 28+ Payers</span>
+            <span class="tag-new">[OK] 16 AUDIT FINDINGS RESOLVED</span>
+            <span class="tag-new">? Patient Safety Alerts Built</span>
+            <span class="tag-new">? PPE Flags (Bloodborne/Airborne/Contact)</span>
+            <span class="tag-new">? NLP Context Processing (Negation/Family/Temporal)</span>
+            <span class="tag-new">? Insurance Allowables Integrated (34 payers)</span>
+            <span class="tag-new">[DOC] Notes Quality Assessment</span>
+            <span class="tag-new">? Patient Contact Extraction</span>
+            <span class="tag-new">? Medication Class Detection</span>
+            <span class="tag-new">[PIN] 105 flags * 1,394 lines * 46 paths audited</span>
+        </div>
+    </div>
+
+    <div class="mod-nav">
+        <a href="#master" class="new">Master Flow ?</a>
+        <a href="#m1-intake">M1A: File Intake</a>
+        <a href="#m1-patient" class="new">M1B: Patient/Contact ?</a>
+        <a href="#m1-ins" class="new">M1C: Insurance + ID Validation ?</a>
+        <a href="#m1-cob">M1D: COB</a>
+        <a href="#m1-provider" class="new">M1E: Provider/Notes/Quality ?</a>
+        <a href="#m2-icd" class="new">M2A: ICD + PPE + Safety ?</a>
+        <a href="#m2-nlp" class="new">M2A-NLP: Context Processing ?</a>
+        <a href="#m2-scope">M2B: Order Scope</a>
+        <a href="#m2-contra">M2C: Contraindications</a>
+        <a href="#m2-suff" class="new">M2D: Sufficiency + Questionnaire ?</a>
+        <a href="#m3">M3: Insurance Scope</a>
+        <a href="#m4" class="new">M4: Test Select + Allowables ?</a>
+        <a href="#m4-split">M4 Split Night</a>
+        <a href="#m5">M5: Auth Readiness</a>
+        <a href="#m6" class="new">M6: Output ?</a>
+        <a href="#bcbs-route">BCBS Routing</a>
+        <a href="#payer-route">Payer Routing</a>
+        <a href="#criteria-map">Criteria File Map</a>
+        <a href="#ma-route">MA Routing</a>
+        <a href="#hst">HST Resolution</a>
+        <a href="#reentry">Re-entry / Rerun</a>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--           MASTER FLOW -- MAJOR ARCHITECTURE CHANGE             -->
+    <!-- ============================================================ -->
+    <div id="master" class="section s-blue">
+        <div class="section-head">
+            <h2>[MAP] MASTER FLOW -- v0.19.3 <span class="fix-badge">ALL STUBS RESOLVED + DATA SOURCES MAPPED</span></h2>
+            <div class="sub">Benefits verification is POST-TREE. PENDING_ORDER still runs clinical assessment. PENDING_INSURANCE routes like cash with contact flag.</div>
+        </div>
+        <div class="section-body">
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START([REFERRAL RECEIVED]) --> OCR
+
+    subgraph OCR_BLOCK["STEP 0: OCR + LLM -- Extracts to JSON"]
+        OCR["OCR + LLM extracts ALL fields\ninto structured JSON:\npatient (name, DOB, phone, email, address),\ninsurance, provider (ordering + supervising),\nclinical, O2, homebound, BMI,\nFEV1, notes text, medications,\nlanguage indicators, etc."]
+    end
+
+    OCR --> NLP
+
+    subgraph NLP["STEP 0.5: NLP CONTEXT PROCESSING"]
+        NLP_A["Negation detection\nFamily vs personal history\nTemporal context (resolved/active)\nMedication class detection\nLanguage barrier indicators"]
+    end
+
+    NLP --> M1
+
+    subgraph M1["MODULE 1: INTAKE + IDENTIFICATION"]
+        direction TB
+        M1A["Stage 0: Filename Classification"] --> M1B["Stage 1.1: Patient Validation\n+ Age Alerts (2,6,10,18)\n+ Patient Contact Info\n+ Pediatric eligibility set"]
+        M1B --> M1C["Stage 1.2: Payment Type"]
+        M1C -->|INSURED| M1D["Stage 1.3: Insurance ID\n+ ID Format Validation\n+ Plan Type Signals\n+ Criteria File Loaded"]
+        M1D --> M1E{Multiple payers?}
+        M1E -->|"2+ payers"| M1COB["Stage 1.3C: COB\nFederal overrides -> NAIC D1-D6\nOON primary = STOP_OON_PRIMARY\nOON secondary only = passes"]
+        M1E -->|"1 payer"| M1F["Continue"]
+        M1COB --> M1F
+        M1C -->|CASH| CASH_TAG["payment = CASH\nNo insurance routing\nM3 + M5 skip at M2D routing"]
+        M1C -->|"No ins data"| PEND_INS["payment = PENDING_INSURANCE\nALERT_CONTACT_FOR_INSURANCE\nRoute like cash + block scheduling"]
+        M1F --> M1G["Stage 1.4: Provider Validation\n+ Supervising Physician\n+ Notes Quality Assessment"]
+        CASH_TAG --> M1G
+        PEND_INS --> M1G
+        M1G --> M1H["Stage 1.5: Notes confirmed\n+ Quality evaluated"]
+    end
+
+    M1H --> ICD_PROC
+
+    subgraph ICD_PROC["ICD PROCESSING (Tree Step)"]
+        direction TB
+        ICD_GEN["ICD Code Generation:\n1. Literal codes from JSON\n2. Tier A: icd10_curated.json (84 codes)\n3. Tier B: full ICD-10 master\n4. Unspecified / description-only"]
+        ICD_GEN --> ICD_SCAN["ICD Code Scan:\nCategorize all codes\nPPE flags (bloodborne/airborne/contact)\nPatient safety alerts\nMedication class detection\nComorbidity extraction"]
+    end
+
+    ICD_SCAN --> M2
+
+    subgraph M2["MODULE 2: CLINICAL REVIEW"]
+        direction TB
+        M2A{Order present?}
+        M2A -->|Yes| M2B["Stage 2.1: Order Scope\n+ ICD Analysis"]
+        M2A -->|No| M2A2["PENDING_ORDER\nscope = UNKNOWN\nStill runs clinical assessment"]
+        M2B --> M2C["Stage 2.2: Contraindications\nO2 = only hard HST stop\nOthers = FLAG_PSG_RECOMMENDED"]
+        M2A2 --> M2C
+        M2C --> M2D["Stage 2.3: Clinical Sufficiency"]
+    end
+
+    M2D --> ORDER_CHK{"Order present?"}
+    ORDER_CHK -->|No| M6_PEND["M6: PENDING_ORDER\n+ clinical pre-assessment\nRe-entry: M2B when order arrives"]
+    ORDER_CHK -->|Yes| ROUTE{"payment_type?"}
+
+    ROUTE -->|INSURED| M3
+    ROUTE -->|CASH| M4_CASH["M4 TEST SELECTION\nAll codes in scope = approved\n(no payer restrictions)\nIncludes split night eval\nCash tiebreaker: $250 HST\nvs $600 PSG"]
+    ROUTE -->|PENDING_INSURANCE| M4_PEND["M4 TEST SELECTION\n+ ALERT_CONTACT_FOR_INSURANCE\nBlock scheduling until resolved\nRe-entry: M1C when info obtained"]
+
+    subgraph M3["MODULE 3: INSURANCE SCOPE"]
+        direction TB
+        M3A["Payer Coverage per CPT"] --> M3B["Auth Requirements\n+ Submission Method"]
+        M3B --> M3C{"Default UP needed?"}
+        M3C -->|"Yes: need PSG order\nbut have HST order"| M3_PAUSE["PENDING_NEW_ORDER\nRe-entry: M2B"]
+        M3C -->|"No / Default DOWN OK"| M3_DONE["Continue"]
+    end
+
+    M3_DONE --> M4
+
+    subgraph M4["MODULE 4: TEST SELECTION"]
+        direction TB
+        M4A["Tiebreaker: Insurance >\nClinical > Physician > Patient >\nBest Interest (cost)"] --> M4_SPLIT_GATE{"Both diagnostic +\ntitration in scope?"}
+        M4_SPLIT_GATE -->|Yes| M4_SPLIT_EVAL["SPLIT NIGHT EVALUATION\n(see M4 Split Night section)"]
+        M4_SPLIT_GATE -->|No| M4B["Standard selection"]
+        M4_SPLIT_EVAL --> M4B2["Pediatric Conversion"]
+        M4B --> M4B2
+        M4B2 --> M4C["Selected vs Submitted"]
+    end
+
+    M4C --> M4_PAY_EXIT{"payment_type?"}
+    M4_PAY_EXIT -->|INSURED| M5
+    M4_PAY_EXIT -->|"CASH / PENDING"| M6
+    M4_CASH --> M4
+    M4_PEND --> M4
+
+    subgraph M5["MODULE 5: AUTH READINESS"]
+        direction TB
+        M5A["Clinical vs Criteria"] --> M5B["Readiness + Auth Package\n(ICD codes: auto-codified\n+ descriptions for unknowns)"]
+    end
+
+    M5B --> M6
+
+    subgraph M6["MODULE 6: OUTPUT"]
+        direction TB
+        M6A["HST Code: insured=map, cash=95806"] --> M6B["Flag Aggregation\n+ DEDUPLICATION\n(multiple reasons for same\nremoval -> consolidated)"]
+        M6B --> M6C["Cost: insurance_allowables.json\n(34 payers, payer-specific rates)\nUMR: charge at HPN rates"]
+        M6C --> M6D["Final Output\n+ Patient Safety Alerts\n+ PPE Alerts\n+ Patient Contact Info"]
+    end
+
+    M6_PEND --> FINAL
+    M3_PAUSE --> M6_PAUSE["M6: PENDING_NEW_ORDER\nRe-entry: M2B"]
+    M6_PAUSE --> FINAL
+    M6D --> FINAL(["OUTPUT -> Human workflow"])
+    FINAL --> RERUN{Rerun?}
+    RERUN -->|Update| M1
+    RERUN -->|Done| DONE(["COMPLETE"])
+
+    style M1 fill:#0c1e3a,stroke:#4d8ef7,color:#e1e7ef
+    style M2 fill:#0a2618,stroke:#34d399,color:#e1e7ef
+    style M3 fill:#1a0f30,stroke:#a78bfa,color:#e1e7ef
+    style M4 fill:#1a1505,stroke:#fb923c,color:#e1e7ef
+    style M5 fill:#071a20,stroke:#22d3ee,color:#e1e7ef
+    style M6 fill:#1a0a1e,stroke:#f472b6,color:#e1e7ef
+    style OCR_BLOCK fill:#1a0a1e,stroke:#f472b6,color:#e1e7ef
+    style NLP fill:#1a0520,stroke:#e879f9,color:#e1e7ef
+    style ICD_PROC fill:#1a0505,stroke:#ef4444,color:#e1e7ef
+    style FINAL fill:#064e3b,stroke:#34d399,color:#fff
+    style M4_CASH fill:#1a1505,stroke:#fb923c,color:#e1e7ef
+    style M4_PEND fill:#1a1505,stroke:#fb923c,color:#e1e7ef
+    style M4_PAY_EXIT fill:#1a0f30,stroke:#a78bfa,color:#e1e7ef
+    style PEND_INS fill:#78350f,stroke:#fbbf24,color:#e1e7ef
+    style M6_PEND fill:#78350f,stroke:#fbbf24,color:#fff
+    style M6_PAUSE fill:#78350f,stroke:#fbbf24,color:#fff
+    style M3_PAUSE fill:#78350f,stroke:#fbbf24,color:#fff
+    style ROUTE fill:#1a0f30,stroke:#a78bfa,color:#e1e7ef
+                </pre>
+            </div>
+            <div class="note note-green">
+                <strong>v0.19.3 -- Complete Build, All Stubs Resolved:</strong><br>
+                * <strong>NLP Context Processing (Step 0.5):</strong> Negation detection, family vs personal history exclusion, temporal context (resolved/active/discontinued), medication class detection (opioids, BP meds, sleep/psych meds), language barrier indicators.<br>
+                * <strong>Patient Contact Extraction (M1B):</strong> Phone, email, address extracted. Missing contact = ALERT_MISSING_PATIENT_CONTACT.<br>
+                * <strong>ID Format Validation (M1C):</strong> 19 payer-specific format rules catch OCR errors and wrong-payer routing. Reference: eligibility_combinations.json.<br>
+                * <strong>Notes Quality Assessment (M1E):</strong> Checkbox-only, single page, unsigned notes flagged. Not just presence but sufficiency evaluated.<br>
+                * <strong>Patient Safety Alerts (M2A):</strong> Seizures, PTSD, violent tendency, incontinence, communication barriers, language barriers. Carried through to scheduling output.<br>
+                * <strong>PPE Specifics (M2A):</strong> Bloodborne (HIV, Hep B/C), Airborne (TB, COVID), Contact (MRSA, shingles) with specific PPE requirements.<br>
+                * <strong>Medication Classes (M2A):</strong> BP meds -> cardiovascular comorbidity. Psych/sleep meds -> interpretation relevance. Opioids already covered.<br>
+                * <strong>NV Medicaid Questionnaire (M2D):</strong> Only payer requiring questionnaire for submission. If notes insufficient -> call patient.<br>
+                * <strong>Insurance Allowables (M4/M6):</strong> 34 payers, 112 rates. UMR special billing: charge patient at HPN rates, HST reimbursement = $900. Prioritize HST for UMR.<br>
+                * <strong>COB fully built:</strong> Federal overrides -> NAIC D1-D6 -> dual pipeline. No stubs.<br>
+                * <strong>All PINs resolved (1-8).</strong> 124 flags. 1,394 lines. 46 paths audited.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--              MODULE 1A: FILE INTAKE                           -->
+    <!-- ============================================================ -->
+    <div id="m1-intake" class="section s-blue">
+        <div class="section-head">
+            <h2>MODULE 1A -- File Intake & OCR</h2>
+            <div class="sub">Patient-mismatch detection, duplicate flagging, OCR confidence tiers</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>filename_classification.json</code> -- 14 filename suffix patterns -> routing decisions (SIMPLIFIED vs FULL_OCR, expected study type, validation path A/B/C)<br>
+                * <code>facility_config.json</code> -- OCR exclusion filter (prevents facility's own phone/fax/NPI/address from being extracted as referring provider data), <code>duplicate_check_window_days</code> threshold
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    FILE([File Received]) --> PARSE[Parse Filename Pattern]
+    PARSE --> ROUTE{Pattern Match?}
+    ROUTE -->|_INCOMPLETE| INC["INCOMPLETE -> M6 PENDING"]
+    ROUTE -->|_MSLT / _MWT| MSLT["Not our service -> M6 STOP"]
+    ROUTE -->|_POX| POX_ROUTE["POX path"]
+    ROUTE -->|"Standard / Order"| OCR_GO
+    ROUTE -->|_Chart Notes| OCR_GO
+
+    OCR_GO["OCR + LLM Processing"] --> CONF{"OCR Confidence?"}
+    CONF -->|"95%+"| HIGH_CONF["HIGH -- proceed normally"]
+    CONF -->|"90-94%"| GOOD_CONF["GOOD -- proceed normally"]
+    CONF -->|"85-89%"| MARGINAL["INFO_OCR_MARGINAL\nProceed but flag for review"]
+    CONF -->|"Below 85%"| LOW_CONF["FLAG_LOW_OCR_CONFIDENCE\nIdentify affected fields\nManual review needed"]
+
+    HIGH_CONF --> MULTI
+    GOOD_CONF --> MULTI
+    MARGINAL --> MULTI
+    LOW_CONF --> MULTI
+
+    MULTI{"Multiple pages?\nPatient IDs match?"}
+    MULTI -->|"All match"| MERGE["Merge all pages"]
+    MULTI -->|"Mismatch detected"| SPLIT["SPLIT into separate referrals\nProcess each independently"]
+    MULTI -->|"Single page"| DUP_CHK
+
+    MERGE --> DUP_CHK
+    SPLIT --> DUP_CHK
+
+    DUP_CHK{"Same patient + physician\n+ test in system\nwithin 30 days?\n(requires: referral DB query)"}
+    DUP_CHK -->|Yes| DUP["INFO_POSSIBLE_DUPLICATE\nMay be updated order or\nlate notes -- still process"]
+    DUP_CHK -->|No| ICD_GO
+    DUP_CHK -->|"DB unavailable"| ICD_GO
+
+    DUP --> ICD_GO(["-> M1B Patient Validation"])
+
+    style LOW_CONF fill:#78350f,stroke:#fbbf24,color:#fff
+    style SPLIT fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--         MODULE 1B: PATIENT + PAYMENT TYPE                     -->
+    <!-- ============================================================ -->
+    <div id="m1-patient" class="section s-blue">
+        <div class="section-head">
+            <h2>MODULE 1B -- Patient Validation + Contact + Payment Type <span class="fix-badge">v0.19.3</span></h2>
+            <div class="sub">Age alerts with specific dates. Patient contact extraction (phone/email/address). Partial info = still process with alert. Age at anticipated service date.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>facility_config.json</code> -- <code>anticipated_service_date_offset_days</code> (default 21), <code>age_transition_alert_window_days</code> (default 60)
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    PAT([Patient Data]) --> NAME{Name present?}
+    NAME -->|Yes| DOB{DOB present?}
+    NAME -->|No| F_NAME["ALERT_MISSING_PATIENT_NAME\nContact MD office\nStill process available data"]
+
+    DOB -->|Yes| AGE_CALC["Calculate age at\nANTICIPATED service date\n(~2-4 weeks from today)"]
+    DOB -->|No| F_DOB["ALERT_MISSING_DOB\nContact MD/patient\nStill process available data"]
+
+    AGE_CALC --> AGE_ALERTS{"Age transition\nalerts needed?"}
+
+    AGE_ALERTS -->|"Under 2"| STOP_AGE(["STOP_CANNOT_TEST\nToo young"])
+    AGE_ALERTS -->|"Approaching 2\n(within 2 months)"| ALERT_2["AGE_ALERT_TURNING_2\nDate: [specific birthday]\nCurrently cannot test\nWill become eligible on [date]\n---\nPre-set for post-birthday:\nPediatric = true\nCodes: 95782 / 95783\nHST NOT allowed"]
+    AGE_ALERTS -->|"2-5"| PED_YOUNG["Pediatric = true\nCodes: 95782 / 95783\nHST NOT allowed"]
+    AGE_ALERTS -->|"Approaching 6\n(within 2 months)"| ALERT_6["AGE_ALERT_TURNING_6\nDate: [specific birthday]\nCodes change: 95782 -> 95810\non [date]"]
+    AGE_ALERTS -->|"6-9"| PED_OLDER["Pediatric = true\nAdult codes OK\nHST NOT allowed"]
+    AGE_ALERTS -->|"Approaching 10\n(within 2 months)"| ALERT_10["AGE_ALERT_TURNING_10\nDate: [specific birthday]\nINFO: scheduling consideration\nNo code change"]
+    AGE_ALERTS -->|"10-17"| PED_STD["Pediatric = true\nAdult codes OK\nHST NOT allowed"]
+    AGE_ALERTS -->|"Approaching 18\n(within 2 months)"| ALERT_18["AGE_ALERT_TURNING_18\nDate: [specific birthday]\nHST becomes eligible on [date]\nCodes remain adult"]
+    AGE_ALERTS -->|"18+"| ADULT["Standard adult\nAll codes available"]
+
+    PED_YOUNG --> PAY
+    PED_OLDER --> PAY
+    PED_STD --> PAY
+    ADULT --> PAY
+    F_NAME --> DOB
+    F_DOB --> PAY
+    ALERT_2 --> AGE2_SOFT["SOFT STOP: PENDING_AGE_ELIGIBLE\n---\nProcess file completely\n(insurance, clinical, auth readiness)\nBLOCK scheduling until [birthday]\n---\nRe-entry: automatic date trigger\nNo reprocessing needed —\ncodes and criteria pre-set"]
+    AGE2_SOFT --> PAY
+    ALERT_6 --> PAY
+    ALERT_10 --> PAY
+    ALERT_18 --> PAY
+
+    PAY{Insurance data?}
+    PAY -->|"Payer + member ID\n(minimum for most)"| INSURED(["INSURED\n-> Insurance ID"])
+    PAY -->|"Self-pay indicated"| CASH(["CASH PAY\n-> Provider + Notes + ICD\nthen M2 + M4\nSkip M3 + M5"])
+    PAY -->|"Partial insurance info\n(payer only, ID only, etc.)"| PARTIAL["INSURED with\nALERT_INCOMPLETE_INSURANCE\nStill process\nContact patient/MD for rest"]
+    PAY -->|"No data at all"| NO_INS["payment = PENDING_INSURANCE\nALERT_CONTACT_FOR_INSURANCE\n---\nRoute like cash (skip M3/M5)\nBLOCK scheduling until resolved\nRe-entry: M1C when info obtained"]
+
+    PARTIAL --> INSURED
+    NO_INS --> PEND_ROUTE(["-> Provider + Notes + ICD\nthen M2 clinical review\nthen M4 cash path\nwith scheduling blocked"])
+
+    style STOP_AGE fill:#7f1d1d,stroke:#f87171,color:#fff
+    style ALERT_2 fill:#78350f,stroke:#fbbf24,color:#fff
+    style AGE2_SOFT fill:#78350f,stroke:#fbbf24,color:#fff
+    style ALERT_6 fill:#78350f,stroke:#fbbf24,color:#fff
+    style ALERT_10 fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style ALERT_18 fill:#78350f,stroke:#fbbf24,color:#fff
+    style NO_INS fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Patient Contact Information Extraction</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    CONTACT_START(["Patient contact\nfields from OCR"]) --> PHONE{"Phone number\nextracted?"}
+    PHONE -->|"Yes: 10 digits"| PHONE_OK["Phone captured [OK]\nFormat: (xxx) xxx-xxxx"]
+    PHONE -->|"Partial / malformed"| PHONE_PARTIAL["ALERT_VERIFY_PATIENT_PHONE\nPartial number found\nVerify with MD office"]
+    PHONE -->|"None found"| PHONE_NONE["No phone extracted"]
+
+    PHONE_OK --> EMAIL
+    PHONE_PARTIAL --> EMAIL
+    PHONE_NONE --> EMAIL
+
+    EMAIL{"Email extracted?"}
+    EMAIL -->|Yes| EMAIL_OK["Email captured [OK]"]
+    EMAIL -->|No| EMAIL_NONE["No email"]
+
+    EMAIL_OK --> ADDR
+    EMAIL_NONE --> ADDR
+
+    ADDR{"Address extracted?"}
+    ADDR -->|Yes| ADDR_OK["Address captured [OK]\nUsed for distance check\nin split night evaluation"]
+    ADDR -->|"Partial"| ADDR_PART["Partial address\nCity/state for distance\nestimate if possible"]
+    ADDR -->|No| ADDR_NONE["No address"]
+
+    ADDR_OK --> CONTACT_RESULT
+    ADDR_PART --> CONTACT_RESULT
+    ADDR_NONE --> CONTACT_RESULT
+
+    CONTACT_RESULT{"Any contact info\ncaptured?"}
+    CONTACT_RESULT -->|"Phone or email\navailable"| CONTACT_DONE["Patient contactable [OK]"]
+    CONTACT_RESULT -->|"No contact info\nat all"| CONTACT_MISSING["ALERT_MISSING_PATIENT_CONTACT\nCannot schedule without\npatient contact method\nRequest from MD office"]
+
+    CONTACT_DONE --> ALT_CONTACT
+    CONTACT_MISSING --> ALT_CONTACT
+
+    ALT_CONTACT{"Alternate contact\n(caregiver, parent, etc.)?"}
+    ALT_CONTACT -->|Found| ALT_OK["Alternate contact captured\nUseful for pediatric,\nelderly, or dependent patients"]
+    ALT_CONTACT -->|"Not found"| ALT_NA["N/A -- typical for adults"]
+
+    ALT_OK --> DONE_CONTACT(["-> Payment Type"])
+    ALT_NA --> DONE_CONTACT
+
+    style CONTACT_MISSING fill:#78350f,stroke:#fbbf24,color:#fff
+    style CONTACT_DONE fill:#064e3b,stroke:#34d399,color:#fff
+                </pre>
+            </div>
+
+            <div class="note note-green">
+                <strong>v0.19.3 FIXES (M1B):</strong><br>
+                * <strong>Fix #13:</strong> Approaching-2 patients now get a soft stop (PENDING_AGE_ELIGIBLE). File processes completely with pediatric codes pre-set. Scheduling blocked until birthday. Auto re-entry via REENTRY_RE_AGE2 on birthday.<br>
+                * <strong>Fix #14:</strong> Missing patient name no longer skips DOB/age validation. F_NAME now routes to DOB (not PAY), so age is still calculated and pediatric codes still selected correctly even when name is missing.
+            </div>
+
+            <div class="note note-blue">
+                <strong>[OK] PIN-1 RESOLVED:</strong> Payer-by-payer eligibility lookup requirements fully documented in <code>eligibility_combinations.json</code>. 21 payers, 75 combos, 15 unique field types. System checks if available data satisfies any combo for the identified payer. If not -> ALERT_INCOMPLETE_INSURANCE with specific missing fields and easiest combo to complete.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 1C: INSURANCE ID + PLAN TYPE                     -->
+    <!-- ============================================================ -->
+    <div id="m1-ins" class="section s-blue">
+        <div class="section-head">
+            <h2>MODULE 1C -- Insurance ID + Plan Type Signals</h2>
+            <div class="sub">Multiple signals gathered. Always confirmed during manual benefits verification post-tree.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>insurance.json</code> -- Payer identification, aliases, plan types, do-not-accept list<br>
+                * <code>payer_[id].json</code> + <code>criteria_[id].json</code> -- 3-layer chain: payer operational rules + clinical criteria with keyword arrays<br>
+                * <code>eligibility_combinations.json</code> -- ID format validation rules (21 payers, 75 combos, 15 field types)<br>
+                * <code>bcbs_prefix_database.json</code> -- 19,511 BCBS prefixes -> affiliate routing (loaded if payer = BCBS)
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    INS([Insurance Data]) --> EXTRACT["Extract: payer name,\nmember ID, group #"]
+
+    EXTRACT --> KNOWN{Payer in\ninsurance.json?}
+    KNOWN -->|Yes| PAYER_ID["Payer identified\nLoad payer_[id].json + criteria_[id].json\nvia 3-layer chain"]
+    KNOWN -->|No| UNKNOWN["FLAG_UNKNOWN_PAYER\nUse Carelon baseline\nAttempt ID clues"]
+
+    PAYER_ID --> SIGNALS["GATHER PLAN TYPE SIGNALS:\n---\n1. Card text (Supplement/MA/Medicaid)\n2. ID format patterns\n3. Member age (65+ = likely Medicare)\n4. Both cards present?\n5. BCBS specific retirement plans\n---\nThese are SIGNALS, not confirmation.\nConfirmation happens during\nmanual benefits verification."]
+
+    SIGNALS --> BEST_GUESS{"Best determination\nfrom available signals?"}
+    BEST_GUESS -->|"Supplement indicators\n(card says Plan G, etc.)"| SUPP_LIKELY["LIKELY_SUPPLEMENT\nProcess as no-auth\nConfirm during verification"]
+    BEST_GUESS -->|"MA indicators"| MA_LIKELY["LIKELY_MA\nProcess with MA criteria"]
+    BEST_GUESS -->|"Commercial indicators"| COMM_LIKELY["LIKELY_COMMERCIAL\nProcess with payer criteria"]
+    BEST_GUESS -->|"Medicaid indicators"| MCAID_LIKELY["LIKELY_MEDICAID\nProcess with Medicaid rules"]
+    BEST_GUESS -->|"Cannot determine"| NO_GUESS["PLAN_TYPE_UNKNOWN\nProcess all scenarios\nOutput possibilities for each"]
+
+    UNKNOWN --> NO_GUESS
+
+    SUPP_LIKELY --> BCBS_CHK{"Is this BCBS?"}
+    MA_LIKELY --> BCBS_CHK
+    COMM_LIKELY --> BCBS_CHK
+    MCAID_LIKELY --> BCBS_CHK
+    NO_GUESS --> BCBS_CHK
+
+    BCBS_CHK -->|Yes| BCBS_TREE(["-> BCBS 4-Step Sub-Tree\nRun full hierarchy\nthen return to COB Check"])
+    BCBS_CHK -->|No| PAYER_ROUTE(["-> Payer-Specific Routing\n(3-layer JSON chain)"])
+
+    BCBS_TREE --> BCBS_NOTE["BCBS 4-Step Hierarchy\n(see BCBS Routing section)\nAll exits return here"]
+    BCBS_NOTE --> COB_CHK
+    PAYER_ROUTE --> MA_GATE{"Plan type signal\n= LIKELY_MA?"}
+    MA_GATE -->|"Yes: LIKELY_MA"| MA_ROUTE(["-> MA Routing\nIPA + HMO checks\n(see MA Routing section)\nthen COB Check"])
+    MA_GATE -->|"No: Commercial /\nMedicaid / Other"| STD_ROUTE(["-> Payer Routing\nPer-payer rules\n(see Payer Routing section)\nthen COB Check"])
+    MA_ROUTE --> COB_CHK
+    STD_ROUTE --> COB_CHK
+    COB_CHK(["-> COB Check\nthen Provider/Notes"])
+
+    style SUPP_LIKELY fill:#064e3b,stroke:#34d399,color:#fff
+    style UNKNOWN fill:#78350f,stroke:#fbbf24,color:#fff
+    style NO_GUESS fill:#78350f,stroke:#fbbf24,color:#fff
+    style BCBS_NOTE fill:#1a1505,stroke:#fbbf24,color:#fff
+    style MA_GATE fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style MA_ROUTE fill:#1a0f30,stroke:#a78bfa,color:#fff
+    style STD_ROUTE fill:#1a1505,stroke:#fb923c,color:#fff
+                </pre>
+            </div>
+            <div class="note note-blue">
+                <strong>v0.18.3 KEY PRINCIPLE:</strong> The system gathers the best signals it can and makes its best determination. This is NOT confirmed -- it's a working assumption. Manual benefits verification after the tree confirms or corrects. If the payer name isn't recognized but the card says "Supplement Plan G," the system processes as supplement for auth purposes and continues trying to identify the payer.
+            </div>
+
+            <div class="dia-label">ID Format Validation (19 payers)</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    ID_START(["Member ID extracted\nPayer identified"]) --> FORMAT_CHK{"Check ID format\nagainst payer rules"}
+
+    FORMAT_CHK -->|"No member ID\nextracted"| NO_ID["ALERT_MISSING_MEMBER_ID\nPayer identified but\nno ID to validate\nRequest from patient/MD"]
+
+    FORMAT_CHK -->|"Tricare"| TRI_FMT{"Digit count?"}
+    TRI_FMT -->|"9 digits"| TRI_SSN["SSN [OK]"]
+    TRI_FMT -->|"11 digits"| TRI_DBN["DBN [OK]\n(often in member_id field)"]
+    TRI_FMT -->|"10 digits"| TRI_BAD["DOD ID [X]\nFLAG_INVALID_TRICARE_ID\nNeed SSN or DBN"]
+
+    FORMAT_CHK -->|"Aetna Commercial"| AETNA_FMT{"Format?"}
+    AETNA_FMT -->|"10 digits (W prefix OK)"| AETNA_OK["Standard [OK]"]
+    AETNA_FMT -->|"12 digits"| AETNA_AMB["AMBIGUOUS:\nMedicare MA or Intermountain HMO\nFLAG_VERIFY_AETNA_12DIGIT\nAge 65+ -> likely MA\nUnder 65 + CVS/HMO -> likely Intermountain\n---\nDetermination happens during\nmanual benefits verification.\nIf Intermountain confirmed -> OON stop\napplied by human at rerun stage."]
+
+    FORMAT_CHK -->|"Medicare FFS (MBI)"| MBI_FMT{"11 chars, mixed?\nLast 4 = 2 letters + 2 numbers?\nNo 3+ consecutive same type?"}
+    MBI_FMT -->|"Valid MBI format"| MBI_OK["MBI [OK]"]
+    MBI_FMT -->|"Invalid format"| MBI_BAD["FLAG_INVALID_MBI\nMay be old HICN, MA plan ID,\nor OCR error"]
+
+    FORMAT_CHK -->|"Medicaid (any plan)"| MCAID_FMT{"11 digits,\nall numeric?"}
+    MCAID_FMT -->|Yes| MCAID_OK["Medicaid ID [OK]"]
+    MCAID_FMT -->|"Letters present"| MCAID_BAD["FLAG_INVALID_MEDICAID_ID\nMedicaid IDs are always\n11 digits, no letters"]
+
+    FORMAT_CHK -->|"Humana"| HUM_FMT{"Starts with H?"}
+    HUM_FMT -->|Yes| HUM_OK["Humana ID [OK]"]
+    HUM_FMT -->|No| HUM_BAD["FLAG_VERIFY_HUMANA_ID\nMay be wrong payer\nor Humana Medicaid line"]
+
+    FORMAT_CHK -->|"UHC"| UHC_FMT{"Format?"}
+    UHC_FMT -->|"9 digits starting with 9"| UHC_OK["Standard UHC [OK]"]
+    UHC_FMT -->|"12 digits starting 771/777"| UHC_SUREST["FLAG_UHC_SUREST_DETECTED\nDifferent auth/network rules"]
+    UHC_FMT -->|"Letters present"| UHC_BAD["Wrong payer or MBI\nRe-evaluate payer ID"]
+
+    FORMAT_CHK -->|"BCBS"| BCBS_FMT["-> Prefix database lookup\nbcbs_prefix_database.json\n19,511 prefixes\nFirst 3 chars -> affiliate routing"]
+
+    FORMAT_CHK -->|"Other 12 payers"| OTHER_FMT["GEHA: starts with G\nLV Firefighters: starts with 800\nSierra/HPN: 11 digits, starts 1/2\nSilversummit: Medicaid=11 digits\n  Ambetter=2 letters + numbers\nAetna Supp: 3 letters + numbers\nCigna: all numbers or U+numbers"]
+
+    style TRI_BAD fill:#7f1d1d,stroke:#f87171,color:#fff
+    style NO_ID fill:#78350f,stroke:#fbbf24,color:#fff
+    style AETNA_AMB fill:#78350f,stroke:#fbbf24,color:#fff
+    style MBI_BAD fill:#78350f,stroke:#fbbf24,color:#fff
+    style MCAID_BAD fill:#78350f,stroke:#fbbf24,color:#fff
+    style HUM_BAD fill:#78350f,stroke:#fbbf24,color:#fff
+    style UHC_SUREST fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="note note-green">
+                <strong>v0.19.3 FIXES (M1C Format Validation):</strong><br>
+                * <strong>Fix #12:</strong> Payer identification and format validation are now sequential (not parallel). Unknown payers get format analysis to attempt derivation (e.g., 3-letter alpha prefix = BCBS). Format-derived payers get FLAG_PAYER_FROM_FORMAT.<br>
+                * <strong>Fix #15:</strong> Added explicit "No member ID extracted" branch → ALERT_MISSING_MEMBER_ID. Processing continues to signals without format validation.<br>
+                * <strong>Fix #16:</strong> Aetna 12-digit Intermountain label clarified — OON determination is a manual benefits-verification-time decision, not an automated branch.
+            </div>
+            <div class="note note-green">
+                <strong>[OK] PIN-2 + PIN-3 RESOLVED:</strong> ID format details per carrier for supplement and MA identification are fully documented. 19 payers with format validation rules. Supplement detection: Aetna Supplement = 3 letters + numbers. MA detection: MBI format (11 chars mixed), Aetna 12-digit disambiguation. All rules in <code>eligibility_combinations.json</code>.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 1D: COB -- CORRECTED ARCHITECTURE                 -->
+    <!-- ============================================================ -->
+    <div id="m1-cob" class="section s-purple">
+        <div class="section-head">
+            <h2>MODULE 1D -- COB / Multiple Payers <span class="fix-badge">v0.18.4</span></h2>
+            <div class="sub">NAIC auto-determination with data-availability gates on D1-D5. Federal overrides first. Full pipeline fallback at D6.</div>
+        </div>
+        <div class="section-body">
+            <div class="dia-label">STEP 1: Attempt COB auto-resolution using NAIC rules</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    COB(["2+ insurances detected\nRun Stage 1.3 for each payer"]) --> FED{"FEDERAL OVERRIDES\n(check first, override all NAIC)"}
+
+    FED -->|"Medicaid present"| FED_MCAID["Medicaid = ALWAYS SECONDARY\n42 CFR 433.139\nPayer of last resort"]
+    FED -->|"Tricare + employer"| FED_TRI["Tricare = SECONDARY to employer\n10 USC 1097c\nException: primary TO Medicaid"]
+    FED -->|"Medicare + Supplement"| FED_SUPP["Medicare = PRIMARY\nSupplement = SECONDARY\nNo auth for either"]
+    FED -->|"No federal override"| NAIC
+
+    FED_MCAID --> RESOLVED
+    FED_TRI --> RESOLVED
+    FED_SUPP --> RESOLVED
+
+    NAIC{"NAIC MO-120 RULES\nApply in order D1-D6\nSTOP at first rule that resolves\nSKIP if data not available"}
+
+    NAIC --> D1{"D1: Subscriber vs Dependent?\n(data: subscriber name\nvs patient name on cards)"}
+    D1 -->|"One is subscriber plan"| D1_R["Subscriber = PRIMARY\nDependent = SECONDARY"]
+    D1 -->|"Both subscriber or\nboth dependent"| D2
+    D1 -->|"Can't determine\nfrom available data"| D2
+
+    D1_R --> RESOLVED
+
+    D2{"D2: Dependent child?\nBirthday Rule\n(data: both parents' DOBs)"}
+    D2 -->|"Earlier birthday\nmonth/day = primary"| D2_R["Birthday Rule resolved"]
+    D2 -->|"Same birthday"| D2_LONG["Longer coverage = primary"]
+    D2 -->|"Parents divorced"| D2_DIV["Court decree names parent\nOR custody order applies"]
+    D2 -->|"Not dependent child\nor data unavailable"| D3
+
+    D2_R --> RESOLVED
+    D2_LONG --> RESOLVED
+    D2_DIV --> RESOLVED
+
+    D3{"D3: Active vs Retired?\n(data: employment status\nrarely on referral)"}
+    D3 -->|"One active, one retired"| D3_R["Active = PRIMARY"]
+    D3 -->|"Same status or\ndata unavailable"| D4
+    D3_R --> RESOLVED
+
+    D4{"D4: COBRA vs Regular?\n(data: COBRA status\nrarely on referral)"}
+    D4 -->|"One is COBRA"| D4_R["Regular = PRIMARY\nCOBRA = SECONDARY"]
+    D4 -->|"Neither COBRA or\ndata unavailable"| D5
+    D4_R --> RESOLVED
+
+    D5{"D5: Length of coverage?\n(data: effective dates\nsometimes on cards)"}
+    D5 -->|"One is longer"| D5_R["Longer = PRIMARY"]
+    D5 -->|"Same length or\ndata unavailable"| D6
+    D5_R --> RESOLVED
+
+    D6["D6: Cannot resolve\nAuto-determination FAILED"]
+
+    RESOLVED["COB RESOLVED\n---\nprimary_payer: identified\nsecondary_payer: identified\nrule_applied: which rule\nrule_citation: NAIC/CFR ref\nauto_resolved: true"]
+
+    D6 --> FALLBACK
+
+    style RESOLVED fill:#064e3b,stroke:#34d399,color:#fff
+    style D6 fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">STEP 2: Process based on COB result</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    RESULT{"COB auto-resolved?"}
+
+    RESULT -->|"YES: Primary +\nSecondary determined"| PRI_OON{"PRIMARY payer\nknown OON?"}
+
+    PRI_OON -->|Yes| OON_STOP["STANDARD OON PATH\n---\nPrimary is OON = standard OON stop\nIn-network secondary does NOT override\n---\nSTOP_OON_PRIMARY\nFLAG_CONTACT_PATIENT\nHuman resolution required"]
+
+    PRI_OON -->|No| DUAL_PIPE["PRIMARY payer:\nRun full M2-M5 pipeline\nDrives test selection + CPT\n---\nSECONDARY payer:\nRun M3+M5 using same test\nCheck secondary coverage + auth"]
+
+    RESULT -->|"NO: D6 fallback\nCannot auto-determine"| FALLBACK["FALLBACK: Run EACH payer\nthrough full pipeline individually\nProduce output for EACH\n---\nFLAG_COB_MANUAL_DETERMINATION\nHuman resolves during\nbenefit verification\nCall patient if needed"]
+
+    DUAL_PIPE --> SEC_OON{"Secondary payer\nknown OON?"}
+    SEC_OON -->|"Yes: Cigna Medicare,\nP3, Caremore, etc."| OON_PASS["OON SECONDARY PASSES\nProcess with in-network primary\nSecondary noted but doesn't block\n---\nONLY time OON doesn't\nstop processing"]
+    SEC_OON -->|"No / Unknown"| DUAL_OUT
+
+    OON_PASS --> DUAL_OUT
+    FALLBACK --> DUAL_OUT
+
+    DUAL_OUT(["-> Continue pipeline\nwith COB data attached"])
+
+    style OON_PASS fill:#78350f,stroke:#fbbf24,color:#fff
+    style OON_STOP fill:#7f1d1d,stroke:#f87171,color:#fff
+    style FALLBACK fill:#78350f,stroke:#fbbf24,color:#fff
+    style DUAL_PIPE fill:#064e3b,stroke:#34d399,color:#fff
+                </pre>
+            </div>
+            <div class="note note-green">
+                <strong>v0.18.3b CORRECTION:</strong> The system DOES run NAIC rules to auto-determine primary/secondary. Federal overrides first (Medicaid always last, Tricare secondary to employer), then NAIC D1-D6 in order. The "run each payer individually" approach is the FALLBACK only when auto-resolution fails at D6.
+            </div>
+            <div class="note note-red">
+                <strong>v0.18.5 -- OON Primary = Standard OON Stop:</strong><br>
+                If COB determines primary payer is OON, standard OON stop applies. The fact that secondary is in-network does NOT override this -- COB rules establish who is primary, and we cannot skip the primary to bill the secondary directly. STOP_OON_PRIMARY + FLAG_CONTACT_PATIENT generated for human resolution.
+            </div>
+            <div class="note note-yellow">
+                <strong>OON Secondary Exception:</strong> When a secondary payer is known OON but primary is in-network, the patient CAN still be tested under primary. The OON secondary is noted in the output but doesn't block processing. This is the ONLY scenario where OON doesn't stop processing.
+            </div>
+        </div>
+    </div>
+
+    <div id="m1-provider" class="section s-blue">
+        <div class="section-head">
+            <h2>MODULE 1E -- Provider & Chart Notes <span class="fix-badge">REBUILT v0.18.5</span></h2>
+            <div class="sub">Provider validation, signature check, supervising physician logic, credential validation, chart notes confirmation.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>signature_patterns.json</code> -- Electronic signature patterns (EHR systems, /s/, "electronically signed by"), credential tiers (MD/DO independent, NP/PA need supervising, MA/RN cannot order), freshness thresholds<br>
+                * <code>provider_databank.json</code> -- Known referring providers (NPI -> name/credentials/practice). Lookup cascade: databank -> NPPES API -> manual. Grows automatically as providers are verified.<br>
+                * <code>referral_keywords.json</code> -- Referral/order language for document validation (explicit referral phrases, order language, checkbox interpretation)<br>
+                * <code>facility_config.json</code> -- OCR exclusion filter (excludes facility's own phone/fax/NPI/address from provider extraction), supervising physician list for OON workaround, <code>signature_stale_threshold_days</code>, <code>signature_aging_threshold_days</code>
+            </div>
+            <div class="dia-label">Provider Validation Flow</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START(["Provider fields from\nStep 0 JSON"]) --> NAME{"Physician name\nextracted?"}
+
+    NAME -->|Yes| NPI_CHK{"NPI extracted?"}
+    NAME -->|"No / partial"| NAME_FLAG["ALERT_MISSING_PROVIDER_NAME\nAttempt extraction from\nsignature block or cover sheet"]
+
+    NPI_CHK -->|"Yes: 10 digits"| NPI_VALID["NPI format valid [OK]\nVerify against provider_databank.json\nthen NPPES Registry if not found"]
+    NPI_CHK -->|"Partial / malformed"| NPI_LOOKUP["NPI format invalid\nTreat as not present\nLookup by name in\nprovider_databank.json"]
+    NPI_CHK -->|"No NPI found"| NPI_LOOKUP
+
+    NPI_LOOKUP --> NPI_FLAG["ALERT_MISSING_NPI\nLookup by physician name\nnppes.cms.hhs.gov"]
+
+    NAME_FLAG --> CRED
+    NPI_VALID --> CRED
+    NPI_FLAG --> CRED
+
+    CRED{"Credentials\nidentifiable?"}
+    CRED -->|"MD / DO"| CRED_OK["Can order sleep studies [OK]"]
+    CRED -->|"NP / PA / APRN"| CRED_MID["Mid-level provider\nMay need supervising\nphysician for some payers"]
+    CRED -->|"Resident / Fellow\n/ Student / Intern"| CRED_STUDENT["Student/trainee\nSUPERVISING PHYSICIAN\nREQUIRED for auth"]
+    CRED -->|"Unknown / not parsed"| CRED_UNK["Credentials unclear\nVerify during processing"]
+
+    CRED_OK --> SIG
+    CRED_MID --> SUPV_NOTE_1(["-> See Supervising\nPhysician Logic below"])
+    SUPV_NOTE_1 --> SIG
+    CRED_STUDENT --> SUPV_NOTE_2(["-> See Supervising\nPhysician Logic below\nATTENDING REQUIRED"])
+    SUPV_NOTE_2 --> SIG
+    CRED_UNK --> SIG
+
+    SIG{"Signature present?"}
+    SIG -->|Yes| SIG_DATE{"Signature date?"}
+    SIG -->|No| SIG_MISSING["FLAG_MISSING_SIGNATURE\nRequest signed order\nfrom physician office"]
+
+    SIG_DATE -->|"Date present\nand parseable"| SIG_FRESH{"Date within 1 year?"}
+    SIG_DATE -->|"No date / illegible"| SIG_NODATE["ALERT_MISSING_SIG_DATE\nAssume current if\nreferral is recent"]
+
+    SIG_FRESH -->|"Yes: < 1yr old"| SIG_OK["Signature valid [OK]"]
+    SIG_FRESH -->|"No: > 1yr old"| SIG_STALE["FLAG_SIGNATURE_STALE\nNeed fresh signed order"]
+    SIG_FRESH -->|"Future date"| SIG_FUTURE["FLAG_FUTURE_DATE\nData entry error\nVerify with office"]
+
+    SIG_OK --> CONTACT
+    SIG_NODATE --> CONTACT
+    SIG_STALE --> CONTACT
+    SIG_FUTURE --> CONTACT
+    SIG_MISSING --> CONTACT
+
+    CONTACT{"Provider contact info?"}
+    CONTACT -->|"Fax and/or phone"| CONTACT_OK["Contact available [OK]"]
+    CONTACT -->|"Both null"| CONTACT_NONE["FLAG_NO_PROVIDER_CONTACT\nCannot reach provider\nSearch by name/NPI"]
+
+    CONTACT_OK --> STATE_CHK
+    CONTACT_NONE --> STATE_CHK
+
+    STATE_CHK{"Provider state =\nPatient state?"}
+    STATE_CHK -->|"Same state"| NOTES
+    STATE_CHK -->|"Different state"| OOS_CHK{"Patient payer\nis Medicaid?"}
+    STATE_CHK -->|"Cannot determine"| NOTES
+
+    OOS_CHK -->|"Yes: Medicaid"| OOS_BLOCK["FLAG_OUT_OF_STATE_PROVIDER\n[!] MEDICAID BLOCKER\nAll Medicaid plans require\nin-network providers\nVerify provider is enrolled"]
+    OOS_CHK -->|"No: other payer"| OOS_INFO["FLAG_OUT_OF_STATE_PROVIDER\n(informational only)\nVerify payer accepts\nout-of-state referral"]
+
+    OOS_BLOCK --> NOTES
+    OOS_INFO --> NOTES
+
+    NOTES{"Chart notes present?"}
+    NOTES -->|"Yes: notes_text\nhas content"| NOTES_QUALITY{"Notes quality\nassessment?"}
+    NOTES -->|"No / empty"| NOTES_MISSING["FLAG_NOTES_MISSING\nRequest from physician\nNotes needed for clinical\nassessment + auth"]
+
+    NOTES_QUALITY -->|"Multiple pages\nNarrative content\nSpecific symptoms\nExam findings"| NOTES_GOOD["Notes quality: GOOD [OK]\n-> ICD Processing"]
+    NOTES_QUALITY -->|"Single page\nCheckbox-only\nTemplate without\npatient-specific detail"| NOTES_POOR["FLAG_NOTES_QUALITY_POOR\nMay be insufficient for\nstrict payers (Evicore, NV Medicaid)\nConsider requesting fuller notes"]
+    NOTES_QUALITY -->|"Notes present but\nno signature found"| NOTES_UNSIGN["FLAG_NOTES_UNSIGNED\nPayers may reject\nunsigned documentation\nRequest signed copy"]
+
+    NOTES_POOR --> NOTES_OK(["-> ICD Processing\n(flag carried forward)"])
+    NOTES_UNSIGN --> NOTES_OK
+    NOTES_GOOD --> NOTES_OK
+    NOTES_MISSING --> NOTES_OK
+
+    style SIG_OK fill:#064e3b,stroke:#34d399,color:#fff
+    style NPI_VALID fill:#064e3b,stroke:#34d399,color:#fff
+    style CRED_OK fill:#064e3b,stroke:#34d399,color:#fff
+    style CONTACT_OK fill:#064e3b,stroke:#34d399,color:#fff
+    style SIG_MISSING fill:#7f1d1d,stroke:#f87171,color:#fff
+    style SIG_STALE fill:#7f1d1d,stroke:#f87171,color:#fff
+    style OOS_BLOCK fill:#7f1d1d,stroke:#f87171,color:#fff
+    style CRED_STUDENT fill:#78350f,stroke:#fbbf24,color:#fff
+    style SUPV_NOTE_2 fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Supervising Physician Logic</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START(["Supervising physician\nevaluation"]) --> TRIGGER{"Any trigger present?"}
+
+    TRIGGER -->|"Referring MD is\nstudent/resident/fellow"| SUPV_REQ["SUPERVISING REQUIRED\nAttending physician must\nbe listed for auth\n---\nIf not on referral:\nFLAG_SUPERVISING_NEEDED\nContact referring office"]
+
+    TRIGGER -->|"Supervising MD\nexplicitly on referral"| SUPV_LISTED["SUPERVISING CAPTURED\nPass through from OCR\n---\nName + NPI if available\nValidate same as referring"]
+
+    TRIGGER -->|"Referring MD is OON\nwith patient's plan"| SUPV_OON["SUPERVISING WORKAROUND\nFacility supervising MD\n(in-network) can be listed\nfor auth submission\n---\nFLAG_SUPERVISING_NEEDED\nUse facility attending"]
+
+    TRIGGER -->|"No triggers"| SUPV_NA["Supervising = N/A\nNot shown in output"]
+
+    SUPV_REQ --> DONE(["Continue"])
+    SUPV_LISTED --> DONE
+    SUPV_OON --> DONE
+    SUPV_NA --> DONE
+
+    style SUPV_REQ fill:#78350f,stroke:#fbbf24,color:#fff
+    style SUPV_OON fill:#78350f,stroke:#fbbf24,color:#fff
+    style SUPV_LISTED fill:#064e3b,stroke:#34d399,color:#fff
+    style SUPV_NA fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+            <div class="note note-blue">
+                <strong>Supervising Physician -- Three Triggers:</strong><br>
+                1. <strong>Student/Resident:</strong> Referring MD credentials indicate trainee -> attending required for auth<br>
+                2. <strong>Explicit on referral:</strong> OCR captured a supervising physician -> pass through<br>
+                3. <strong>OON workaround:</strong> Referring MD not in-network, facility supervising MD IS -> list supervising for auth submission
+            </div>
+            <div class="note note-yellow">
+                <strong>Provider validation does NOT check:</strong><br>
+                * 60-day clinical eval freshness (payers don't enforce this)<br>
+                * Provider specialty (any MD/DO can order sleep studies)<br>
+                * Provider state license (checked during credentialing, not referral processing)
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--         ICD CODE SCAN + INFECTIOUS DISEASE PPE                -->
+    <!-- ============================================================ -->
+    <div id="m2-icd" class="section s-red">
+        <div class="section-head">
+            <h2>ICD-10 CODE SCAN -- Auto-Codification + PPE + Comorbidity Extraction <span class="fix-badge">v0.18.5</span></h2>
+            <div class="sub">Three-tier codification: specific code, unspecified code (category clear), description-only (category unknown). Feedback loop learns from corrections (PIN-7).</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>icd10_curated.json</code> -- Tier A: 84 sleep-relevant ICD-10 codes with custom keywords. Fast keyword matching, covers ~80% of referrals.<br>
+                * <code>icd10_master_fy2026.json</code> -- Tier B: 5,193 codes (sleep-relevant chapters) with official CMS descriptions. LLM semantic matching for long-tail codes (e.g., "restless legs" -> G25.81).<br>
+                * <code>convert_icd10_master.py</code> -- Annual maintenance: CMS releases new code set each Oct 1. Script generates updated master JSON.<br>
+                * <code>cpt_keywords.json</code> -- CPT-related keywords used during OCR extraction to identify study references in notes.
+            </div>
+            <div class="dia-label">STEP 1: ICD Code Generation -- Three Sources, Two-Tier Lookup</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    EXTRACT(["Step 0 JSON output:\nnotes text + any literal\nICD codes from document"]) --> LITERAL
+
+    LITERAL["SOURCE 1: Literal codes\non document\n(doctor wrote G47.33)\nValidated against\ncurrent-year master list"]
+
+    EXTRACT --> SYMPTOMS["LLM extracts all\nclinical mentions\nfrom note text"]
+
+    SYMPTOMS --> TIER_A
+
+    subgraph LOOKUP["TWO-TIER LOOKUP"]
+        direction TB
+        TIER_A{"TIER A: Curated list\nicd10_curated.json\n84 codes\nkeyword matching"}
+        TIER_A -->|"Match found"| CURATED["SOURCE 2: CURATED MATCH\nsnoring -> R06.83\nHTN -> I10\nCHF -> I50.9\nOSA -> G47.33\n---\nFast, highest confidence\nCovers ~80% of referrals"]
+        TIER_A -->|"No match in\ncurated list"| TIER_B
+
+        TIER_B{"TIER B: Full ICD-10\nmaster reference\n~5,193 codes (sleep-relevant chapters)\nLLM semantic matching\nvs official CMS descriptions"}
+        TIER_B -->|"Match found"| REFERENCE["SOURCE 3: REFERENCE MATCH\nrestless legs -> G25.81\nbruxism -> G47.63\npulm HTN -> I27.0\nnarcolepsy -> G47.411\n---\nSlower, high confidence\nCatches the long tail"]
+        TIER_B -->|"No match"| CLASSIFY
+
+        CLASSIFY{"Can identify\nbody system\ncategory?"}
+        CLASSIFY -->|"Yes: category clear\ndetail unclear"| UNSPEC["UNSPECIFIED CODE\nheart problems -> I51.9\nlung issues -> J98.4"]
+        CLASSIFY -->|"No: can't even\nidentify category"| DESC["DESCRIPTION ONLY\nnot feeling well -> text\nother conditions per PCP -> text"]
+    end
+
+    LITERAL --> MERGE
+    CURATED --> MERGE
+    REFERENCE --> MERGE
+    UNSPEC --> MERGE
+    DESC --> MERGE
+
+    MERGE["MERGE + DEDUPLICATE\n+ VALIDATE all codes against\ncurrent-year master list\n---\nRetired code? -> ALERT_CODE_RETIRED\nNew code? -> use if valid"]
+
+    MERGE --> OUTPUT["ICD OUTPUT:\n---\nEach item tagged with source:\ndocument | curated | reference |\nunspecified | description_only\n---\nAll codes validated for\ncurrent year"]
+
+    style CURATED fill:#064e3b,stroke:#34d399,color:#fff
+    style REFERENCE fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style UNSPEC fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style DESC fill:#78350f,stroke:#fbbf24,color:#fff
+    style TIER_A fill:#064e3b,stroke:#34d399,color:#e1e7ef
+    style TIER_B fill:#1e3a5f,stroke:#4d8ef7,color:#e1e7ef
+                </pre>
+            </div>
+
+            <div class="dia-label">STEP 2: ICD Code Scan -- Categorization (all tiers with codes)</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    ICD(["All ICD-10 codes\n(Tier 1 + Tier 2 + literal)"]) --> SCAN["SCAN EACH CODE"]
+
+    SCAN --> INF{"Code starts with\nA or B?"}
+    INF -->|"Yes: A00-B99"| PPE_TYPE{"PPE Type?"}
+
+    PPE_TYPE -->|"B20, Z21, B18.x, B19.x\n(HIV, Hep B/C, Hepatitis)"| PPE_BLOOD["ALERT_PPE_BLOODBORNE\nGloves mandatory all contact\nSharps precautions\nNO clinical blocker"]
+    PPE_TYPE -->|"A15.x, A16.x, U07.1, J12.9\n(TB, COVID, Viral pneumonia)"| PPE_AIR["ALERT_PPE_AIRBORNE\nN95 + isolation room\nVerify disease inactive\nIf ACTIVE -> defer testing"]
+    PPE_TYPE -->|"Z22.321, Z22.322, B02.9, B37.1\n(MRSA, MSSA, Shingles, Fungal)"| PPE_CONTACT["ALERT_PPE_CONTACT\nGown + gloves for contact\nEnhanced room cleaning"]
+    PPE_TYPE -->|"Other A/B code"| PPE_GEN["INFO_INFECTIOUS_DISEASE_PPE\nGeneral PPE awareness"]
+
+    INF -->|No| SAFETY{"Patient safety\ncodes?"}
+
+    SAFETY -->|"G40.x, R56.9\n(Epilepsy, Seizures)"| SAFE_SEIZ["ALERT_SEIZURE_DISORDER\nTech awareness\nEmergency protocol ready"]
+    SAFETY -->|"F43.1x\n(PTSD)"| SAFE_PTSD["ALERT_PTSD\nCalm environment\nMay startle easily\nExtra hookup time"]
+    SAFETY -->|"R45.6, F63.81\n(Violence, IED)"| SAFE_VIOL["ALERT_VIOLENT_TENDENCY\nStaff safety precaution\nSchedule with extra staff"]
+    SAFETY -->|"N39.x, R32, R15.9\n(Incontinence)"| SAFE_INCON["ALERT_INCONTINENCE\nProtective covers\nExtra linens"]
+    SAFETY -->|"H90.x, H91.x, H54.x, F80.9\n(Hearing/Vision/Speech)"| SAFE_COMM["ALERT_COMMUNICATION_BARRIER\nInterpreter if needed\nWritten instructions"]
+
+    SAFETY -->|No| SLEEP{"G47.xx?"}
+    SLEEP -->|G47.30| DIAG_NEW["dx_type: NEW_DIAGNOSTIC"]
+    SLEEP -->|G47.33| DIAG_EST["dx_type: ESTABLISHED_OSA\nMay be retest/treatment"]
+    SLEEP -->|Other G47| DIAG_OTHER["dx_type: OTHER_SLEEP_DISORDER"]
+
+    SLEEP -->|No| MEDS{"Medication-related\ncodes?"}
+    MEDS -->|"I10, I11.x, I25.x\n(HTN, HHD, CAD)"| MED_CV["INFO_MEDICATION_BP\nCardiovascular comorbidity\nSupports clinical justification"]
+    MEDS -->|"F32.x, F41.x\n(Depression, Anxiety)"| MED_PSYCH["INFO_MEDICATION_PSYCH\nMay affect sleep architecture\nDocument for interpreting MD"]
+    MEDS -->|"F51.x\n(Primary insomnia)"| MED_SLEEP["comorbidity += insomnia\nDifferential diagnosis relevant"]
+
+    MEDS -->|No| COMORBID{"Known comorbidity?"}
+    COMORBID -->|"I50.x CHF"| CM_CHF["comorbidity += CHF\nClinical link: central apnea\nTitration likely relevant"]
+    COMORBID -->|"E66.01 Morbid obesity"| CM_OB["comorbidity += morbid_obesity\nClinical link: hypoventilation\nTitration likely relevant"]
+    COMORBID -->|"I48.x AFib"| CM_AFIB["comorbidity += AFib\nMedicare: check AFib-only"]
+    COMORBID -->|"J44.x COPD"| CM_COPD["comorbidity += COPD\nNeed FEV1 for severity"]
+    COMORBID -->|"G20/G12 Neuro"| CM_NEURO["comorbidity += neuromuscular\nPSG clinically preferred"]
+    COMORBID -->|"F11.x Opioid use"| CM_OPIOID["comorbidity += chronic_opioid\nClinical link: central apnea\nTitration likely relevant"]
+    COMORBID -->|Other| CM_LOG["Log for reference"]
+
+    PPE_BLOOD --> FACTS
+    PPE_AIR --> FACTS
+    PPE_CONTACT --> FACTS
+    PPE_GEN --> FACTS
+    SAFE_SEIZ --> FACTS
+    SAFE_PTSD --> FACTS
+    SAFE_VIOL --> FACTS
+    SAFE_INCON --> FACTS
+    SAFE_COMM --> FACTS
+    DIAG_NEW --> FACTS
+    DIAG_EST --> FACTS
+    DIAG_OTHER --> FACTS
+    MED_CV --> FACTS
+    MED_PSYCH --> FACTS
+    MED_SLEEP --> FACTS
+    CM_CHF --> FACTS
+    CM_OB --> FACTS
+    CM_AFIB --> FACTS
+    CM_COPD --> FACTS
+    CM_NEURO --> FACTS
+    CM_OPIOID --> FACTS
+    CM_LOG --> FACTS
+
+    FACTS["ICD SCAN OUTPUT:\n---\nAll codes categorized\nppe_alerts: [{type, code, precautions}]\nsafety_alerts: [{type, code, action}]\nmedication_flags: [{class, relevance}]\ncomorbidity_list: conditions\ndx_type: new/established/other\ncomorbidity_titration_relevant: true/false\nmedicare_afib_only: true/false\n---\nThese are CLINICAL FACTS.\nTest-level decisions made in M2C/M4.\nSafety alerts carried to M6 output."]
+
+    style PPE_BLOOD fill:#7f1d1d,stroke:#f87171,color:#fff
+    style PPE_AIR fill:#7f1d1d,stroke:#f87171,color:#fff
+    style PPE_CONTACT fill:#78350f,stroke:#fbbf24,color:#fff
+    style PPE_GEN fill:#78350f,stroke:#fbbf24,color:#fff
+    style SAFE_SEIZ fill:#78350f,stroke:#fbbf24,color:#fff
+    style SAFE_PTSD fill:#78350f,stroke:#fbbf24,color:#fff
+    style SAFE_VIOL fill:#7f1d1d,stroke:#f87171,color:#fff
+    style SAFE_INCON fill:#78350f,stroke:#fbbf24,color:#fff
+    style SAFE_COMM fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-red">
+                <strong>v0.18.3 CORRECTION -- Infectious disease is PPE flag, NOT clinical blocker.</strong><br>
+                ICD A00-B99 (infectious + parasitic diseases) flags for staff safety and PPE purposes. Does NOT block clinical processing.
+            </div>
+            <div class="note note-yellow">
+                <strong>v0.18.5 -- Two-Tier ICD Codification from Notes:</strong><br>
+                Doctors don't attach ICD codes separately -- they're in the notes. <strong>Tier A (icd10_curated.json):</strong> 84 sleep-relevant codes with custom keywords. Fast keyword matching, covers ~80% of referrals. <strong>Tier B (full ICD-10 master reference):</strong> ~5,193 codes (sleep-relevant chapters) with official CMS descriptions. LLM semantic matching catches the long tail -- "restless legs" -> G25.81, "bruxism" -> G47.63. Only runs when Tier A has no match. <strong>Unspecified codes</strong> when category clear but detail isn't (e.g., "heart problems" -> I51.9). <strong>Description-only</strong> when even category can't be determined. All codes validated against current-year master list.
+            </div>
+            <div class="note note-green">
+                <strong>v0.18.5 -- Tier B -> Tier A Promotion:</strong><br>
+                When a reference-matched code appears 3+ times in 30 days, system suggests adding it to the curated list with keywords. Staff approves -> code is promoted to fast Tier A matching. Curated list grows organically based on what the practice actually sees. Staff can also search the full reference directly when assigning codes to description-only items -- no more external database lookups.
+            </div>
+            <div class="note note-green">
+                <strong>[OK] PIN-7 RESOLVED:</strong> ICD codification feedback loop. You (human) manually correct auto-codified codes in output. CONFIRM / CORRECT / SPECIFY / ASSIGN / ADD actions. When a reference-matched code appears 3+ times in 30 days, system suggests promotion to curated list. Staff approves -> code moves to fast Tier A matching. The feedback mechanism is your manual corrections applied during case review.
+            </div>
+            <div class="note note-green">
+                <strong>[OK] PIN-8 RESOLVED:</strong> Annual ICD-10 master list update process built. Script: <code>convert_icd10_master.py</code>. CMS releases new code set each October 1. Download CSV -> run script -> generates <code>icd10_master_[year].json</code>. Validates curated list against new master -- flags retired codes, notes new codes. Current: FY2026 (5,193 codes (sleep-relevant chapters)).
+            </div>
+        </div>
+    </div>
+
+    <div id="m2-nlp" class="section s-red">
+        <div class="section-head">
+            <h2>M2A-NLP -- Context Processing <span class="fix-badge">NEW v0.19.3</span></h2>
+            <div class="sub">Applied during Step 0.5 (post-OCR, pre-tree). Ensures extracted clinical data is properly contextualized before entering the decision tree. Runs on all note text.</div>
+        </div>
+        <div class="section-body">
+            <div class="dia-label">Negation Detection</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    NEG_START(["Clinical mention\nextracted from notes"]) --> NEG_CHK{"Negation words\nwithin 5-word window?"}
+
+    NEG_CHK -->|"'denies', 'absent',\n'no history of', 'negative for',\n'none', 'without', 'no evidence',\n'WNL', 'unremarkable',\n'not present', 'free of'"| NEG_SCOPE{"Negation scope?"}
+
+    NEG_SCOPE -->|"Single symptom negated\n'No snoring, but has\nwitnessed apneas'"| NEG_SINGLE["EXCLUDE negated symptom\nKEEP non-negated symptoms\n---\nsnoring = EXCLUDED\napneas = INCLUDED"]
+    NEG_SCOPE -->|"Blanket denial\n'Denies all sleep symptoms'"| NEG_BLANKET["EXCLUDE all following\nsleep symptoms in context\n---\nBUT: may have other\nrelevant findings later\nin same note"]
+    NEG_SCOPE -->|"Qualified negation\n'No snoring per patient,\nbut wife reports loud snoring'"| NEG_CONFLICT["MIXED_SIGNALS\nFLAG_VERIFY_MANUALLY\nInclude WITH conflict note"]
+
+    NEG_CHK -->|"No negation found"| NEG_INCLUDE["INCLUDE as positive\nclinical finding"]
+
+    style NEG_SINGLE fill:#064e3b,stroke:#34d399,color:#fff
+    style NEG_INCLUDE fill:#064e3b,stroke:#34d399,color:#fff
+    style NEG_CONFLICT fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Family vs Personal History Exclusion</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    FAM_START(["Clinical mention\nwith family context"]) --> FAM_CHK{"Subject analysis:\nWho has the condition?"}
+
+    FAM_CHK -->|"'Patient's father snores'\n'Family history of OSA'\n'Mother has sleep apnea'\n'FH: HTN, DM'"| FAM_EXCL["EXCLUDE from patient symptoms\n---\nFamily history = INFORMATIONAL\nDoes NOT count as patient symptom\nDoes NOT satisfy sufficiency criteria"]
+
+    FAM_CHK -->|"'Patient snores like father'\n'Snoring runs in family,\npatient affected too'\n'Same symptoms as mother'"| FAM_INCL["INCLUDE as patient symptom\n---\nPatient is the subject\nFamily comparison is context only"]
+
+    FAM_CHK -->|"'History of OSA'\n(ambiguous -- whose?)"| FAM_AMB{"Context clues?"}
+    FAM_AMB -->|"In 'Family History'\nsection of note"| FAM_EXCL
+    FAM_AMB -->|"In 'Medical History'\nor 'HPI' section"| FAM_INCL
+    FAM_AMB -->|"Cannot determine"| FAM_FLAG["FLAG_VERIFY_MANUALLY\nInclude tentatively\nwith ambiguity note"]
+
+    style FAM_EXCL fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style FAM_INCL fill:#064e3b,stroke:#34d399,color:#fff
+    style FAM_FLAG fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Temporal Context -- Active vs Resolved vs Discontinued</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    TEMP_START(["Clinical mention\nwith temporal indicator"]) --> TEMP_CHK{"Temporal status?"}
+
+    TEMP_CHK -->|"'Currently has'\n'Ongoing'\n'Active'\n'Still using CPAP'\n'Present complaint'"| TEMP_ACTIVE["STATUS: ACTIVE\nInclude as current finding\nFull clinical weight"]
+
+    TEMP_CHK -->|"'Had sleep apnea 10 years ago,\nresolved after weight loss'\n'OSA resolved post-surgery'\n'No longer an issue'"| TEMP_RESOLVED["STATUS: RESOLVED\nINFO_CONDITION_RESOLVED\n---\nDoes NOT count as\ncurrent diagnosis\nBUT: may be relevant context\nfor re-evaluation"]
+
+    TEMP_CHK -->|"'Discontinued CPAP 2 years ago'\n'Off CPAP since 2023'\n'Stopped using'\n'Was on CPAP, quit'"| TEMP_DISC["STATUS: DISCONTINUED_PAP\nINFO_CPAP_CONTEXT\n---\nTRIGGERS DECISION TREE:\n* Why discontinued?\n* How long ago?\n* Still positive?\n* Repeat titration rules apply\nAll CPAP context carried\nthrough to output"]
+
+    TEMP_CHK -->|"'Previous sleep study showed'\n'Prior PSG in 2020'\n'Last test 3 years ago'"| TEMP_PRIOR["STATUS: PRIOR_STUDY\nFeed into M2B prior results\nvalidation + recency check\n---\nExtract: date, AHI, facility\nif mentioned"]
+
+    TEMP_CHK -->|"No temporal indicator"| TEMP_CURRENT["Assume CURRENT\nDefault to active finding"]
+
+    style TEMP_ACTIVE fill:#064e3b,stroke:#34d399,color:#fff
+    style TEMP_RESOLVED fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style TEMP_DISC fill:#78350f,stroke:#fbbf24,color:#fff
+    style TEMP_PRIOR fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Medication Class Detection</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    MED_START(["Medication mentions\nin notes"]) --> MED_CLASS{"Medication class?"}
+
+    MED_CLASS -->|"Opioids:\noxycodone, morphine, fentanyl,\nhydrocodone, percocet, vicodin"| MED_OPIOID["comorbidity += chronic_opioid\n---\nRespiratory depression risk\nCentral apnea association\nPSG strongly recommended\nAPAP contraindicated"]
+
+    MED_CLASS -->|"BP Medications:\nlisinopril, metoprolol, amlodipine,\nACE inhibitor, beta blocker, diuretic"| MED_BP["INFO_MEDICATION_BP\n---\nCardiovascular comorbidity\nHTN supports clinical\njustification for testing"]
+
+    MED_CLASS -->|"Sleep/Psych Medications:\nambien, trazodone, melatonin,\nantidepressant, benzodiazepine,\nanxiety medication"| MED_PSYCH_OUT["INFO_MEDICATION_PSYCH\n---\nMay affect sleep architecture\nDocument for interpreting MD\nDoes NOT block testing"]
+
+    MED_CLASS -->|"Other medications"| MED_OTHER["Log for reference\nNo specific flag"]
+
+    style MED_OPIOID fill:#7f1d1d,stroke:#f87171,color:#fff
+    style MED_BP fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style MED_PSYCH_OUT fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Language Barrier Detection</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    LANG_START(["Notes text + patient\ndemographic fields"]) --> LANG_CHK{"Language indicators?"}
+
+    LANG_CHK -->|"'Spanish speaking'\n'Interpreter needed'\n'Limited English'\n'Non-English primary'\n'Translator required'"| LANG_FLAG["ALERT_LANGUAGE_BARRIER\n---\nArrange interpreter for:\n* Scheduling call\n* Night of study (consent)\n* Equipment instructions\n---\nDocument language in output"]
+
+    LANG_CHK -->|"No indicators\nor English confirmed"| LANG_OK["No language flag needed"]
+
+    style LANG_FLAG fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+
+            <div class="note note-red">
+                <strong>NLP Context Processing -- Conservative Approach:</strong><br>
+                When any of these produce ambiguous results (mixed signals, unclear negation scope, uncertain family vs personal), the system flags for manual verification rather than making assumptions. The principle: when uncertain, include the finding but flag it. Better to over-include and let staff verify than to silently exclude a relevant finding.
+            </div>
+        </div>
+    </div>
+
+    <div id="m2-scope" class="section s-green">
+        <div class="section-head">
+            <h2>MODULE 2B -- Order Scope + Prior Results <span class="fix-badge">REBUILT v0.18.5</span></h2>
+            <div class="sub">Order language determines what tests are even on the table. ICD codes feed in from ICD Processing step. Prior results validated. This is the foundation of test selection.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>referral_keywords.json</code> -- Scope interpretation rules: "eval and treat" -> FULL, "diagnostic only" -> PSG/HST, "titration" -> 95811. Checkbox mapping. Non-referral indicators.<br>
+                * <code>cpt_selector_FIXED.json</code> -- CPT hierarchy rules for scope expansion/contraction and default logic.<br>
+                * <code>facility_config.json</code> -- <code>prior_study_absolute_max_years</code> (5yr), <code>prior_study_aging_threshold_years</code> (1yr) for prior results recency validation.
+            </div>
+            <div class="dia-label">Step 1: Order Language -> Scope Determination</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    ORDER(["Order text from\nStep 0 JSON extraction"]) --> FORMAT{"Order format?"}
+
+    FORMAT -->|"CHECKBOX\n(specific test marked)"| CHK_TYPE{"Checkbox value?"}
+    CHK_TYPE -->|"Complete Sleep Study\nor Split Night"| SCOPE_FULL["scope = ALL CODES\n[HST, PSG, Split, Titration]\nscope_type = FULL"]
+    CHK_TYPE -->|"Polysomnogram\nor In-Lab"| SCOPE_DIAG_PSG["scope = [PSG, HST]\nscope_type = DIAGNOSTIC\nscope_note: split_if_needed"]
+    CHK_TYPE -->|"Home Sleep Test"| SCOPE_HST["scope = [HST only]\nscope_type = HST_LOCKED"]
+    CHK_TYPE -->|"Titration\nor CPAP Study"| TIT_PREREQ{"Prior positive\ndiagnostic results?"}
+
+    FORMAT -->|"FREE TEXT\n(written order language)"| TEXT_TYPE{"Verbiage analysis?"}
+    TEXT_TYPE -->|"'Evaluate for...'\n'Diagnostic'\n'Rule out'\n'Referral for sleep study'"| SCOPE_DIAG["scope = [PSG, HST]\nscope_type = DIAGNOSTIC"]
+    TEXT_TYPE -->|"'Evaluate and treat'\n'Eval & treat'\n'Complete sleep study'\n'Any sleep test'"| SCOPE_FULL
+    TEXT_TYPE -->|"'Titration'\n'CPAP titration'\n'PAP study'\n'Treat OSA'"| TIT_PREREQ
+    TEXT_TYPE -->|"'Sleep study'\n'Sleep test'\n(generic/ambiguous)"| SCOPE_AMB["scope = [PSG, HST]\nscope_type = AMBIGUOUS\nFLAG_AMBIGUOUS_ORDER"]
+    TEXT_TYPE -->|"'Split night'\n'Split night if indicated'"| SCOPE_SPLIT["scope = [PSG, Split, Titration]\nscope_type = SPLIT_REQUESTED\nsplit_reason += ORDER_REQUESTED"]
+
+    TIT_PREREQ -->|"YES: prior AHI\nqualifies for titration"| TIT_SPLIT_CHK{"Also qualifies\nfor split?"}
+    TIT_SPLIT_CHK -->|Yes| SCOPE_TIT_SPLIT["scope = [Titration, Split]\nscope_type = TITRATION"]
+    TIT_SPLIT_CHK -->|No| SCOPE_TIT["scope = [Titration]\nscope_type = TITRATION"]
+    TIT_PREREQ -->|"NO: no prior\npositive diagnostic"| TIT_BLOCK["FLAG_NEEDS_PRIOR_RESULTS\nCannot authorize titration\nwithout diagnosis\n---\nIf prior study exists but\nnot on referral -> request it\nIf no prior study -> need\ndiagnostic first\n---\nTitration BLOCKED in scope\nuntil prior results obtained"]
+
+    FORMAT -->|"NO ORDER\n(order.text = null)"| NO_ORDER["scope = UNKNOWN\nscope_type = PENDING\n-> PENDING_ORDER path"]
+
+    SCOPE_FULL --> SCOPE_OUT
+    SCOPE_DIAG --> SCOPE_OUT
+    SCOPE_DIAG_PSG --> SCOPE_OUT
+    SCOPE_HST --> SCOPE_OUT
+    SCOPE_AMB --> SCOPE_OUT
+    SCOPE_SPLIT --> SCOPE_OUT
+    SCOPE_TIT --> SCOPE_OUT
+    SCOPE_TIT_SPLIT --> SCOPE_OUT
+    TIT_BLOCK --> SCOPE_BLOCKED["SCOPE WITH BLOCK\n---\ncpt_scope[]: titration in scope\nbut BLOCKED by missing prior\n---\nContinues to M2C/M2D\nfor clinical pre-assessment\nTitration cannot proceed to\nM3/M4 until prior results arrive\nRe-entry: M2B"]
+
+    SCOPE_OUT["SCOPE DETERMINED\n---\ncpt_scope[]: allowed tests\nscope_type: how we got here\nphysician_preference: from order\nflags: any scope flags"]
+
+    NO_ORDER --> PEND(["-> PENDING_ORDER\nOrder check already flagged this\nPre-assessment only"])
+
+    SCOPE_OUT --> PRIOR(["-> Prior Results Check"])
+
+    SCOPE_BLOCKED --> PRIOR
+
+    style SCOPE_FULL fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_DIAG fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_DIAG_PSG fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_HST fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_SPLIT fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_TIT fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_TIT_SPLIT fill:#064e3b,stroke:#34d399,color:#fff
+    style SCOPE_AMB fill:#78350f,stroke:#fbbf24,color:#fff
+    style TIT_BLOCK fill:#7f1d1d,stroke:#f87171,color:#fff
+    style NO_ORDER fill:#78350f,stroke:#fbbf24,color:#fff
+    style SCOPE_BLOCKED fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-green">
+                <strong>Scope Principle:</strong> Order language determines the CEILING of what tests can be considered. Clinical assessment (M2C) may remove options. Insurance (M3) may remove more. But nothing can ADD tests beyond what the order allows. Default to what the physician ordered -- only deviate if insurance or clinical factors force it.
+            </div>
+            <div class="note note-yellow">
+                <strong>Ambiguous Orders:</strong> Generic "sleep study" or "sleep test" without specifying HST vs PSG defaults to diagnostic scope [PSG, HST]. FLAG_AMBIGUOUS_ORDER noted but doesn't block processing -- the system makes the best clinical/insurance-driven selection from the available scope.
+            </div>
+
+            <div class="dia-label">Step 2: CPT Defaulting Hierarchy</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    TOP["CPT HIERARCHY\n(top = most intensive)"] --> TIT
+
+    TIT["95811 -- Titration Only\n(top of hierarchy)"]
+    TIT -->|"? DOWN: can default\nto Split only"| SPLIT
+    TIT -.->|"[X] CANNOT skip to\n95810 or HST\n(needs new order)"| BLOCKED_1["BLOCKED"]
+
+    SPLIT["95810 + 95811 -- Split Night\n(bridge code)"]
+    SPLIT -->|"? UP: CAN go to\n95811 if necessary"| TIT
+    SPLIT -->|"? DOWN: can default\nto 95810 or HST"| PSG
+
+    PSG["95810 -- PSG Diagnostic"]
+    PSG -->|"? DOWN: can default\nto HST"| HST
+
+    HST["95806/G0399 -- HST\n(bottom of hierarchy)"]
+    HST -.->|"[X] CANNOT go UP\nAlways needs new order\n-> PENDING_NEW_ORDER"| BLOCKED_2["BLOCKED"]
+
+    style TIT fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style SPLIT fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style PSG fill:#064e3b,stroke:#34d399,color:#fff
+    style HST fill:#064e3b,stroke:#34d399,color:#fff
+    style BLOCKED_1 fill:#7f1d1d,stroke:#f87171,color:#fff
+    style BLOCKED_2 fill:#7f1d1d,stroke:#f87171,color:#fff
+                </pre>
+            </div>
+            <div class="note note-green">
+                <strong>Defaulting Rules:</strong><br>
+                * <strong>DOWN = generally allowed</strong> (less intensive test, protects patient from unnecessary cost/procedure)<br>
+                * <strong>UP = never allowed</strong> (more intensive test needs physician authorization via new order)<br>
+                * <strong>Exception:</strong> Titration (95811) can only default DOWN to Split, not further to 95810 or HST. If the doctor ordered titration, the result MUST include a titration component.<br>
+                * <strong>Exception:</strong> Split CAN go UP to 95811 (titration is already included in split scope).<br>
+                * <strong>Applied in M3:</strong> When payer doesn't cover a code, the system checks if it can default within scope before generating PENDING_NEW_ORDER.
+            </div>
+
+            <div class="dia-label">Step 3: Prior Results Validation</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    SCOPE(["Scope includes\ntitration or split?"]) --> TIT_CHK{"Titration or Split\nin scope?"}
+
+    TIT_CHK -->|"No: diagnostic only\n(PSG/HST)"| NO_PRIOR["No prior results needed\nfor initial diagnostic\n-> Continue to M2C"]
+    TIT_CHK -->|"Yes: titration or\nsplit in scope"| PRIOR_CHK{"Prior positive\ndiagnostic on file?"}
+
+    PRIOR_CHK -->|"Yes: results from\nown facility"| OWN_FAC["ACCEPTED [OK]\nHighest confidence\n-> Validate recency"]
+    PRIOR_CHK -->|"Yes: results from\nother lab"| OTHER_LAB["ACCEPTED [OK]\nNeed actual report\n(not just MD notes)\n-> Validate recency"]
+    PRIOR_CHK -->|"MD notes mention\nprior study"| MD_NOTES{"Notes include\nAHI + dates + details?"}
+    MD_NOTES -->|"Yes: specific AHI,\ndates, lab name"| MD_ACCEPT["ACCEPTED with caution [OK]\nMay need to request\nfull report for auth"]
+    MD_NOTES -->|"No: vague reference\n'patient had prior study'"| MD_REJECT["NOT SUFFICIENT [X]\nFLAG_NEED_PRIOR_RESULTS\nRequest full report"]
+    PRIOR_CHK -->|"No prior results\nat all"| NO_RESULTS["NOT SUFFICIENT [X]\nFLAG_NEEDS_PRIOR_RESULTS\nCannot authorize titration\nwithout prior diagnostic"]
+    PRIOR_CHK -->|"Prior PAP/CPAP\nmentioned but no study"| PAP_NO_STUDY["FLAG_REQUEST_PRIOR_STUDY\nPatient had PAP before ->\nprior study must exist\nRequest from original facility"]
+
+    OWN_FAC --> RECENCY
+    OTHER_LAB --> RECENCY
+    MD_ACCEPT --> RECENCY
+
+    RECENCY{"Recency check\n(check 5yr first)"}
+    RECENCY -->|"ANY study > 5yr old\n(absolute hard stop)"| STALE_5["ABSOLUTE MAX EXCEEDED\nSTOP_TITRATION_EXPIRED\nStudy too old\nNeed new diagnostic"]
+    RECENCY -->|"Initial titration:\ndiagnostic 1-5yr old"| STALE_1["FLAG_TITRATION_TIMING\n+ FLAG_TITRATION_PRIOR_STUDY_AGING\nMay need repeat diagnostic\nbefore titration (circumstantial)"]
+    RECENCY -->|"Initial titration:\ndiagnostic < 1yr old"| RECENT_OK["Timing OK [OK]"]
+    RECENCY -->|"Repeat titration:\nexisting PAP patient"| REPEAT["REPEAT TITRATION (PIN-6 [OK]):\nPath A: Still positive +\npressure change -> retitration\nPath B: Questioning diagnosis\n-> repeat diagnostic first\n5yr from original diag = max"]
+
+    RECENT_OK --> DONE(["-> M2C Contraindications"])
+    NO_PRIOR --> DONE
+    STALE_1 --> DONE
+    STALE_5 --> DONE
+    REPEAT --> DONE
+    MD_REJECT --> DONE
+    NO_RESULTS --> DONE
+    PAP_NO_STUDY --> DONE
+
+    style OWN_FAC fill:#064e3b,stroke:#34d399,color:#fff
+    style OTHER_LAB fill:#064e3b,stroke:#34d399,color:#fff
+    style MD_ACCEPT fill:#064e3b,stroke:#34d399,color:#fff
+    style RECENT_OK fill:#064e3b,stroke:#34d399,color:#fff
+    style NO_PRIOR fill:#064e3b,stroke:#34d399,color:#fff
+    style MD_REJECT fill:#7f1d1d,stroke:#f87171,color:#fff
+    style NO_RESULTS fill:#7f1d1d,stroke:#f87171,color:#fff
+    style PAP_NO_STUDY fill:#78350f,stroke:#fbbf24,color:#fff
+    style STALE_1 fill:#78350f,stroke:#fbbf24,color:#fff
+    style STALE_5 fill:#7f1d1d,stroke:#f87171,color:#fff
+                </pre>
+            </div>
+            <div class="note note-yellow">
+                <strong>Prior Results -- Key Rules:</strong><br>
+                * Own facility results = always accepted (we have the data)<br>
+                * Other lab results = accepted IF actual report provided (not just a mention)<br>
+                * MD notes = only if they include AHI, dates, and specific details<br>
+                * Max 1yr between initial diagnostic and initial titration<br>
+                * 5yr absolute maximum for any prior study<br>
+                * Prior PAP mentioned + no study results = FLAG_REQUEST_PRIOR_STUDY (request from original facility)
+            </div>
+            <div class="note note-green"><strong>[OK] PIN-6 RESOLVED -- Repeat Titration Rules</strong><br><br>
+                <strong>Two distinct paths for existing PAP patients:</strong><br><br>
+                <strong>PATH A -- STRAIGHT TO RETITRATION (no new diagnostic):</strong><br>
+                Patient still positive (diagnosis not in question). Needs pressure adjustment.<br>
+                * Pressure complications with newly obtained equipment<br>
+                * Weight gain -> pressure may be too low<br>
+                * Weight loss (moderate) -> pressure may be too high<br>
+                * Feels less effective / not working as well<br>
+                * Pressure feels too high<br>
+                * Within 5 years of original diagnostic study<br>
+                -> Order: 95811 (titration) or split night<br>
+                -> Prior diagnostic NOT required to be repeated<br><br>
+                <strong>PATH B -- REPEAT DIAGNOSTIC FIRST:</strong><br>
+                Questioning whether patient is still positive at all.<br>
+                * Significant weight loss (enough to question OSA persistence)<br>
+                * Corrective surgery (adenotonsillectomy, bariatric, jaw surgery, etc.)<br>
+                * Any change that could eliminate the underlying condition<br>
+                -> Order: 95810 (diagnostic PSG) or HST first<br>
+                -> If still positive -> then titration<br>
+                -> If negative -> no titration needed<br><br>
+                <strong>5-YEAR RULE:</strong> Measured from original diagnostic study date. After 5 years, repeat diagnostic required regardless of path.<br><br>
+                <strong>Key distinction:</strong> "Do my settings need adjusting?" (Path A) vs. "Do I still have this?" (Path B)
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 2C: CONTRAINDICATIONS -- CORRECTED                -->
+    <!-- ============================================================ -->
+    <div id="m2-contra" class="section s-green">
+        <div class="section-head">
+            <h2>MODULE 2C -- Contraindications <span class="fix-badge">v0.18.4</span></h2>
+            <div class="sub">O2 is the ONLY hard stop for HST. All other comorbidities are recommendations/flags -- HST can still be selected if physician ordered it or patient needs it.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>contraindications.json</code> -- 2 hard stops (homebound+O2 = STOP_CANNOT_TEST, age&lt;2 = STOP_AGE), 1 HST hard block (home O2), 6 soft recommendations (COPD/CHF/opioids/BMI&gt;50/neuromuscular/central apnea -> FLAG_PSG_RECOMMENDED but HST remains available), 4 pediatric tiers, titration prerequisites with recency rules.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    SCOPE([Current Scope\n+ Comorbidity List\nfrom ICD Scan]) --> SCOPE_CHK_TOP{"Scope known?"}
+
+    SCOPE_CHK_TOP -->|"Yes: order present\nscope determined"| HST_IN{"HST in scope?"}
+    SCOPE_CHK_TOP -->|"UNKNOWN:\nPENDING_ORDER\nno scope yet"| PRE_ASSESS["PRE-ASSESSMENT MODE\n---\nNo scope to narrow -- evaluate\nclinical facts for when order arrives"]
+
+    PRE_ASSESS --> O2_PRE{"HOME OXYGEN?"}
+    O2_PRE -->|Yes| PRE_O2["PRE-ASSESSMENT:\nHST will be contraindicated\nwhen order arrives\nOnly in-lab viable"]
+    O2_PRE -->|No| PRE_PED{"Pediatric < 18?"}
+    PRE_PED -->|Yes| PRE_PED_FLAG["PRE-ASSESSMENT:\nHST not available\nIn-lab only (pediatric)"]
+    PRE_PED -->|No| COMPLEXITY_PRE["Evaluate comorbidity\nseverity (below)"]
+
+    PRE_O2 --> COMPLEXITY_PRE
+    PRE_PED_FLAG --> COMPLEXITY_PRE
+    COMPLEXITY_PRE --> COMPLEXITY
+
+    HST_IN -->|No| COMPLEXITY
+    HST_IN -->|Yes| O2{"HOME OXYGEN\nUSAGE?"}
+
+    O2 -->|"YES: Patient uses\nhome oxygen"| HARD_STOP["HARD STOP: Remove HST\n---\nO2 is the ONLY condition\nthat absolutely prevents\nhome sleep testing\n---\nHST physically cannot\nbe performed with O2"]
+    O2 -->|No oxygen| SOFT_CHK
+
+    SOFT_CHK{"Other comorbidities\npresent?"}
+
+    SOFT_CHK -->|"NV Medicaid FFS"| REC_NVM["REMOVE HST: NV Medicaid\nnever covers HST\n(payer rule, not clinical)"]
+
+    SOFT_CHK -->|"Pediatric < 18"| REC_PED["REMOVE HST: Pediatric\nHST not validated for children\n(clinical standard)"]
+
+    SOFT_CHK -->|"COPD, CHF, Opioids,\nNeuromuscular, Central apnea,\nBMI > 50, Prior failed HSAT"| RECOMMEND["FLAG_PSG_RECOMMENDED\n---\nPSG is clinically preferred\nfor complex patients\n---\nBUT: HST still available if:\n* Doctor specifically ordered HST\n* Patient preference/need\n* No oxygen usage\n---\nHST remains in scope\nas override option"]
+
+    SOFT_CHK -->|None| NO_CONTRA["No contraindications\nAll options remain"]
+
+    HARD_STOP --> COMPLEXITY
+    REC_NVM --> COMPLEXITY
+    REC_PED --> COMPLEXITY
+    RECOMMEND --> COMPLEXITY
+    NO_CONTRA --> COMPLEXITY
+
+    COMPLEXITY{"Comorbidity severity?"}
+    COMPLEXITY -->|"3+ comorbidities"| COMPLEX["FLAG_COMPLEX_CASE\n---\nPSG strongly recommended\nTitration clinically indicated:\n* CHF/Opioids = central apnea risk\n* Morbid obesity = hypoventilation risk\n---\nScope does NOT expand.\nIf order is diagnostic-only,\ntitration stays out of scope.\n---\nALERT: Consider requesting\nnew order including titration\nif clinically appropriate"]
+    COMPLEXITY -->|"1-2 comorbidities"| STANDARD["Standard handling:\nPSG recommended\nTitration may be indicated"]
+    COMPLEXITY -->|"0 comorbidities"| SIMPLE["No comorbidity impact"]
+
+    COMPLEX --> HOMEBOUND
+    STANDARD --> HOMEBOUND
+    SIMPLE --> HOMEBOUND
+
+    HOMEBOUND{Homebound?}
+    HOMEBOUND -->|No| SCOPE_CHK
+    HOMEBOUND -->|"Yes + no O2"| HB["HST only realistic option\nFLAG_HOMEBOUND"]
+    HOMEBOUND -->|"Yes + O2"| NIV(["STOP_UNABLE_TO_SCHEDULE\nHomebound + O2\nNo testing possible\nClinical documentation"])
+
+    HB --> SCOPE_CHK
+    SCOPE_CHK{Remaining options?}
+    SCOPE_CHK -->|0| NO_OPT(["STOP_UNABLE_TO_SCHEDULE"])
+    SCOPE_CHK -->|1+| DONE(["-> Clinical Sufficiency"])
+
+    style HARD_STOP fill:#7f1d1d,stroke:#f87171,color:#fff
+    style NIV fill:#7f1d1d,stroke:#f87171,color:#fff
+    style NO_OPT fill:#7f1d1d,stroke:#f87171,color:#fff
+    style REC_NVM fill:#7f1d1d,stroke:#f87171,color:#fff
+    style REC_PED fill:#7f1d1d,stroke:#f87171,color:#fff
+    style RECOMMEND fill:#78350f,stroke:#fbbf24,color:#fff
+    style COMPLEX fill:#78350f,stroke:#fbbf24,color:#fff
+    style PRE_ASSESS fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style PRE_O2 fill:#7f1d1d,stroke:#f87171,color:#fff
+    style PRE_PED_FLAG fill:#7f1d1d,stroke:#f87171,color:#fff
+                </pre>
+            </div>
+            <div class="note note-red">
+                <strong>v0.18.3b CRITICAL CORRECTION -- HST Contraindication Hierarchy:</strong><br>
+                <strong>HARD REMOVALS (HST physically impossible or never covered):</strong><br>
+                * Home O2 usage -- ONLY true clinical hard stop. HST cannot be performed with supplemental oxygen.<br>
+                * NV Medicaid FFS -- payer rule, never covers HST regardless of clinical picture.<br>
+                * Pediatric (&lt;18) -- clinical standard, HST not validated for children.<br><br>
+                <strong>SOFT RECOMMENDATIONS (PSG preferred, but HST remains available):</strong><br>
+                * COPD (FEV1 &lt; 60%) -> FLAG_PSG_RECOMMENDED<br>
+                * CHF (NYHA III-IV) -> FLAG_PSG_RECOMMENDED + titration indicated<br>
+                * Chronic opioid (&gt;3mo) -> FLAG_PSG_RECOMMENDED + titration indicated<br>
+                * Neuromuscular disease -> FLAG_PSG_RECOMMENDED<br>
+                * Central apnea suspected -> FLAG_PSG_RECOMMENDED<br>
+                * BMI &gt; 50 -> FLAG_PSG_RECOMMENDED<br>
+                * Prior failed HSAT -> FLAG_PSG_RECOMMENDED<br><br>
+                For all SOFT recommendations: if the doctor ordered HST, or the patient requests/needs HST, and there is NO oxygen usage, HST can still be selected. The flag ensures staff and physician are aware PSG is preferred.
+            </div>
+            <div class="note note-green">
+                <strong>v0.18.5 -- PENDING_ORDER patients still run M2C:</strong><br>
+                Without an order, scope = UNKNOWN. M2C still evaluates: O2 status -> "HST will be contraindicated when order arrives." Homebound + O2 -> "STOP_UNABLE_TO_SCHEDULE -- no order needed, cannot test." Comorbidity severity -> flag complex case profile. Pediatric -> flag HST ineligibility. Pre-assessment saves time when the order arrives.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 2D: CLINICAL SUFFICIENCY -- UNIVERSAL             -->
+    <!-- ============================================================ -->
+    <div id="m2-suff" class="section s-green">
+        <div class="section-head">
+            <h2>MODULE 2D -- Clinical Sufficiency <span class="fix-badge">v0.18.4</span></h2>
+            <div class="sub">Same thorough check for ALL payers. LLM already extracted all clinical elements during OCR. Prior results validation lives in M2B (scope context).</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- <code>questionnaire_required</code> flag (NV Medicaid FFS is the ONLY payer requiring sleep questionnaire for auth submission), payer-specific sufficiency thresholds.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    SUFF(["Clinical Data\n(already extracted by LLM\nduring OCR processing)"]) --> EVAL["EVALUATE pre-extracted\nclinical elements:\n---\n* ESS score or equivalent\n* STOP-BANG elements\n* Witnessed apnea\n* Snoring (loud, habitual)\n* Daytime sleepiness/EDS\n* Gasping/choking at night\n* Morning headaches\n* BMI / neck circumference\n* Blood pressure / HTN\n* Comorbidities\n* Prior test results + AHI\n* Physical exam findings\n* O2 status, homebound status\n---\nAll already in structured data"]
+
+    EVAL --> PATH{"Which sufficiency\npathway?"}
+
+    PATH -->|Path A| OBS["Observed apneas\nby bed partner/caregiver\n-> SUFFICIENT"]
+    PATH -->|Path B| TWO{"2 of 5 symptoms?"}
+    PATH -->|Path C| CARDIO["Cardiovascular history\n+ at least 1 symptom\n-> SUFFICIENT"]
+    PATH -->|Path D| UNEX["Unexplained condition\n(R heart failure, polycythemia,\nsleep arrhythmia, pulm HTN)\n-> SUFFICIENT"]
+
+    TWO --> S_LIST["1. EDS (ESS > 10)\n2. Snoring/gasping\n3. Treatment-resistant HTN (3+ meds)\n4. Obesity (BMI > 30 or neck > 17M/16F)\n5. Craniofacial/airway abnormalities"]
+    S_LIST --> COUNT{"2+ present?"}
+    COUNT -->|Yes| SUFFICIENT
+    COUNT -->|No| INSUFFICIENT
+
+    OBS --> SUFFICIENT
+    CARDIO --> SUFFICIENT
+    UNEX --> SUFFICIENT
+
+    SUFFICIENT["CLINICALLY SUFFICIENT\n---\nAll extracted elements stored\nfor auth submission package\nQuestionnaire fields populated\nfrom note content"]
+
+    INSUFFICIENT --> NV_MCD_CHK{"Payer = NV Medicaid FFS?"}
+    NV_MCD_CHK -->|"Yes"| NV_QUEST["FLAG_NV_MEDICAID_QUESTIONNAIRE_REQUIRED\n+ FLAG_CALL_FOR_QUESTIONNAIRE\n---\nONLY payer that requires\nquestionnaire for submission.\nChart notes don't meet criteria.\nCall patient for Epworth/STOP-BANG\nbefore submitting auth."]
+    NV_MCD_CHK -->|"No"| QUEST
+
+    QUEST{"Any additional\ndocumentation\navailable?"}
+    QUEST -->|"Notes contain enough\nfor questionnaire equivalent"| QUEST_OK["Questionnaire SATISFIED\nvia note content"]
+    QUEST -->|"Notes insufficient"| NEED_DOCS["FLAG_CLINICAL_INSUFFICIENT\nRequest additional docs\nRe-entry: Stage 2.3\nwhen docs arrive"]
+
+    NV_QUEST --> NEED_DOCS_NV["PENDING_QUESTIONNAIRE\nRe-entry: M2D\nwhen questionnaire received"]
+
+    QUEST_OK --> SUFFICIENT
+
+    SUFFICIENT --> DONE(["-> Payment type routing\nInsured: M3 Insurance Scope\nCash: M4 directly (skip M3, M5)"])
+
+    NEED_DOCS_NV --> DONE
+    NEED_DOCS --> DONE
+
+    style SUFFICIENT fill:#064e3b,stroke:#34d399,color:#fff
+    style NEED_DOCS fill:#78350f,stroke:#fbbf24,color:#fff
+    style NV_QUEST fill:#78350f,stroke:#fbbf24,color:#fff
+    style NEED_DOCS_NV fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-green">
+                <strong>v0.18.4 Architecture Note:</strong> The LLM already read all notes and extracted all clinical data during OCR (Step 0). M2D EVALUATES the pre-extracted structured data against sufficiency criteria -- it does not re-read notes.</div>
+            <div class="note note-green">
+                <strong>[OK] PIN-4 RESOLVED:</strong> NV Medicaid FFS is the ONLY payer that requires a sleep questionnaire for auth submission. If chart notes are present but don't meet criteria -> FLAG_CALL_FOR_QUESTIONNAIRE -> call patient for Epworth/STOP-BANG. All other payers: <code>questionnaire_required: false</code>. Documented in <code>payer_[id].json + criteria_[id].json</code>.
+            </div>
+            <div class="note note-yellow">
+                <strong>Prior results validation:</strong> Now lives in M2B (Order Scope) where the scope context determines whether prior results are needed. M2B checks existence, source, recency, and repeat titration rules (PIN-6). M2D focuses purely on clinical symptom sufficiency.<br><br>
+                * 60-day clinical evaluation freshness: NOT checked (payers don't actually enforce)
+            </div>
+        </div>
+    </div>
+
+    <div id="m3" class="section s-purple">
+        <div class="section-head">
+            <h2>MODULE 3 -- Insurance Scope <span class="fix-badge">v0.18.5</span></h2>
+            <div class="sub">Criteria file lookup determines coverage. CPT defaulting follows patient best interest. Default-UP generates PENDING_NEW_ORDER with re-entry at M2B.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- Criteria file lookup (coverage rules, auth requirements, portal URLs, submission methods per payer + CPT).<br>
+                * 27 <code>payer_[id].json</code> files + 9 <code>criteria_[id].json</code> files -- 3-layer chain: payer routing, coverage/auth rules, clinical criteria with keyword arrays.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START([Scope from M2\n+ Payer + criteria_[id].json]) --> LOOP["FOR EACH CPT in scope"]
+
+    LOOP --> COV{"Payer covers\nthis code?\n(payer.coverage lookup)"}
+    COV -->|Yes| KEEP["Keep in cpt_payer_approved"]
+    COV -->|No| DEFAULT{"Can default\nto covered code?"}
+
+    DEFAULT -->|"DOWN: PSG to HST\nInsurance covers HST\nnot PSG"| BEST_INT{"Clinically safe\nfor HST?"}
+    BEST_INT -->|"Yes: no contraindications"| DEF_DOWN["Default to HST\nPatient best interest:\navoid cash-pay for PSG"]
+    BEST_INT -->|"No: contraindications\nrequire PSG"| CONFLICT["CONFLICT: Payer won't cover\nthe medically necessary test\nFLAG_COVERAGE_CONFLICT\nOptions: appeal, cash pay,\npause + request new order"]
+
+    DEFAULT -->|"UP: HST to PSG\nNeeds physician order"| PAUSE["PENDING_NEW_ORDER\n---\nCurrent order (HST) not viable\nPayer requires PSG\n---\nAction: Contact physician\nfor new order specifying PSG\n---\nStatus: PENDING\nRe-entry: M2B when new\norder arrives\nAll M1 + M2C/M2D clinical\nwork carries forward"]
+
+    KEEP --> AUTH
+    DEF_DOWN --> AUTH
+    CONFLICT --> AUTH
+    PAUSE --> M6_PAUSE(["-> M6 with\nPENDING_NEW_ORDER"])
+
+    AUTH{"Auth required?"}
+    AUTH -->|No| APPROVED["No submission needed"]
+    AUTH -->|Yes| METHOD["Note: portal + method\nfrom payer.submission"]
+    AUTH -->|Submit anyway| SUBMIT_AW["Submit regardless\n(Sierra, Humana, UHC Direct)"]
+
+    APPROVED --> NEXT
+    METHOD --> NEXT
+    SUBMIT_AW --> NEXT
+
+    NEXT{More CPTs?}
+    NEXT -->|Yes| LOOP
+    NEXT -->|No| FINAL{Approved count?}
+    FINAL -->|0| NO_OPT(["STOP_NO_VALID_OPTIONS"])
+    FINAL -->|1+| DONE(["-> MODULE 4"])
+
+    style NO_OPT fill:#7f1d1d,stroke:#f87171,color:#fff
+    style CONFLICT fill:#78350f,stroke:#fbbf24,color:#fff
+    style PAUSE fill:#78350f,stroke:#fbbf24,color:#fff
+    style M6_PAUSE fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-purple">
+                <strong>CPT Defaulting -- Patient Best Interest Principle:</strong><br>
+                * DOWN (PSG->HST): Automatic IF clinically safe. Patient would have to pay cash otherwise.<br>
+                * UP (HST->PSG): Pause and request new order. Patient clinically needs PSG (e.g., O2 usage).<br>
+                * CONFLICT: Payer won't cover medically necessary test. Flag for human resolution.
+            </div>
+            <div class="note note-yellow">
+                <strong>Aetna dual submission note (post-tree action):</strong><br>
+                For Aetna HMO referrals + PPO/POS no-auth: If Evicore returns "no auth required" -> also check Availity. If Availity also says "no auth" -> documented written confirmation. This is a FLAG_AETNA_CHECK_DUAL_AVAILITY added to the output for post-tree manual action.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 4: TEST SELECTION -- CORRECTED TIEBREAKER         -->
+    <!-- ============================================================ -->
+    <div id="m4" class="section s-orange">
+        <div class="section-head">
+            <h2>MODULE 4 -- Test Selection <span class="fix-badge">v0.18.5</span></h2>
+            <div class="sub">Tiebreaker with split night evaluation gate. When both diagnostic + titration in scope, evaluates split candidacy before final selection.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>cpt_selector_FIXED.json</code> -- Test selection rules and tiebreaker hierarchy.<br>
+                * <code>insurance_allowables.json</code> -- Cost comparison for Tier 5 tiebreaker (patient best interest).<br>
+                * <code>facility_config.json</code> -- <code>service_area.local_cities</code> for split night distance check, <code>split_night_ahi_threshold</code>, <code>split_night_minimum_titration_hours</code>.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START([cpt_payer_approved\nfrom M3]) --> COUNT{How many\napproved?}
+
+    COUNT -->|0| STOP_NONE(["No valid options -> M6"])
+    COUNT -->|1| USE_SINGLE["Use single option"]
+    COUNT -->|Multiple| SPLIT_GATE
+
+    SPLIT_GATE{"Both diagnostic (95810)\nAND titration (95811)\nin approved set?"}
+    SPLIT_GATE -->|Yes| SPLIT_EVAL(["-> SPLIT NIGHT\nEVALUATION\n(see next section)"])
+    SPLIT_GATE -->|No| TIE_1
+
+    TIE_1{"TIER 1: Insurance\nnarrows options?"}
+    TIE_1 -->|"Only 1 option\ncovered"| USE_SINGLE
+    TIE_1 -->|"Multiple covered"| TIE_2
+
+    TIE_2{"TIER 2: Clinical\nnarrows options?"}
+    TIE_2 -->|"Contraindications\nremove options"| REDUCED["Reduced set"]
+    TIE_2 -->|"Still multiple"| TIE_3
+
+    REDUCED --> TIE_3
+    TIE_3{"TIER 3: Physician\npreference stated?"}
+    TIE_3 -->|"Order says prefer\nSplit / PSG / HST"| PHYS_PREF["Use physician preference"]
+    TIE_3 -->|"No preference stated"| TIE_4
+
+    TIE_4{"TIER 4: Patient preference?\n(if known from referral notes\nor prior contact.\nUsually unknown at initial run\n-- skip to Tier 5)"}
+    TIE_4 -->|"Known: patient prefers\nspecific test"| PAT_PREF["Use patient preference"]
+    TIE_4 -->|"Unknown (typical)"| TIE_5
+
+    TIE_5{"TIER 5: BEST INTEREST\n(cost-based)"}
+    TIE_5 -->|"Medicare / Medicaid\nSupplement\n$0 patient cost"| PSG_BEST["SELECT PSG\nHigher quality test\nNo cost to patient"]
+    TIE_5 -->|"Commercial: deductible\nknown low (from rerun)"| PSG_BEST
+    TIE_5 -->|"Commercial: deductible\nknown high (from rerun)"| HST_BEST["SELECT HST\n~$203 vs ~$835\nPatient financial interest"]
+    TIE_5 -->|"Commercial: deductible\nUNKNOWN (initial run)"| HST_DEFAULT["DEFAULT HST\nLower cost = safer assumption\nINFO_COST_PENDING_VERIFICATION"]
+    TIE_5 -->|"CASH / PENDING_INS\nSelf-pay rates apply"| HST_CASH_BEST["DEFAULT HST\n$250 vs $600 PSG\nPatient financial interest\nUnless split selected above"]
+
+    USE_SINGLE --> PED_CHK
+    PHYS_PREF --> PED_CHK
+    PAT_PREF --> PED_CHK
+    PSG_BEST --> PED_CHK
+    HST_BEST --> PED_CHK
+    HST_DEFAULT --> PED_CHK
+    HST_CASH_BEST --> PED_CHK
+
+    PED_CHK{"Pediatric\nconversion?"}
+    PED_CHK -->|"Age 2-5 + 95810"| CONV_782["95782"]
+    PED_CHK -->|"Age 2-5 + 95811"| CONV_783["95783"]
+    PED_CHK -->|"Age 2-5 + HST"| STOP_PED(["HST not allowed"])
+    PED_CHK -->|"6-17 + HST"| STOP_PED
+    PED_CHK -->|"6-17 + in-lab"| ADULT_CODES["Adult codes OK"]
+    PED_CHK -->|"18+ or no conversion"| ADULT_CODES
+
+    CONV_782 --> SELECT
+    CONV_783 --> SELECT
+    ADULT_CODES --> SELECT
+
+    SELECT["SELECTED TEST\nvs\nSUBMITTED CODES\n---\nselected_test: the ONE test\nwe are scheduling\n---\nsubmitted_codes: what gets sent\nto payer (may include ALL codes\nfor payers like UMR/Sierra)"]
+
+    SELECT --> FINAL{"payment_type?"}
+    FINAL -->|INSURED| M5_GO(["-> MODULE 5\nAuth Readiness"])
+    FINAL -->|"CASH / PENDING"| M6_GO(["-> MODULE 6\nSkip M5\nNo auth needed"])
+
+    style STOP_NONE fill:#7f1d1d,stroke:#f87171,color:#fff
+    style STOP_PED fill:#7f1d1d,stroke:#f87171,color:#fff
+    style PSG_BEST fill:#064e3b,stroke:#34d399,color:#fff
+    style HST_BEST fill:#064e3b,stroke:#34d399,color:#fff
+    style HST_DEFAULT fill:#78350f,stroke:#fbbf24,color:#fff
+    style HST_CASH_BEST fill:#1a1505,stroke:#fb923c,color:#fff
+    style SPLIT_EVAL fill:#1a1505,stroke:#fb923c,color:#fff
+    style M5_GO fill:#064e3b,stroke:#34d399,color:#fff
+    style M6_GO fill:#1a1505,stroke:#fb923c,color:#fff
+                </pre>
+            </div>
+            <div class="note note-yellow">
+                <strong>v0.18.3 -- Selected test != Submitted codes:</strong><br>
+                The system selects ONE test to schedule. But some payers (UMR, Sierra/HPN) require submitting ALL approved codes even though only one is selected. The output distinguishes: <code>selected_test</code> (what we schedule) vs <code>submitted_codes</code> (what gets sent to payer for auth).
+            </div>
+            <div class="note note-blue">
+                <strong>Best Interest -- payer-specific rates from insurance_allowables.json:</strong><br>
+                Each payer has specific contracted rates. Example ranges: HST $93-$334, PSG $374-$835, Titration $459-$878.<br>
+                For Medicare/Medicaid: $0 either way -> always select PSG (higher quality).<br>
+                For high-deductible: use payer-specific allowable to calculate patient cost impact.
+            </div>
+            <div class="note note-yellow">
+                <strong>[!] UMR SPECIAL BILLING RULE -- FLAG_UMR_HST_PRIORITY:</strong><br>
+                All UMR plans (generic, CCSF, PEBP, Teachers, Loomis, MGM Direct): <strong>PRIORITIZE HST</strong> unless clinical reason for in-lab.<br>
+                Reason: Actual HST reimbursement from Sierra UMR = <strong>$900.00</strong> (far exceeds the $334.04 allowable shown).<br>
+                Patient is charged at HPN rates ($334.04 HST / $374.40 PSG / $495.24 titration) so they're never overbilled.<br>
+                This makes UMR HSTs the highest-revenue test option. Only route to in-lab if O2, pediatric, or strong clinical indication.
+            </div>
+            <div class="note note-green">
+                <strong>[OK] PIN-5 RESOLVED:</strong> Insurance allowables fully integrated. <code>insurance_allowables.json</code>: 34 payers, 112 rate entries, 5 CPT codes. UMR special billing rules captured with sub-plan breakdown. Self-pay rates: HST $250, PSG $600, Titration $650, Pediatric $1,200.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 4 SPLIT NIGHT: EVALUATION SUB-TREE               -->
+    <!-- ============================================================ -->
+    <div id="m4-split" class="section s-orange">
+        <div class="section-head">
+            <h2>MODULE 4 -- Split Night Evaluation <span class="fix-badge">NEW v0.18.5</span></h2>
+            <div class="sub">Triggered ONLY when both diagnostic (95810) + titration (95811) survive to M4. Evaluates whether to order a split night study vs separate nights.</div>
+        </div>
+        <div class="section-body">
+            <div class="dia-label">Split Night Decision Logic</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    ENTRY(["Both 95810 + 95811\nin approved scope"]) --> ORDER_LANG
+
+    ORDER_LANG{"Order specifically\nrequests Split Night?"}
+    ORDER_LANG -->|Yes| FAVOR_ORDER["FAVOR SPLIT\nReason: physician ordered\nsplit_reason = ORDER_REQUESTED"]
+    ORDER_LANG -->|No| PAP_CHK
+
+    PAP_CHK{"Patient has existing\nPAP equipment?"}
+    PAP_CHK -->|"Yes: requalification\nneeded"| FAVOR_PAP["FAVOR SPLIT\nReason: PAP requalification\n---\nPatient can't easily stop\nusing equipment for HST.\nSplit combines diagnostic +\ntitration in one night.\nsplit_reason = PAP_REQUALIFICATION"]
+    PAP_CHK -->|"No / Unknown"| DIST_CHK
+
+    DIST_CHK{"Patient location?"}
+    DIST_CHK -->|"NOT in Las Vegas,\nHenderson, North Las Vegas,\nor Boulder City\n(long distance)"| FAVOR_DIST["FAVOR SPLIT\nReason: minimize trips\nfor distant patient\nsplit_reason = DISTANCE"]
+    DIST_CHK -->|"Local (LV / Henderson\nNLV / Boulder City)"| COMORBID_CHK
+
+    COMORBID_CHK{"Comorbidity severity\n(from ICD scan)?"}
+    COMORBID_CHK -->|"3+ comorbidities\nOR severe cardiac/pulm:\nCHF, COPD, morbid obesity,\nOR multiple moderate"| FAVOR_SEVERE["FAVOR SPLIT\nReason: severe comorbids\nFaster path to treatment\nsplit_reason = SEVERE_COMORBIDS"]
+    COMORBID_CHK -->|"Mild/moderate\nor none"| FIRST_TIME
+
+    FIRST_TIME{"First-time sleep\nstudy patient?"}
+    FIRST_TIME -->|"Yes: no prior PSG/HST\nno prior PAP\nmild/moderate comorbids"| AVOID_FIRST["AVOID SPLIT\n---\nFirst-time patient benefits\nfrom full-night titration\nfor comfort and adjustment.\n---\nSELECT: diagnostic PSG (95810)\nTitration as separate\nfollow-up if needed"]
+    FIRST_TIME -->|"No: repeat study\nor complex history"| NEUTRAL["NEUTRAL\nNo strong factor either way\n---\nFall through to standard\n5-tier tiebreaker on\nremaining options"]
+
+    FAVOR_ORDER --> HOMEBOUND
+    FAVOR_PAP --> HOMEBOUND
+    FAVOR_DIST --> HOMEBOUND
+    FAVOR_SEVERE --> HOMEBOUND
+
+    HOMEBOUND{"Patient homebound?"}
+    HOMEBOUND -->|"Yes"| HB_OVERRIDE["OVERRIDE: Cannot do in-lab\nSplit not possible for\nhomebound patient\n---\nIf no O2 -> HST only\nIf O2 -> STOP_UNABLE_TO_TEST"]
+    HOMEBOUND -->|"No"| SELECT_SPLIT
+
+    SELECT_SPLIT["SELECT SPLIT NIGHT\nselected_test = 95810 + 95811\nsplit_reason = [accumulated reasons]\n---\nNote: Technical split during test\nrequires AHI > 20 in first 2 hours\n+ 3 hours remaining for titration.\nIf not met -> becomes full\ndiagnostic PSG (95810)."]
+
+    SELECT_SPLIT --> SPLIT_PAY{"payment_type?"}
+    SPLIT_PAY -->|INSURED| RETURN(["Return to M4\nPediatric Conversion"])
+    SPLIT_PAY -->|"CASH / PENDING"| CASH_REF(["-> Cash Split Path\n(see below)\nThen return to M4\nPediatric Conversion"])
+
+    HB_OVERRIDE --> RETURN
+    AVOID_FIRST --> RETURN
+    NEUTRAL --> RETURN_TIE(["Return to M4\nStandard 5-tier tiebreaker"])
+
+    style FAVOR_ORDER fill:#064e3b,stroke:#34d399,color:#fff
+    style FAVOR_PAP fill:#064e3b,stroke:#34d399,color:#fff
+    style FAVOR_DIST fill:#064e3b,stroke:#34d399,color:#fff
+    style FAVOR_SEVERE fill:#064e3b,stroke:#34d399,color:#fff
+    style AVOID_FIRST fill:#78350f,stroke:#fbbf24,color:#fff
+    style HB_OVERRIDE fill:#7f1d1d,stroke:#f87171,color:#fff
+    style SELECT_SPLIT fill:#064e3b,stroke:#34d399,color:#fff
+    style CASH_REF fill:#1a1505,stroke:#fb923c,color:#fff
+    style NEUTRAL fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Split Night -- Cash Path Variant</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    CASH_ENTRY(["CASH PATH\nBoth diagnostic + titration\nclinically appropriate"]) --> SAME_EVAL["Same clinical evaluation:\nOrder language > PAP history >\nDistance > Comorbidity > First-time"]
+
+    SAME_EVAL --> CASH_COST{"Cost consideration"}
+    CASH_COST --> CASH_NOTE["Split = 1 night: $650\nSeparate = 2 nights: $1,250\n($600 PSG + $650 titration)\n---\nSplit saves patient $600\nCash patients generally favor\nsplit when clinically appropriate"]
+    CASH_NOTE --> CASH_OUT(["Selected test at\nfacility cash rate"])
+
+    style CASH_NOTE fill:#1a1505,stroke:#fb923c,color:#fff
+                </pre>
+            </div>
+
+            <div class="note note-green">
+                <strong>Technical Split vs Ordered Split -- important distinction:</strong><br>
+                The decision tree decides whether to <em>order</em> a split night study. Whether the split actually <em>occurs</em> during the test depends on real-time clinical data: AHI must exceed 20/hour within the first 2 hours, and at least 3 hours must remain for titration. If the threshold isn't met, the night becomes a full diagnostic PSG (95810) and titration is scheduled separately. This is an execution-time outcome, not a decision-tree outcome.
+            </div>
+            <div class="note note-yellow">
+                <strong>Insurance layer for split:</strong><br>
+                Medicare/Medicaid (no auth for in-lab): choose freely based on patient factors. Payers that cover split: evaluation runs normally. Payers that don't cover split: removed in M3 before reaching M4, so this evaluation never triggers. If split auth denied but diagnostic + titration individually approved: select diagnostic first, schedule titration as follow-up.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 5: AUTH READINESS                                -->
+    <!-- ============================================================ -->
+    <div id="m5" class="section s-cyan">
+        <div class="section-head">
+            <h2>MODULE 5 -- Auth Readiness + Submission Package</h2>
+            <div class="sub">Real lookup: clinical data vs criteria_[id].json thresholds. Auth package built from payer_[id].json submission rules.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- Criteria comparison (extracted clinical data vs payer requirements for this CPT), portal URL, submission method.<br>
+                * <code>facility_config.json</code> -- Facility NPI, name, address, phone, fax for auth package. Supervising physician for OON workaround cases.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START([selected_test + payer\n+ criteria_[id].json]) --> SUPP{"Supplement?"}
+    SUPP -->|Yes| READY_SCHED(["READY_TO_SCHEDULE\nNo auth needed"])
+    SUPP -->|No| CASH{"Cash pay?"}
+    CASH -->|Yes| READY_SCHED2(["READY_TO_SCHEDULE"])
+    CASH -->|No| CRITERIA{"CRITERIA COMPARISON\n---\nCompare extracted clinical data\nagainst criteria_[id].json thresholds\nfor this payer + this CPT code\n---\nThis is a REAL system lookup\nnot a guess"}
+
+    CRITERIA -->|Meets criteria| BLOCK{Blocking flags?}
+    CRITERIA -->|Does not meet| INSUFF["FLAG_CRITERIA_NOT_MET\nDocument what's missing\nRequest additional docs\nor note for auth appeal"]
+
+    INSUFF --> PENDING
+    CRITERIA -->|"Submit anyway\n(Humana, Sierra)"| SUBMIT(["READY_FOR_AUTH\nSubmit regardless"])
+
+    BLOCK -->|No blocks| BUILD_PKG
+    BLOCK -->|STOP flags| STOPPED(["STOPPED"])
+    BLOCK -->|PENDING flags| PENDING(["PENDING"])
+
+    BUILD_PKG["BUILD AUTH SUBMISSION PACKAGE:\n---\n* CPT Codes (selected + submitted)\n* ICD-10 Codes (all extracted)\n* Patient Demographics\n* Clinical Notes\n* Physician: NPI, Name, Credentials,\n  Address, Phone, Fax\n* Facility: NPI, Name, Address,\n  Phone, Fax (from facility_config.json)\n* Prior Auth # (if extension/repeat)\n* Submission method + portal URL\n  (from payer_[id].json + criteria_[id].json)"]
+
+    BUILD_PKG --> READY_AUTH(["READY_FOR_AUTH\nAll clear to submit\nPackage assembled"])
+
+    style READY_SCHED fill:#064e3b,stroke:#34d399,color:#fff
+    style READY_SCHED2 fill:#064e3b,stroke:#34d399,color:#fff
+    style READY_AUTH fill:#064e3b,stroke:#34d399,color:#fff
+    style SUBMIT fill:#064e3b,stroke:#34d399,color:#fff
+    style STOPPED fill:#7f1d1d,stroke:#f87171,color:#fff
+    style INSUFF fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       MODULE 6: OUTPUT -- CORRECTED                            -->
+    <!-- ============================================================ -->
+    <div id="m6" class="section s-pink">
+        <div class="section-head">
+            <h2>MODULE 6 -- Output <span class="fix-badge">v0.18.5</span></h2>
+            <div class="sub">Cash vs insured paths explicit. Flag deduplication added. PENDING_ORDER and PENDING_INSURANCE paths included. ICD output includes auto-codified codes from notes.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>flags_catalog_tree_v0_19_3.json</code> -- 105 flags across 5 severity tiers: aggregation, severity sorting (STOP &gt; PENDING &gt; FLAG &gt; ALERT &gt; INFO), deduplication rules, human action text per flag.<br>
+                * <code>insurance_allowables.json</code> -- Cost estimates (payer-specific contracted rates + UMR rules + Self Pay rates).<br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- HST code resolution (G0399 vs 95806 per payer mapping).<br>
+                * <code>facility_config.json</code> -- Facility identity fields for output object (NPI, name, address, phone, fax).
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    START(["All paths converge"]) --> HST_CHK{"final_test == HST?"}
+    HST_CHK -->|Yes| PAY_CHK{"payment_type?"}
+    HST_CHK -->|No| KEEP["Keep existing CPT"]
+    HST_CHK -->|"N/A (stopped/pending)"| NO_CPT["No CPT\nOutput reason + status"]
+
+    PAY_CHK -->|INSURED| HST_INS["HST Code from payer.hst_code:\nG0399 or 95806\nper payer mapping"]
+    PAY_CHK -->|"CASH / PENDING_INS"| HST_CASH["HST Code = 95806\nG0399 is payer-specific\nCash/pending always uses 95806"]
+
+    HST_INS --> FLAGS
+    HST_CASH --> FLAGS
+    KEEP --> FLAGS
+    NO_CPT --> FLAGS
+
+    FLAGS["FLAG AGGREGATION + DEDUPLICATION\n---\n1. Collect all flags from all modules\n2. Sort: STOP > PENDING > FLAG > ALERT > INFO\n3. DEDUPLICATE: if multiple flags remove\n   same CPT, consolidate into single flag\n   with all reasons listed\n   e.g. REMOVE_HST: reasons:\n   [Pediatric, NV Medicaid]\n4. Output: deduplicated, severity-sorted"]
+
+    FLAGS --> COST_CHK{"payment_type?"}
+    COST_CHK -->|INSURED| COST_INS["COST ESTIMATE:\nFrom insurance_allowables.json\nPayer-specific contracted rates\n---\nUMR plans: charge at HPN rates\n$334.04 HST / $374.40 PSG / $495.24 tit\n(Actual UMR HST reimb: $900)\n---\nExamples: Medicare FFS:\nHST $102.95 / PSG $673.50 / tit $707.49\nSierra: HST $203.17 / PSG $835.31"]
+    COST_CHK -->|CASH| COST_CASH["COST ESTIMATE:\nFacility cash rate:\nHST (95806): $250\nPSG/Ped 6+ (95810): $600\nSplit/PAP tit (95811): $650\nPed under 6 (95782): $1,200"]
+    COST_CHK -->|PENDING_INSURANCE| COST_PEND["COST ESTIMATE:\nCannot estimate\nALERT_CONTACT_FOR_INSURANCE\nScheduling blocked"]
+
+    COST_INS --> OUTPUT
+    COST_CASH --> OUTPUT
+    COST_PEND --> OUTPUT
+
+    OUTPUT["FINAL OUTPUT OBJECT\n---\n* Patient (name, DOB, age, age_alerts,\n  phone, email, address, alt_contact)\n* Insurance (payer, ID, plan_type, criteria)\n  OR payment = CASH / PENDING_INSURANCE\n* Provider (ordering: NPI, name, creds, contact)\n  (supervising: NPI, name IF applicable)\n* Clinical (symptoms, comorbidities,\n  medication_flags, resolved_conditions)\n* ICD Codes (Tier 1: specific + Tier 2:\n  unspecified + Tier 3: descriptions)\n* Order (scope, physician preference)\n  OR PENDING_ORDER with pre-assessment\n* Test (selected_test, submitted_codes)\n* Split (split_favored, split_reason if eval'd)\n* CPT (final code, HST resolution)\n* Auth (required?, method, portal, status)\n  OR auth = N/A for cash/pending\n* Auth Package (submission data) if insured\n* COB (if multi-payer: results for EACH\n  payer, primary/secondary, rule applied)\n* Cost Estimate (payer-specific from\n  insurance_allowables.json + UMR rules)\n* Flags (deduplicated, severity-sorted)\n* Actions (each flag -> human action)\n* Patient Safety Alerts (seizures, PTSD,\n  violence, incontinence, communication)\n* PPE Alerts (bloodborne/airborne/contact\n  with specific precaution type)\n* Language Alert (interpreter needed?)\n* CPAP Context (all PAP info carried\n  through for assessment)\n* Notes Quality (good/poor/unsigned)\n* Re-entry Point (if PENDING status)\n* Status"]
+
+    OUTPUT --> STATUS{Status?}
+    STATUS -->|READY_TO_SCHEDULE| NOTE_1(["Output to scheduler\n[!] STILL requires manual\nbenefit verification first\n(unless cash pay)"])
+    STATUS -->|READY_FOR_AUTH| NOTE_2(["Output to auth team\nPackage ready to submit\nVerify benefits during submission"])
+    STATUS -->|PENDING| NOTE_3(["Complete pending items\nthen RERUN from re-entry point:\nPENDING_ORDER -> M2B\nPENDING_INSURANCE -> M1C\nPENDING_NEW_ORDER -> M2B\nPENDING_PRIOR_RESULTS -> M2B"])
+    STATUS -->|STOPPED| NOTE_4(["Resolve or document\nUnable to Schedule"])
+
+    style NOTE_1 fill:#064e3b,stroke:#34d399,color:#fff
+    style NOTE_2 fill:#064e3b,stroke:#34d399,color:#fff
+    style NOTE_3 fill:#78350f,stroke:#fbbf24,color:#fff
+    style NOTE_4 fill:#7f1d1d,stroke:#f87171,color:#fff
+    style COST_PEND fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-pink">
+                <strong>v0.18.3 KEY -- Every output feeds into manual workflow:</strong><br>
+                Even READY_TO_SCHEDULE requires human benefit verification before actual scheduling. The system's job is to produce the most complete, accurate output possible so the human can verify and act quickly.
+            </div>
+            <div class="note note-green">
+                <strong>v0.18.5 -- Flag Deduplication:</strong><br>
+                Multiple flags removing the same CPT (e.g., pediatric + NV Medicaid both removing HST) are consolidated into a single REMOVE_HST flag with all reasons listed. Prevents redundant action items in human workflow.
+            </div>
+            <div class="note note-yellow">
+                <strong>v0.18.5 -- Re-entry Points for PENDING Status:</strong><br>
+                PENDING_ORDER -> re-enter at M2B when order arrives. All M1 + M2C/M2D clinical work carries forward.<br>
+                PENDING_INSURANCE -> re-enter at M1C when insurance info obtained. All M2 clinical work carries forward.<br>
+                PENDING_NEW_ORDER -> re-enter at M2B when new order arrives. All M1 + M2C/M2D carries forward.<br>
+                PENDING_PRIOR_RESULTS -> re-enter at M2B when prior results received. All M1 + M2C/M2D carries forward.<br>
+                Additional clinical docs / questionnaire -> re-enter at M2D. All prior data carries forward.<br>
+                Benefits reveals different plan type -> re-enter at M3. All M1 + M2 carries forward.
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--       BCBS ROUTING -- CORRECTED                                -->
+    <!-- ============================================================ -->
+    <div id="bcbs-route" class="section s-yellow">
+        <div class="section-head">
+            <h2>BCBS Full Routing <span class="fix-badge">v0.18.4</span></h2>
+            <div class="sub">ALL BCBS plans run through full 4-step hierarchy. No pre-fork. Plan type can be discovered at any step.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>bcbs_prefix_database.json</code> -- 19,511 BCBS prefixes -> affiliate, plan type, auth requirements, Carelon routing.<br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- Carelon criteria file for behavioral health-carved BCBS plans.
+            </div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    BCBS(["BCBS Identified\nALL plans enter here\nregardless of plan type signals"]) --> STEP0{"STEP 0: TPA CHECK\nQuantum Health?\nUnion/Benesys?"}
+
+    STEP0 -->|Quantum Health| QH["No auth required\nPortal: ccbyqh.com"]
+    STEP0 -->|Union / Benesys| UNION["Check handler:\nICM / NHS / Telligen / No auth"]
+    STEP0 -->|Not TPA| STEP1
+
+    STEP1{"STEP 1: KNOWN PREFIX\nPrefix in spreadsheet?"}
+    STEP1 -->|"Found: VERIFIED"| VERIFIED["Use exact rules\nconfidence = VERIFIED"]
+    STEP1 -->|"Found: UNVERIFIED"| LIKELY["Use rules\nFLAG_VERIFY_AUTH"]
+    STEP1 -->|"NEW PREFIX"| NEW_PFX["FLAG_NEW_PREFIX\nNo existing rules\nLog for spreadsheet addition\nafter processing"]
+    STEP1 -->|"CHANGED since last"| CHANGED["FLAG_RULES_CHANGED\nUpdate spreadsheet\nafter processing"]
+
+    VERIFIED --> SUPP_CHK
+    LIKELY --> SUPP_CHK
+    NEW_PFX --> STEP2
+    CHANGED --> STEP2
+
+    SUPP_CHK{"Supplement confirmed\nthrough prefix rules?"}
+    SUPP_CHK -->|Yes| SUPP_DONE(["SUPPLEMENT CONFIRMED\nNo auth required\nShort-circuit remaining steps"])
+    SUPP_CHK -->|No / Not indicated| STEP2
+
+    STEP2{"STEP 2: UNIVERSAL RULES\nLetter in ID body?"}
+    STEP2 -->|Yes| CARELON_LIKELY["Carelon LIKELY\nSubmit to Carelon\nIf no pull-up -> Availity chat"]
+    STEP2 -->|No| STEP3
+
+    STEP3{"STEP 3: AFFILIATE\nDEFAULTS"}
+    STEP3 -->|Horizon NJ| HZN["No auth all codes"]
+    STEP3 -->|BCBS FEP| FEP["HST: no auth\nIn-lab: fax"]
+    STEP3 -->|BCBS FL| FL["Auth ALL: CareCentrix"]
+    STEP3 -->|BCBS SC| SC["No auth: Cohere"]
+    STEP3 -->|BCBS IL / TX| ILTX["Letter -> Carelon\nNo letter -> call IVR"]
+    STEP3 -->|BCBS CA| CA["Complex: 101 prefixes"]
+    STEP3 -->|Regence| REG["Call Carelon: 4hr hold"]
+    STEP3 -->|Premera| PREM["Availity"]
+    STEP3 -->|BCBS KC| KC["Call ONLY"]
+    STEP3 -->|BCBS HI| HI["Fax HMSA"]
+    STEP3 -->|Wellmark| WM["Availity or fax"]
+    STEP3 -->|"UMQ (VirtuOx)"| UMQ(["STOP_UNABLE_TO_SCHEDULE\nVirtuOx redirects approval\nCannot process"])
+    STEP3 -->|"VNV (Anthem Medicaid)"| VNV["Fax form\nCarelon criteria\nAvaility submission"]
+    STEP3 -->|"N2G (Ameriben)"| N2G["Separate entity\nNot standard BCBS"]
+    STEP3 -->|"Other / Unknown"| FALLBACK["Call payer\nnumber on card"]
+
+    CARELON_LIKELY --> CONTINUE
+    HZN --> CONTINUE
+    FEP --> CONTINUE
+    FL --> CONTINUE
+    SC --> CONTINUE
+    ILTX --> CONTINUE
+    CA --> CONTINUE
+    REG --> CONTINUE
+    PREM --> CONTINUE
+    KC --> CONTINUE
+    HI --> CONTINUE
+    WM --> CONTINUE
+    VNV --> CONTINUE
+    N2G --> CONTINUE
+    FALLBACK --> CONTINUE
+    QH --> CONTINUE
+    UNION --> CONTINUE
+
+    CONTINUE(["-> Continue pipeline\nPlan type confirmed or\nassumed pending verification"])
+
+    style UMQ fill:#7f1d1d,stroke:#f87171,color:#fff
+    style QH fill:#064e3b,stroke:#34d399,color:#fff
+    style SUPP_DONE fill:#064e3b,stroke:#34d399,color:#fff
+    style NEW_PFX fill:#78350f,stroke:#fbbf24,color:#fff
+    style CHANGED fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-yellow">
+                <strong>v0.18.3 CORRECTION:</strong> ALL BCBS plans run through the full hierarchy regardless of plan type signals. If Medicare is listed as primary + BCBS secondary, still run all 4 steps. If supplement is confirmed through the hierarchy, great. If not, assume supplement pending manual verification. Plan type discovery can happen at any step and short-circuits remaining steps when confirmed.
+            </div>
+            <div class="note note-red">
+                <strong>v0.19.3 Pipeline Wiring:</strong><br>
+                * <strong>VirtuOx (UMQ prefix):</strong> STOP_UNABLE_TO_SCHEDULE. This is a hard pipeline stop — does NOT continue to M1E/M2/etc.<br>
+                * <strong>All other BCBS exits</strong> (CONTINUE, SUPP_DONE) return to COB Check before proceeding to M1E. BCBS patients with dual coverage must go through COB determination.<br>
+                * <strong>Supplement confirmed:</strong> Short-circuits to COB Check with no-auth status. Still checked for secondary payer.
+            </div>
+            <div class="note note-green">
+                <strong>[OK] BCBS Feedback Loop (formerly PIN-4):</strong> The BCBS prefix learning system (CONFIRM, CORRECT, NEW_PREFIX, OVERRIDE, CASCADE) is a manual workflow during post-tree benefit verification. When you verify and find rule changes -> update prefix spreadsheet. No automation needed -- this is human corrections fed back to the data source. Gus' OCR handles extraction; you maintain the prefix database.
+            </div>
+        </div>
+    </div>
+
+    <!-- Remaining sections: Payer Routing, Criteria Map, MA Routing, HST, Re-entry -->
+    <!-- These are structurally sound from v0.18.2 with minor updates -->
+
+    <div id="payer-route" class="section s-yellow">
+        <div class="section-head">
+            <h2>Payer Routing -- Non-BCBS <span class="fix-badge">LIVE PIPELINE v0.19.3</span></h2>
+            <div class="sub">Executes for all non-BCBS, non-MA payers via PAYER_MA_GATE. Routes each payer to correct criteria file + submission method. All terminals exit to COB Check. Special cases: VA (referral=auth), Meritain (call first), Anthem Medicaid (Carelon criteria but Availity/fax submission).</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-blue">
+                <strong>[DIR] DATA SOURCES:</strong><br>
+                * <code>payer_[id].json + criteria_[id].json</code> -- Master payer -> criteria file routing (portal URLs, submission methods, auth requirements per payer + CPT).<br>
+                * <code>insurance.json</code> -- Payer identification, aliases, plan types, do-not-accept list.<br>
+                * 27 <code>payer_[id].json</code> files + 9 <code>criteria_[id].json</code> files -- Complete 3-layer chain with keyword arrays for OCR matching.
+            </div>
+            <div class="dia-label">Payer -> Criteria File Routing</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    PAYER(["Payer identified\nin M1C"]) --> TYPE{"Payer category?"}
+
+    TYPE -->|"BCBS (any)"| BCBS(["-> BCBS 4-Step\nRouting (above)"])
+
+    TYPE -->|"VA / Veterans Affairs"| VA["VA: Referral = Auth\nNo separate auth process\ncriteria: criteria_universal_baseline.json\n---\nFLAG_VA_REFERRAL_REQUIRED\nFLAG_VA_1_WEEK_SCHEDULING\nSchedule within 1 week\nof referral receipt"]
+
+    TYPE -->|"Cigna"| EVICORE_C["Cigna -> Evicore\ncriteria: criteria_evicore.json\nSubmit: evicore.com portal"]
+
+    TYPE -->|"Aetna"| AETNA_CHK{"Aetna sub-type?"}
+    AETNA_CHK -->|"Standard / PPO"| EVICORE_A["Aetna -> Evicore\ncriteria: criteria_evicore.json\nFLAG_AETNA_CHECK_DUAL_AVAILITY\n(check both Evicore + Availity)"]
+    AETNA_CHK -->|"Meritain Health\n(Aetna subsidiary)"| MERITAIN["[!] MERITAIN SPECIAL:\n1. CALL for benefits first\n2. Ask if auth required\n3. If yes -> meritain.mednecessity.com\nDo NOT use Evicore portal"]
+    AETNA_CHK -->|"Aetna Medicare"| EVICORE_A
+
+    TYPE -->|"UHC / United"| UHC_CHK{"UHC sub-type?"}
+    UHC_CHK -->|"UHC Commercial"| UHC["UHC -> UHC criteria\ncriteria: criteria_uhc.json\nSubmit: Evicore (submit regardless)"]
+    UHC_CHK -->|"UHC Medicare"| UHC
+    UHC_CHK -->|"UMR via UHC"| UHC
+
+    TYPE -->|"Sierra / HPN"| SIERRA_CHK{"Sierra sub-type?"}
+    SIERRA_CHK -->|"Sierra Commercial"| SIERRA["Sierra/HPN -> Sierra criteria\ncriteria: criteria_sierra_hpn.json\nSubmit: Sierra portal"]
+    SIERRA_CHK -->|"HPN Commercial"| SIERRA
+    SIERRA_CHK -->|"HPN Medicaid"| HPN_MCD["HPN Medicaid -> Sierra criteria\ncriteria: criteria_sierra_hpn.json\nFLAG_HPN_MEDICAID_SUBMIT_VIA_PORTAL\nFLAG_100_PERCENT_COVERED\nHST code: G0399\n[!] NOT no-auth"]
+    SIERRA_CHK -->|"UMR via Sierra"| SIERRA
+
+    TYPE -->|"Anthem Medicaid"| ANTHEM_MCD["[!] ANTHEM MEDICAID:\nCriteria: criteria_carelon.json\nSubmission: Availity or Fax\n(NOT Carelon portal)\nFLAG_HST_NO_AUTH_INLAB_AUTH\nFLAG_100_PERCENT_COVERED"]
+
+    TYPE -->|"Medicare FFS"| MEDICARE["Medicare FFS\ncriteria: criteria_medicare_ffs.json\nNo auth for in-lab\n95806 for HST"]
+
+    TYPE -->|"NV Medicaid FFS"| NV_MCD["NV Medicaid FFS\ncriteria: criteria_nevada_medicaid.json\nHST never covered\nAuth required"]
+
+    TYPE -->|"Humana"| HUMANA["Humana\ncriteria: criteria_humana.json\nSubmit regardless"]
+
+    TYPE -->|"No-Auth Payers:\nChampVA, Silversummit,\nMolina, Caresource,\nLV Firefighters"| NO_AUTH["No auth required\ncriteria: criteria_universal_baseline.json (safety checks only)\nProceed to scheduling"]
+
+    TYPE -->|"Tricare"| TRICARE["Tricare\ncriteria: criteria_tricare.json\nVaries by plan region"]
+
+    TYPE -->|"Unknown payer"| UNKNOWN["FLAG_UNKNOWN_PAYER\nNot in insurance.json\nProcess with generic criteria\nVerify during benefits check"]
+
+    TYPE -->|"Call-Based Payers:\nEBMS, GEHA, Workers Comp,\nMultiplan/PHCS, First Health"| CALL_BASED["Call for requirements\nNo portal submission\nVerify auth method by phone\n---\nWorkers Comp: 100% covered\nGEHA: call for in-lab\nEBMS: TPA, rules vary\nMultiplan/PHCS/First Health:\ncall-based workflow"]
+
+    style VA fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style MERITAIN fill:#78350f,stroke:#fbbf24,color:#fff
+    style ANTHEM_MCD fill:#78350f,stroke:#fbbf24,color:#fff
+    style HPN_MCD fill:#78350f,stroke:#fbbf24,color:#fff
+    style UNKNOWN fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-yellow">
+                <strong>Strictness Hierarchy (for reference when clinical is borderline):</strong><br>
+                1. STRICTEST: Evicore (Cigna, Aetna) -- most documentation required<br>
+                2. MODERATE: UHC<br>
+                3. PROCESS-STRICT: NV Medicaid FFS -- strict process, not criteria<br>
+                4. LENIENT: Sierra/HPN<br>
+                5. REFERRAL-BASED: VA -- referral IS the auth<br>
+                6. NO REVIEW: ChampVA, Silversummit, Molina, Caresource, LV Firefighters
+            </div>
+            <div class="note note-red">
+                <strong>[!] Critical Routing Corrections (from v2.0):</strong><br>
+                * VA routes to criteria_universal_baseline.json -- NOT no-auth. Referral = auth but requires specific workflow.<br>
+                * HPN Medicaid routes to Sierra/HPN -- NOT no-auth. Submit via portal, 100% covered.<br>
+                * Anthem Medicaid uses Carelon CRITERIA but submits via Availity/Fax -- NOT Carelon portal.
+            </div>
+        </div>
+    </div>
+
+    <div id="criteria-map" class="section s-cyan">
+        <div class="section-head">
+            <h2>Criteria File Map <span class="fix-badge">REBUILT v0.18.5</span></h2>
+            <div class="sub">Real system lookup -- which criteria file loads for which payer. Used in M3 (insurance scope) and M5 (auth readiness) to compare clinical data against payer-specific requirements.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-cyan">
+                <strong>How This Works:</strong> When payer is identified in M1C, the system loads the matching criteria file. M3 uses it to determine which CPT codes the payer covers. M5 uses it to check if clinical documentation meets the payer's specific approval requirements. The criteria file is the payer's "rulebook" for what they'll authorize.
+            </div>
+            <div class="note note-cyan">
+                <strong>Payer -> Criteria File -> Auth Method</strong><br><br>
+                <strong>EVICORE PAYERS (strictest):</strong><br>
+                * Cigna -> criteria_evicore.json -> evicore.com portal<br>
+                * Aetna -> criteria_evicore.json -> evicore.com + check Availity (dual)<br>
+                * Aetna Medicare -> criteria_evicore.json -> evicore.com<br>
+                * Meritain -> criteria_evicore.json -> [!] CALL first, then meritain.mednecessity.com<br><br>
+                <strong>UHC PAYERS (moderate):</strong><br>
+                * UHC Commercial -> criteria_uhc.json -> Evicore (submit regardless)<br>
+                * UHC Medicare -> criteria_uhc.json -> Evicore (submit regardless)<br>
+                * UMR via UHC -> criteria_uhc.json -> per UHC workflow<br><br>
+                <strong>SIERRA / HPN PAYERS (lenient):</strong><br>
+                * Sierra -> criteria_sierra_hpn.json -> Sierra portal<br>
+                * HPN -> criteria_sierra_hpn.json -> Sierra portal<br>
+                * HPN Medicaid -> criteria_sierra_hpn.json -> [!] Submit via portal, 100% covered, HST=G0399<br>
+                * UMR via Sierra -> criteria_sierra_hpn.json -> per Sierra workflow<br><br>
+                <strong>GOVERNMENT PAYERS:</strong><br>
+                * Medicare FFS -> criteria_medicare_ffs.json -> No auth for in-lab, HST=95806<br>
+                * NV Medicaid FFS -> criteria_nevada_medicaid.json -> Prior auth required, no HST<br>
+                * VA -> criteria_universal_baseline.json -> Referral = auth, schedule within 1 week<br>
+                * Tricare -> criteria_tricare.json -> varies by plan/region<br>
+                * ChampVA -> No auth required<br><br>
+                <strong>BCBS PAYERS:</strong><br>
+                * BCBS Carelon plans (letter-in-ID) -> criteria_carelon.json -> Carelon portal<br>
+                * BCBS IL, TX, CA, VA, AL, Premera, Regence, Independence, Highmark -> Carelon<br>
+                * Anthem Medicaid -> [!] Carelon CRITERIA but Availity/fax SUBMISSION<br>
+                * Other BCBS -> per prefix spreadsheet rules (4-step hierarchy)<br><br>
+                <strong>NO-AUTH PAYERS:</strong><br>
+                * Silversummit -> No auth -> proceed to scheduling<br>
+                * Molina -> No auth -> proceed to scheduling<br>
+                * Caresource -> No auth -> proceed to scheduling<br>
+                * LV Firefighters -> No auth -> proceed to scheduling<br><br>
+                <strong>OTHER:</strong><br>
+                * Humana -> criteria_humana.json -> submit regardless<br>
+                * EBMS -> TPA, call for requirements<br>
+                * GEHA -> Call for in-lab<br>
+                * Workers Comp -> 100% covered, verify auth method<br>
+                * Multiplan/PHCS -> Call-based workflow<br>
+                * First Health -> Call-based workflow<br>
+                * Unknown -> FLAG_UNKNOWN_PAYER, process with generic criteria
+            </div>
+        </div>
+    </div>
+
+    <div id="ma-route" class="section s-purple">
+        <div class="section-head">
+            <h2>Medicare Advantage Routing <span class="fix-badge">LIVE PIPELINE v0.19.3</span></h2>
+            <div class="sub">Executes for all LIKELY_MA plans via PAYER_MA_GATE. Routes by carrier for IPA detection (Optum/P3/CareMore), HMO referral verification, and OON flagging. All terminals exit via MA_DONE to COB Check.</div>
+        </div>
+        <div class="section-body">
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    MA(["Medicare Advantage\nplan identified"]) --> CARRIER{"Which carrier?"}
+
+    CARRIER -->|"Humana MA"| HUM_IPA{"IPA / Network?"}
+    HUM_IPA -->|"Optum"| OPTUM["Use Curo portal\nOptum rates\nFLAG_MA_OPTUM_ROUTING\n[!] Wrong portal = wasted time"]
+    HUM_IPA -->|"P3 Health Partners"| P3["P3 = LIKELY_OON\nVerify during benefits\nIf OON confirmed -> STOP"]
+    HUM_IPA -->|"CareMore"| CAREMORE["CareMore = LIKELY_OON\nVerify during benefits"]
+    HUM_IPA -->|"Standard Humana MA"| HUM_STD["Humana MA criteria\ncriteria: criteria_humana.json\nSubmit regardless"]
+    HUM_IPA -->|"Unknown IPA"| IPA_VERIFY["FLAG_MA_IPA_VERIFY\nCall to verify IPA\nbefore proceeding"]
+
+    CARRIER -->|"UHC MA"| UHC_MA["UHC MA criteria\ncriteria: criteria_uhc.json\nMay route to Optum\nCheck benefits"]
+
+    CARRIER -->|"Aetna MA"| AETNA_MA["Aetna MA -> Evicore\ncriteria: criteria_evicore.json"]
+
+    CARRIER -->|"Cigna MA"| CIGNA_MA["Cigna MA = LIKELY_OON\nMost Cigna MA not contracted\nVerify during benefits"]
+
+    CARRIER -->|"BCBS MA"| BCBS_MA["BCBS MA -> varies by network\nRun through BCBS 4-step\nhierarchy first"]
+
+    CARRIER -->|"Unknown MA carrier"| UNK_MA["FLAG_UNKNOWN_PAYER\nCheck Availity -> Call card #\nDetermine carrier + network"]
+
+    OPTUM --> HMO_CHK
+    P3 --> DONE
+    CAREMORE --> DONE
+    HUM_STD --> HMO_CHK
+    IPA_VERIFY --> DONE
+    UHC_MA --> HMO_CHK
+    AETNA_MA --> HMO_CHK
+    CIGNA_MA --> DONE
+    BCBS_MA --> DONE
+    UNK_MA --> DONE
+
+    HMO_CHK{"Plan type\nHMO or PPO?"}
+    HMO_CHK -->|"HMO"| HMO_REF["FLAG_MA_HMO_REFERRAL\nVerify PCP has submitted\nreferral to specialist"]
+    HMO_CHK -->|"PPO / PPO-like"| PPO_OK["No referral needed\nProceed with auth"]
+    HMO_CHK -->|"Cannot determine"| ASSUME_HMO["Assume HMO\n(more restrictive)\nVerify during benefits"]
+
+    HMO_REF --> DONE(["Continue to M3"])
+    PPO_OK --> DONE
+    ASSUME_HMO --> DONE
+
+    style OPTUM fill:#78350f,stroke:#fbbf24,color:#fff
+    style P3 fill:#7f1d1d,stroke:#f87171,color:#fff
+    style CAREMORE fill:#7f1d1d,stroke:#f87171,color:#fff
+    style CIGNA_MA fill:#7f1d1d,stroke:#f87171,color:#fff
+    style IPA_VERIFY fill:#78350f,stroke:#fbbf24,color:#fff
+                </pre>
+            </div>
+            <div class="note note-purple">
+                <strong>MA Fallback Scenarios:</strong><br>
+                * Can't identify carrier -> Check Availity -> Call card number<br>
+                * Can't determine network status -> Check Availity -> Call payer<br>
+                * Can't determine PPO vs HMO -> Assume HMO (more restrictive) -> Verify<br>
+                * Can't identify IPA -> Call to verify (may be clinic, not network)<br>
+                * Nothing works -> Call card number, document everything, add to system
+            </div>
+            <div class="note note-red">
+                <strong>Known OON MA Plans:</strong> Cigna MA, P3, CareMore are flagged as LIKELY_OON. Confirmed during manual benefit verification. If OON confirmed -> standard STOP_OON path.
+            </div>
+        </div>
+    </div>
+
+    <div id="hst" class="section s-green">
+        <div class="section-head">
+            <h2>HST Code Resolution <span class="fix-badge">REBUILT v0.18.5</span></h2>
+            <div class="sub">G0399 vs 95806 resolved per payer criteria file. For COB, each payer gets its own HST code independently.</div>
+        </div>
+        <div class="section-body">
+            <div class="note note-green">
+                <strong>HST Code Resolution (applied in M6 output):</strong><br><br>
+                When HST is the selected test, the CPT code depends on the payer:<br><br>
+                <strong>G0399 (HCPCS code):</strong><br>
+                * UHC (all plans)<br>
+                * Aetna<br>
+                * Humana<br>
+                * Tricare<br>
+                * BCBS (most affiliates)<br>
+                * HPN Medicaid<br><br>
+                <strong>95806 (CPT code):</strong><br>
+                * Medicare FFS<br>
+                * Medicare Advantage (all carriers)<br>
+                * Cigna<br>
+                * Sierra / HPN (commercial)<br>
+                * Cash / Self-pay<br>
+                * Default when payer not specified<br><br>
+                <strong>Resolution logic:</strong> Check <code>payer_[id].json</code> hst_code field (+ hst_code_overrides for sub-plan variants). If not specified, default to 95806.<br><br>
+                <strong>COB handling:</strong> Each payer in a dual-coverage scenario runs independently. Primary may use G0399 while secondary uses 95806 -- each output carries its own HST code from its own criteria file.
+            </div>
+        </div>
+    </div>
+
+    <div id="reentry" class="section s-cyan">
+        <div class="section-head">
+            <h2>Re-entry / Rerun Paths <span class="fix-badge">v0.18.5</span></h2>
+            <div class="sub">Explicit re-entry points for each PENDING scenario. All completed work carries forward.</div>
+        </div>
+        <div class="section-body">
+            <div class="dia-label">PENDING Status Re-entry Points</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    PEND(["PENDING Output"]) --> TYPE{"What is pending?"}
+
+    TYPE -->|"PENDING_ORDER\n(no order on referral)"| RE_M2B_ORD["RE-ENTER: M2B\nWhen order arrives\n---\nCarries forward:\n* All M1 data\n* M2C contraindication assessment\n* M2D sufficiency assessment\n---\nNew order -> determine scope\nthen continue M3+"]
+
+    TYPE -->|"PENDING_INSURANCE\n(no insurance data)"| RE_M1C["RE-ENTER: M1C\nWhen insurance info obtained\n---\nCarries forward:\n* M1A/M1B patient data\n* All M2 clinical work\n---\nIf confirmed self-pay:\nChange to CASH, immediately\nschedulable"]
+
+    TYPE -->|"PENDING_NEW_ORDER\n(default-UP needed\nnew PSG order required)"| RE_M2B_NEW["RE-ENTER: M2B\nWhen new order arrives\n---\nCarries forward:\n* All M1 data\n* M2C/M2D clinical work\n---\nNew order replaces scope\nM3+ re-processes"]
+
+    TYPE -->|"PENDING_NOTES\n(notes missing)"| RE_M2D["RE-ENTER: M2D\nWhen notes arrive\n---\nCarries forward:\n* All M1 + M2B/M2C data\n---\nRe-evaluate sufficiency\nwith new note content"]
+
+    TYPE -->|"PENDING_QUESTIONNAIRE"| RE_M2D_2["RE-ENTER: M2D\nWhen received\n---\nSame as above:\nre-evaluate sufficiency"]
+
+    TYPE -->|"PENDING_PRIOR_RESULTS"| RE_M2B_PRIOR["RE-ENTER: M2B\nWhen prior results received\n---\nCarries forward:\n* All M1 data\n* M2C/M2D clinical work\n---\nRe-validate prior results\nthen continue M3+"]
+
+    style RE_M2B_ORD fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style RE_M1C fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style RE_M2B_NEW fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style RE_M2D fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style RE_M2D_2 fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+    style RE_M2B_PRIOR fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+
+            <div class="dia-label">Manual Verification Rerun</div>
+            <div class="diagram-wrap">
+                <pre class="mermaid">
+flowchart TD
+    OUTPUT(["System Output\ndelivered to human"]) --> VERIFY["Human: Manual\nBenefit Verification"]
+
+    VERIFY --> MATCH{"Output matches\nverification?"}
+    MATCH -->|"Yes -- plan type,\npayer, network all correct"| PROCEED["Proceed with\nauth submission\nand scheduling"]
+    MATCH -->|"No -- something\nis different"| UPDATE["Human updates:\n- Correct plan type -> rerun M3\n- Correct payer -> rerun M1C\n- Add missing info -> rerun M2D\n- OON confirmed -> standard OON stop"]
+
+    UPDATE --> RERUN(["RERUN from\nappropriate re-entry point\nAll completed work\ncarries forward"])
+
+    RERUN --> NEW_OUTPUT(["Updated output\nwith corrections applied"])
+
+    PROCEED --> ACTIONS["Post-tree manual actions:\n---\n* Submit auths (portal/fax/call)\n* Verify referral status if HMO\n* Aetna: check dual Availity\n* Call payers that need calling\n* Confirm cost estimate\n* Schedule patient\n* ICD feedback: CONFIRM/CORRECT\n  auto-codified codes\n* Log outcome for learning"]
+
+    ACTIONS --> COMPLETE(["CASE COMPLETE\nLog: prefix rules,\nnew prefixes,\nchanged rules,\nICD feedback"])
+
+    style PROCEED fill:#064e3b,stroke:#34d399,color:#fff
+    style RERUN fill:#1e3a5f,stroke:#4d8ef7,color:#fff
+                </pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <strong>MEDOCR Visual Decision Tree v0.19.3</strong> -- Complete Build, All Stubs Resolved + 16 Audit Findings Fixed<br>
+        105 flags * 1,394 lines * 46 paths audited * 34 payers with allowables * NLP context processing * Patient safety + PPE alerts<br>
+        <span style="opacity:0.6;">February 27, 2026 * 16 findings fixed across v0.19.0-v0.19.3 * Original Spec: Referral Processing Outline V1 + Keywords &amp; Contexts</span>
+    </div>
+
+</div>
+<script>
+    mermaid.initialize({
+        startOnLoad: true, theme: 'dark',
+        themeVariables: {
+            primaryColor: '#1e3a5f', primaryTextColor: '#e2e8f0', primaryBorderColor: '#4d8ef7',
+            lineColor: '#475569', secondaryColor: '#064e3b', tertiaryColor: '#78350f',
+            background: '#0d1220', mainBkg: '#1a2332', nodeBorder: '#3a4a5f',
+            clusterBkg: '#111827', clusterBorder: '#2a3548', titleColor: '#e2e8f0', edgeLabelBackground: '#111827'
+        },
+        flowchart: { htmlLabels: true, curve: 'basis', padding: 12, nodeSpacing: 30, rankSpacing: 40, diagramPadding: 16, useMaxWidth: true },
+        securityLevel: 'loose'
+    });
+</script>
+</body>
+</html>

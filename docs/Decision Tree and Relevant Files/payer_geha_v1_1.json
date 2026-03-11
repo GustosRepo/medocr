@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "payer_id": "geha",
+    "payer_name": "GEHA",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "No published criteria. In-lab auth status unclear -- call to verify. Uses UHC network. No portal."
+  },
+  "criteria_source": {
+    "criteria_id": "universal_baseline",
+    "criteria_file": "criteria_universal_baseline.json",
+    "confidence": "baseline",
+    "notes": "This payer has no published clinical criteria. Universal baseline provides contraindication checks for test TYPE selection (HST vs PSG) only. Does not gate authorization."
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": "call_to_verify"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "call",
+    "notes": "No portal submission available. Call GEHA directly."
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "yellow"
+}

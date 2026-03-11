@@ -1,0 +1,147 @@
+{
+  "_meta": {
+    "payer_id": "humana",
+    "payer_name": "Humana",
+    "version": "1.1",
+    "last_updated": "2026-03-11",
+    "notes": "Non-Optum Humana plans. Check if Optum IPA during benefits -- if so, use Optum criteria via Curo portal instead. v1.1: Added plan_type_routing with sub-plan details, Medicare supplement handling, IPA detection workflow, mission critical flag."
+  },
+  "criteria_source": {
+    "criteria_id": "humana",
+    "criteria_file": "criteria_humana_v1_1.json",
+    "confidence": "verified"
+  },
+  "plan_types": [
+    "commercial",
+    "medicare_ppo",
+    "medicare_hmo_no_ipa",
+    "medicare_hmo_optum",
+    "medicare_hmo_p3",
+    "medicare_hmo_intermountain",
+    "supplement"
+  ],
+  "plan_type_routing": {
+    "commercial": {
+      "hst_auth": false,
+      "inlab_auth": true,
+      "referral": "check_via_availity",
+      "portal": "availity",
+      "criteria": "criteria_humana_v1_1.json",
+      "pain_level": "green",
+      "note": "Rare plan"
+    },
+    "medicare_ppo": {
+      "hst_auth": false,
+      "inlab_auth": true,
+      "referral": false,
+      "portal": "availity",
+      "criteria": "criteria_humana_v1_1.json"
+    },
+    "medicare_hmo_no_ipa": {
+      "hst_auth": "referral_required",
+      "inlab_auth": true,
+      "referral": true,
+      "referral_by": "PCP submits via Availity (not us)",
+      "portal": "availity",
+      "criteria": "criteria_humana_v1_1.json",
+      "pain_level": "yellow",
+      "note": "IPA routing adds complexity"
+    },
+    "medicare_hmo_optum": {
+      "hst_auth": false,
+      "inlab_auth": true,
+      "referral": false,
+      "portal": "curo.optum.com",
+      "criteria": "criteria_humana_v1_1.json",
+      "benefits_confirm": "availity + confirm in Optum portal",
+      "allowables": "optum_rates",
+      "warning": "NOT Humana criteria workflow — use Optum criteria via Curo"
+    },
+    "medicare_hmo_p3": { "status": "OON", "blocking": true },
+    "medicare_hmo_intermountain": { "status": "OON", "blocking": true },
+    "supplement": {
+      "auth": false,
+      "rule": "UNIVERSAL_MEDICARE_SUPPLEMENT",
+      "description": "No auth after Medicare pays"
+    }
+  },
+  "ipa_detection": {
+    "method": "Availity shows IPA during benefits check",
+    "card_sometimes": true,
+    "verification_note": "If Availity shows an IPA, may need to call to verify (some 'IPAs' are just clinics/facilities)",
+    "no_ipa_rule": "No IPA listed on Availity = no IPA = standard Humana workflow"
+  },
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95805": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "MSLT/MWT"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Availity",
+    "portal_url": "https://www.availity.com"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green",
+  "special_rules": [
+    {
+      "rule_id": "humana_optum_check",
+      "description": "If Availity shows Optum IPA, this is NOT a Humana-criteria plan",
+      "action": "Use Optum criteria, submit via Curo portal"
+    },
+    {
+      "rule_id": "humana_oon_check",
+      "description": "P3 Health Partners or Intermountain IPA = OON",
+      "action": "Cannot accept patient",
+      "blocking": true
+    }
+  ],
+  "flags": [
+    {
+      "flag_id": "FLAG_HUMANA_OPTUM_IPA",
+      "trigger": "availity_shows_optum_ipa",
+      "message": "Use Optum criteria via Curo — NOT Humana criteria",
+      "severity": "high"
+    },
+    {
+      "flag_id": "FLAG_HUMANA_OON_IPA",
+      "trigger": "p3_or_intermountain_ipa",
+      "message": "Patient is OON — cannot accept",
+      "severity": "high",
+      "blocking": true
+    },
+    {
+      "flag_id": "FLAG_HUMANA_MISSION_CRITICAL",
+      "trigger": "occupation in [airline_pilot, bus_driver, military, truck_driver]",
+      "message": "Mission critical occupation — PSG required (not HST)",
+      "severity": "medium"
+    },
+    {
+      "flag_id": "FLAG_HUMANA_HST_CONTRAINDICATION",
+      "trigger": "hst_requested AND comorbidities_present",
+      "message": "HST contraindication detected — route to PSG instead",
+      "severity": "medium"
+    }
+  ]
+}

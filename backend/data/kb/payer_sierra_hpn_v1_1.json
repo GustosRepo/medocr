@@ -1,0 +1,77 @@
+{
+  "_meta": {
+    "payer_id": "sierra_hpn",
+    "payer_name": "Sierra Health / HPN",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "Most lenient. HST auto-approved. PSG just needs 1-2 sentence justification. Request 2 units for all codes. v1.1: HST code corrected to 95806, hst_code_overrides added for HPN Medicaid G0399."
+  },
+  "criteria_source": {
+    "criteria_id": "sierra_hpn",
+    "criteria_file": "criteria_sierra_hpn.json",
+    "confidence": "verified"
+  },
+  "plan_types": [
+    "sierra_commercial",
+    "hpn_commercial",
+    "hpn_medicaid",
+    "umr_via_sierra"
+  ],
+  "coverage": {
+    "95806": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Default HST code for Sierra/HPN commercial. Auth via portal but auto-approved."
+    },
+    "G0399": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "HPN Medicaid uses G0399 instead of 95806. Auth via portal, 100% covered."
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Brief justification needed"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Prior positive AHI needed"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "95806",
+  "hst_code_overrides": {
+    "hpn_medicaid": {
+      "hst_code": "G0399",
+      "reason": "HPN Medicaid uses G0399 for HST, not 95806. 100% covered, still requires portal submission."
+    }
+  },
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "HPN Provider",
+    "portal_url": "https://provider.healthplanofnevada.com",
+    "units_to_request": 2
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green",
+  "flags": [
+    {
+      "flag_id": "FLAG_SIERRA_UM_ONLY",
+      "trigger": "eligibility_shows_um_only",
+      "message": "NOT a Sierra/HPN plan -- UMR auth-only. Find UMR ID for benefits.",
+      "severity": "high"
+    },
+    {
+      "flag_id": "FLAG_SIERRA_DUAL_COVERAGE",
+      "trigger": "multiple_plans_on_sierra_portal",
+      "message": "Submit auth for both plans, verify benefits separately",
+      "severity": "medium"
+    }
+  ]
+}

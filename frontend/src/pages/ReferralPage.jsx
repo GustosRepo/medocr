@@ -9,6 +9,7 @@ import OllamaMonitor from '../components/OllamaMonitor.jsx';
 import ValidationIssuesDrawer from '../components/ValidationIssuesDrawer.jsx';
 // Bug 24 fix: import DualEngineResults (was built but never wired in)
 import DualEngineResults from '../components/DualEngineResults.jsx';
+import KbAssessmentPanel from '../components/KbAssessmentPanel.jsx';
 
 const apiBase = '/api';
 
@@ -34,8 +35,7 @@ async function queueStatusFetch(fn) {
 }
 
 export default function ReferralPage() {
-  // Build marker for cache/debug: update this string to verify reloads
-  console.log('[ReferralPage] build marker v1-dark-cards ' + new Date().toISOString());
+
   const [files, setFiles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   // Bug 18 fix: ref to avoid stale closure in pollStatus
@@ -64,10 +64,6 @@ export default function ReferralPage() {
   // Validation issues drawer state
   const [showValidationDrawer, setShowValidationDrawer] = useState(false);
   
-  // Debug: Track drawer state changes
-  useEffect(() => {
-    console.log('🔵 showValidationDrawer changed to:', showValidationDrawer);
-  }, [showValidationDrawer]);
   
   // Live logs state
   const [logs, setLogs] = useState([]);
@@ -106,7 +102,6 @@ export default function ReferralPage() {
         const parsedOrder = JSON.parse(savedOrder);
         setResultsMap(parsedResults);
         setProcessedOrder(parsedOrder);
-        console.log('📂 Restored', parsedOrder.length, 'processed documents from localStorage');
       }
     } catch (err) {
       console.error('Failed to restore processed documents:', err);
@@ -124,7 +119,7 @@ export default function ReferralPage() {
         // Write both atomically — if one fails, neither is partially written
         localStorage.setItem('processedDocuments', resultsJson);
         localStorage.setItem('processedOrder', orderJson);
-        console.log('💾 Saved', keys.length, 'documents to localStorage');
+
       } catch (err) {
         console.error('Failed to save processed documents:', err);
       }
@@ -148,18 +143,13 @@ export default function ReferralPage() {
   // Auto-scroll logs to bottom only if user is near bottom
   useEffect(() => {
     if (showLogs && autoScroll && logsEndRef.current && logsScrollRef.current) {
-      // Use scrollIntoView on the viewport element
-      const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+      logsScrollRef.current.scrollTop = logsScrollRef.current.scrollHeight;
     }
   }, [logs, showLogs, autoScroll]);
   
   // Detect if user scrolled away from bottom
   const handleLogsScroll = () => {
-    if (!logsScrollRef.current) return;
-    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    const viewport = logsScrollRef.current;
     if (!viewport) return;
     
     const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 100;
@@ -172,8 +162,7 @@ export default function ReferralPage() {
   useEffect(() => {
     if (!showLogs || !logsScrollRef.current) return;
     
-    const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-    if (!viewport) return;
+    const viewport = logsScrollRef.current;
     
     viewport.addEventListener('scroll', handleLogsScroll);
     return () => viewport.removeEventListener('scroll', handleLogsScroll);
@@ -202,9 +191,8 @@ export default function ReferralPage() {
             // Auto-scroll to bottom if enabled
             if (autoScroll && logsScrollRef.current) {
               setTimeout(() => {
-                const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-                if (viewport) {
-                  viewport.scrollTop = viewport.scrollHeight;
+                if (logsScrollRef.current) {
+                  logsScrollRef.current.scrollTop = logsScrollRef.current.scrollHeight;
                 }
               }, 50);
             }
@@ -384,17 +372,7 @@ export default function ReferralPage() {
   }, [selectedDoc]);
 
   const validationIssuesBadge = useMemo(() => {
-    // Debug: Check what data we have
     const conflicts = selectedDoc?.dualEngine?.conflicts;
-    const conflictCount = selectedDoc?.dualEngine?.conflictCount;
-    
-    console.log('[ValidationBadge] Debug:', {
-      hasDualEngine: !!selectedDoc?.dualEngine,
-      conflictsArray: conflicts,
-      conflictCount: conflictCount,
-      conflictsLength: conflicts?.length
-    });
-    
     if (!conflicts || conflicts.length === 0) return null;
     const issueCount = conflicts.length;
     // Bug 17 fix: handle both string and object conflict formats
@@ -412,9 +390,7 @@ export default function ReferralPage() {
           variant="light" 
           style={{ cursor: 'pointer' }}
           onClick={() => {
-            console.log('🟠 Top validation badge clicked! Setting drawer to true');
             setShowValidationDrawer(true);
-            console.log('🟠 showValidationDrawer should now be:', true);
           }}
         >
           ⚠️ {issueCount} Issues
@@ -682,8 +658,6 @@ export default function ReferralPage() {
     localStorage.removeItem('processedDocuments');
     localStorage.removeItem('processedOrder');
     localStorage.removeItem('exportSelection');
-    
-    console.log('🗑️ Cleared all processed documents');
     
     notifications.show({
       title: 'Cleared',
@@ -980,8 +954,6 @@ export default function ReferralPage() {
   // Handler for field updates from ValidationIssuesDrawer
   async function handleUpdateField(fieldPath, newValue) {
     if (!selectedId) return;
-
-    console.log(`[ValidationDrawer] Update ${fieldPath} -> "${newValue}" (persisting to backend)`);
 
     // Optimistic local update for snappy UI
     setResultsMap(prev => {
@@ -1582,6 +1554,11 @@ export default function ReferralPage() {
           </Section>
         )}
 
+        {/* KB Assessment Panel — Phase 4: surfaces payer, test rec, cost, flags from Level 6 */}
+        {doc.routing?.kbAssessment && (
+          <KbAssessmentPanel kb={doc.routing.kbAssessment} />
+        )}
+
         {/* Bug 3 fix: display DME data */}
         {doc.dme && (doc.dme.codes?.length > 0 || doc.dme.providers?.length > 0 || doc.dme.issues?.length > 0) && (
           <Section title="Durable Medical Equipment">
@@ -2114,12 +2091,9 @@ export default function ReferralPage() {
                                     style={{ cursor: 'pointer' }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      console.log('🔴 Validation badge clicked!', { pid, conflicts: r.dualEngine.conflicts.length });
-                                      // First select the document, then open drawer in next tick
                                       setSelectedId(pid);
                                       setTimeout(() => {
                                         setShowValidationDrawer(true);
-                                        console.log('🔴 Drawer opened after selection');
                                       }, 50);
                                     }}
                                   >
@@ -2217,10 +2191,7 @@ export default function ReferralPage() {
                     onClick={() => {
                       setAutoScroll(true);
                       if (logsScrollRef.current) {
-                        const viewport = logsScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-                        if (viewport) {
-                          viewport.scrollTop = viewport.scrollHeight;
-                        }
+                        logsScrollRef.current.scrollTop = logsScrollRef.current.scrollHeight;
                       }
                     }}
                   >
@@ -2283,13 +2254,6 @@ export default function ReferralPage() {
       <OllamaMonitor />
 
       {/* Validation Issues Drawer */}
-      {showValidationDrawer && console.log('🔷 Drawer opening with selectedDoc:', {
-        hasSelectedDoc: !!selectedDoc,
-        selectedId,
-        conflictsCount: selectedDoc?.dualEngine?.conflicts?.length,
-        firstConflict: selectedDoc?.dualEngine?.conflicts?.[0],
-        extractedKeys: selectedDoc ? Object.keys(selectedDoc) : []
-      })}
       <ValidationIssuesDrawer
         isOpen={showValidationDrawer}
         onClose={() => setShowValidationDrawer(false)}

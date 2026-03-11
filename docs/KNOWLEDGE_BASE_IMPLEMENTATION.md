@@ -1,39 +1,113 @@
 # Knowledge Base Implementation Plan
 
-**Date:** March 9, 2026  
+**Date:** March 10, 2026 (revised)  
 **Approach:** 3-layer hybrid (LLM-enriched extraction + deterministic rules + LLM-assisted NLP)
 
 ---
 
-## Current State
+## What Already Exists (~12,500 lines)
 
-The existing pipeline is essentially Module 1A — plus partial raw extraction of M1B/M1C/M1E fields:
+The current codebase has substantial rules infrastructure that this plan **extends**, not replaces:
 
-```
-PDF → OCR → LLM extracts fields → Verify → Save JSON → Download packet
-```
+### Regex Pre-Extraction Engine — `backend/rules/` (5,140 lines)
 
-It extracts patient name, DOB, provider, phone, fax, NPI, CPT codes, insurance name/ID. No logic runs on the extracted data.
+| File | Lines | What It Does |
+|---|---|---|
+| `index.js` | 2,799 | Master orchestrator: runs all detectors on OCR text, builds pre-extraction result with provider, member ID, carrier, CPT, ICD, phone/fax, address, DOB |
+| `patient.js` | 551 | Name detection (multi-format), DOB parsing, phone number extraction |
+| `address.js` | 230 | Street/city/state/zip detection with label awareness |
+| `carriers.js` | 153 | Carrier synonym matching from `carriers_catalog.json`, policy decorations (accepted/DNA/sunset/auto-flag) |
+| `cpt.js` | 198 | CPT code detection with intent classification (ordered/requested/mentioned), titration evidence, pediatric prioritization |
+| `icd.js` | 217 | ICD-10 detection with label context, keyword inference, enrichment (chronic, severity, notes) |
+| `context_guard.js` | 147 | Fax line detection, provider line detection, header line filtering |
+| `dme.js` | 65 | DME equipment detection |
+| `date.js` | 89 | Date of service, referral date parsing |
+| `normalize.js` | 67 | OCR page normalization |
+| `patterns.js` | 85 | Shared regex patterns |
+| `selectBest.js` | 164 | Multi-candidate field selection with scoring |
+| `reportBuilder.js` | 204 | Extraction report formatting |
 
-## What the Knowledge Base Adds
+### Rule Engine — `backend/rules/utils/ruleEngine.js` (637 lines)
 
-The knowledge base is the **brain that acts on the extracted data**. It takes extraction output and produces:
+Singleton class that loads JSON rules from `backend/rules/data/` at startup:
+- **94 carrier JSON files** — each with synonyms, member ID regex patterns + scores, label matching, section preferences, validation rules
+- **5 CPT category files** — codes with keywords, ICD requirements, conflict detection
+- **5 ICD category files** — codes with keyword inference, primary/secondary rules
+- **1 credential file** — provider credential patterns
+- Provides `scoreCandidate()`, `scoreCptCandidate()`, `scoreIcdCandidate()`, `classifyPhone()`, `identifyTemplate()`
 
-1. **Flags** — "this referral has problems X, Y, Z, here's what staff should do"
-2. **Test selection** — "based on order + insurance + clinical, the test is 95810"
-3. **Auth readiness** — "ready to submit" or "missing X, call for Y"
-4. **Cost estimate** — "$334.04 (HPN rate for HST)"
-5. **Status** — `READY_TO_SCHEDULE` / `READY_FOR_AUTH` / `PENDING_*` / `STOPPED`
+### Clinical Normalization — `backend/rules/utils/clinicalNormalization.js` (296 lines)
+
+- Levenshtein deduplication of OCR-noisy clinical notes
+- Falls history detection, opioid medication detection, oxygen/caretaker flags
+- Pediatric description detection, prior study evidence, CPAP titration context
+
+### Decision Tree — `backend/decisionTree.js` (592 lines)
+
+5-level validation pipeline already wired into `server.js`:
+1. **Completeness** — patient name, DOB, contact (dynamic field path resolution)
+2. **Insurance** — carrier name, member ID, auth indicators
+3. **Clinical** — diagnosis, referral reason, urgent keywords
+4. **Provider** — name, NPI, contact info
+5. **Demographics** — address, city, state, zip
+
+Routes to: `READY_TO_SCHEDULE` / `INSURANCE_VERIFICATION` / `AUTHORIZATION_REQUEST` / `PROVIDER_FOLLOWUP` / `MANUAL_REVIEW`
+
+### Other Utilities (1,629 lines)
+
+| File | Lines | Purpose |
+|---|---|---|
+| `utils/ruleEngine.js` | 637 | Universal pattern scoring engine (see above) |
+| `utils/clinicalNormalization.js` | 296 | Note dedup + clinical flag helpers |
+| `utils/icd10Validator.js` | 248 | ICD-10 format validation |
+| `utils/cptValidator.js` | 175 | CPT format validation |
+| `utils/ocrCorrector.js` | 196 | OCR correction application |
+| `utils/configLoader.js` | 53 | JSON config loader with transform/default |
+| `utils/phone.js` | 25 | NANP phone validation |
+
+### Rule Data Files — `backend/rules/data/`
+
+| Directory | Files | Content |
+|---|---|---|
+| `carriers/` | 94 | Carrier-specific member ID patterns, synonyms, labels, validation |
+| `cpt/` | 5 | CPT code catalogs by category (HST, in-lab, MSLT, titration, pediatric) |
+| `icd/` | 5 | ICD-10 code catalogs with keywords and enrichment |
+| `credentials/` | 1 | Provider credential patterns |
+| Root JSONs | 7 | `insurance_policies.json`, `carriers_catalog.json`, `cpt_catalog.json`, `icd_catalog.json`, `icd_alerts.json`, `icd_keywords.json`, `icd_enrichment.json` |
 
 ---
 
-## Architecture: 3 Layers (Not a Monolithic Rules Engine)
+## What the Client's Knowledge Base Adds (87 files, v0.19.3)
 
-A monolithic post-extraction engine that replicates all 25 mermaid tree sections would be ~3,000+ lines of if/else code — redundant with what the LLM already handles during extraction. Instead:
+The client's KB from `/Decision Tree and Relevant Files/` fills gaps the existing system doesn't cover:
 
-### Layer 1 — Enrich the LLM Extraction (modify existing prompts)
+1. **Flags** — 105-flag catalog with 5 severity tiers + human action text (the existing system has no formal flag catalog)
+2. **Payer criteria chains** — insurance → specific rules per payer (auth requirements, allowed CPTs, submission info)
+3. **Test selection** — "based on order + insurance + clinical, the test is 95810" (existing CPT detection finds what's on the page, but doesn't select the *right* test)
+4. **BCBS prefix routing** — 19,511 member ID prefix → plan mappings (existing BCBS carrier matching is synonym-only)
+5. **Cost estimates** — per-payer allowable rates for each test type (not in existing system at all)
+6. **Auth readiness** — "ready to submit" vs "missing X, call for Y" (existing decision tree routes but doesn't produce staff instructions)
+7. **Contraindications** — clinical safety rules (O2-dependent → no HST, pediatric age tiers)
 
-Feed knowledge base context into the existing LLM extraction prompts so it extracts **better** with almost zero new code:
+### What It Does NOT Need to Duplicate
+
+| Capability | Already Handled By | KB Should NOT Rebuild |
+|---|---|---|
+| Carrier name matching | `carriers.js` + 94 carrier JSONs | ✓ Already fuzzy-matches OCR-garbled names |
+| Member ID pattern scoring | `ruleEngine.js` + carrier JSONs | ✓ Already scores candidates per carrier |
+| CPT code detection | `cpt.js` + 5 CPT category files | ✓ Already finds codes with intent classification |
+| ICD-10 keyword extraction | `icd.js` + enrichment JSONs | ✓ Already does labeled + global + keyword inference |
+| Clinical note dedup | `clinicalNormalization.js` | ✓ Already Levenshtein-deduplicates |
+| Basic routing | `decisionTree.js` (5-level) | ✓ Already routes to 5 outcomes |
+| Provider credential detection | `ruleEngine.detectCredential()` | ✓ Already identifies MD/DO/NP/PA-C |
+
+---
+
+## Architecture: 3 Layers
+
+### Layer 1 — Enrich LLM Extraction (modify existing prompts)
+
+Feed KB context into existing LLM prompts so extraction is **better** with minimal new code:
 
 | KB File in Prompt | What It Improves |
 |---|---|
@@ -42,118 +116,199 @@ Feed knowledge base context into the existing LLM extraction prompts so it extra
 | `signature_patterns.json` credential tiers | LLM flags "NP needs supervising" during extraction |
 | `facility_config.json` exclusion filter | LLM stops confusing the facility's own fax number with the provider's |
 
-This replaces most of M1B, M1C name-matching, and M1E with prompt engineering — something the pipeline already does.
+### Layer 2 — Extend Existing Rules with KB Data (new modules, ~400-600 lines)
 
-### Layer 2 — Lightweight Deterministic Engine (new, ~500-800 lines)
+The existing `rules/` infrastructure handles detection. These new modules handle **decision logic** that runs after extraction:
 
-The parts that MUST be exact code, not LLM:
+| New Module | Lines (est.) | What It Does | KB Files Consumed | Extends |
+|---|---|---|---|---|
+| `payerCriteria.js` | ~120 | Maps detected carrier → payer criteria chain → auth requirements, CPT coverage, submission info | `payer_router.json`, `payer_criteria_map.json`, `payer_*.json`, `criteria_*.md` | `carriers.js` output |
+| `bcbsRouter.js` | ~60 | BCBS member ID prefix → specific plan routing | `bcbs_prefix_database.json` | `ruleEngine.scoreCandidate()` |
+| `testSelector.js` | ~80 | Given ordered CPT + insurance coverage + clinical context → recommended test code | `cpt_selector_FIXED.json`, `contraindications.json` | `cpt.js` output |
+| `flagEngine.js` | ~100 | Evaluates all extraction fields against 105-flag catalog, severity sort, dedup | `flags_catalog_tree_v0_19_3.json` | `clinicalNormalization.js` |
+| `costEstimate.js` | ~50 | Payer + test code → allowable rate + patient responsibility | `insurance_allowables.json` | `payerCriteria.js` output |
+| `ageCalc.js` | ~30 | DOB → age at service date, pediatric tier (< 6 / 6-17 / 18+) | `facility_config.json` | — |
 
-| Logic | Why It Can't Be LLM | KB Files Consumed |
-|---|---|---|
-| Age calculation (DOB → service date offset) | Math | `facility_config.json` |
-| Payer routing chain (router → payer JSON → criteria) | Exact JSON lookup | `payer_router.json` → `payer_*.json` → `criteria_*.json` |
-| BCBS prefix lookup (19,511 entries) | Too large for context | `bcbs_prefix_database.json` |
-| Contraindication checks | Clinical safety — must be deterministic | `contraindications.json` |
-| CPT scope narrowing (M2A → M3) | Insurance coverage = binary yes/no | `payer_criteria_map.json`, `cpt_selector_FIXED.json` |
-| Test selection tiebreaker (M4) | Ordered priority rules | `insurance_allowables.json` |
-| Cost estimate | Arithmetic from allowables table | `insurance_allowables.json` |
-| Flag generation + severity sort | Catalog lookup | `flags_catalog_tree_v0_19_3.json` |
+**Total:** ~440 lines of new logic
+
+These modules don't replace anything — they consume the output of existing detectors and add decision intelligence.
+
+### Layer 2 Integration Point — Extend `decisionTree.js`
+
+The existing decision tree produces routing (5 outcomes). The KB integration **adds a 6th pass** after the existing 5 levels:
+
+```
+Level 1: Completeness Check    ← existing
+Level 2: Insurance Check       ← existing
+Level 3: Clinical Check        ← existing
+Level 4: Provider Check        ← existing
+Level 5: Demographics Check    ← existing
+Level 6: KB Assessment (NEW)   ← runs payerCriteria + testSelector + flagEngine + costEstimate
+```
+
+The Level 6 output enriches the result JSON with:
+
+```json
+{
+  "kbAssessment": {
+    "flags": [
+      { "id": "FLAG_MISSING_AUTH", "severity": 1, "action": "Submit PA to UHC portal", "tier": "STOP" }
+    ],
+    "testRecommendation": { "code": "95810", "reason": "In-lab PSG per UHC criteria" },
+    "authStatus": "PENDING_PRIOR_AUTH",
+    "costEstimate": { "allowable": 334.04, "patientResp": 0, "payer": "HPN" },
+    "finalStatus": "READY_FOR_AUTH"
+  }
+}
+```
 
 ### Layer 3 — LLM Assist for Fuzzy Tasks (optional, uses existing Ollama)
 
-Only two things in the tree actually benefit from LLM intelligence:
+Only two things benefit from LLM intelligence beyond what exists:
 
-1. **ICD-10 Tier B** — semantic matching of clinical text to 5,193 codes (e.g., "restless legs" → G25.81). Tier A (84 curated codes, keyword match) handles 80% deterministically. Tier B is the long tail.
-2. **NLP context** — negation detection ("no snoring"), family vs personal ("father had apnea"), temporal ("resolved after surgery"). This is what LLMs are good at.
+1. **ICD-10 Tier B** — semantic matching of clinical text to 5,193 codes (e.g., "restless legs" → G25.81). The existing `icd.js` handles Tier A (keyword/regex, ~84 curated codes, covers ~80% of cases). Tier B is the long tail.
+2. **NLP context** — negation detection ("no snoring"), family vs personal ("father had apnea"), temporal ("resolved after surgery").
 
 ---
 
-## Comparison
+## Mapping: Existing ↔ Client KB ↔ New Modules
 
-| | Monolithic Rules Engine | 3-Layer Hybrid |
+The naming mismatch between the existing 94 carrier JSONs and the client's KB files needs a reconciliation layer:
+
+| Existing System | Client KB | Bridge Needed |
 |---|---|---|
-| **New code** | ~3,000+ lines | ~500-800 lines |
-| **OCR garbling** | Breaks exact-match payer lookup | LLM handles fuzzy matching natively |
-| **Build time** | Weeks (25 sections) | Days (enrich prompts + small engine) |
-| **Leverages existing LLM** | Not at all — parallel system | Fully — it's already running |
-| **Clinical safety** | Deterministic ✓ | Deterministic for rules, LLM only for NLP ✓ |
-| **Testable** | Yes but massive test surface | Small deterministic core, easy to unit test |
-
----
-
-## File Structure
-
-```
-backend/
-  rules/                ← Layer 2 lives here (directory already exists)
-    payerRouter.js       ← insurance.json → payer chain → criteria lookup
-    ageCalc.js           ← DOB → age at service date, pediatric code selection
-    contraCheck.js       ← contraindications.json → scope narrowing
-    testSelector.js      ← M3+M4 tiebreaker, split night eval
-    flagEngine.js        ← catalog lookup, severity sort, dedup
-    costEstimate.js      ← allowables table lookup
-  llmService.js          ← Layer 1: enrich existing prompts with KB context
-  server.js              ← after extraction, pipe result through rules/
-```
+| 94 files in `rules/data/carriers/` (e.g., `aetna.json`) | `insurance.json` (99 carriers) + `payer_router.json` (27 payers) | `payerCriteria.js` maps `carriers.js` output carrier name → KB `payer_router.json` payer_id |
+| `carriers_catalog.json` (synonym patterns) | `insurance.json` (accepted/doNotAccept lists) | Merge — existing synonyms are more OCR-tuned; KB accepted list is authoritative |
+| `insurance_policies.json` (sunset, auto_flag) | `payer_criteria_map.json` (auth, coverage) | Different concerns — policies = acceptance status, criteria = clinical rules. Both load |
+| 5 CPT category files | `cpt_selector_FIXED.json` (6 rule categories) | KB adds insurance-specific CPT coverage rules on top of existing detection |
+| 5 ICD category files + enrichment | `icd10_curated.json` (84) + `icd10_master_fy2026.json` (5,193) | KB curated list supplements existing catalog; master list feeds Layer 3 |
+| `clinicalNormalization.js` safety helpers | `contraindications.json` (15 clinical rules) | New `testSelector.js` uses KB contraindications; existing helpers feed `flagEngine.js` |
+| No equivalent | `flags_catalog_tree_v0_19_3.json` (105 flags) | **Entirely new** — `flagEngine.js` |
+| No equivalent | `insurance_allowables.json` (34 payers, 112 rates) | **Entirely new** — `costEstimate.js` |
+| No equivalent | `bcbs_prefix_database.json` (19,511 prefixes) | **Entirely new** — `bcbsRouter.js` |
 
 ---
 
 ## JSON Files — Load Order & Mapping
 
-All 17 core JSON files load at startup. `facility_config.json` loads FIRST (OCR exclusion filter must be active before any document processing).
+All 17 core KB files load at startup into `backend/data/kb/`. The existing `rules/data/` files continue loading independently.
 
-| # | File | Records | Layer | Modules |
-|---|------|---------|-------|---------|
-| 1 | `facility_config.json` | 5 sections + 10 params | L1 + L2 | All |
-| 2 | `insurance.json` | 99 carriers | L1 | Payer ID |
-| 3 | `payer_criteria_map.json` | 27 payers | L2 | Coverage, auth |
-| 4 | `insurance_allowables.json` | 34 payers + Self Pay, 112 rates | L2 | Cost, tiebreaker |
-| 5 | `eligibility_combinations.json` | 21 payers, 75 combos | L2 | Field validation |
-| 6 | `bcbs_prefix_database.json` | 19,511 prefixes | L2 | BCBS routing |
-| 7 | `filename_classification.json` | 14 patterns | L1 | File intake |
-| 8 | `referral_keywords.json` | ~106 phrases | L1 + L2 | Order scope |
-| 9 | `signature_patterns.json` | ~50 patterns | L1 | Provider validation |
-| 10 | `provider_databank.json` | Schema (grows with usage) | L2 | NPI cache |
-| 11 | `contraindications.json` | 15 clinical rules | L2 | Scope narrowing |
-| 12 | `flags_catalog_tree_v0_19_3.json` | 105 flags | L2 | Flag aggregation |
-| 13 | `icd10_curated.json` | 84 codes | L2 | ICD Tier A |
-| 14 | `icd10_master_fy2026.json` | 5,193 codes | L3 | ICD Tier B |
-| 15 | `cpt_selector_FIXED.json` | 6 rule categories | L2 | CPT selection |
-| 16 | `cpt_keywords.json` | 21 CPT→keyword maps | L1 | OCR extraction |
-| 17 | `convert_icd10_master.py` | Script | N/A | Annual maintenance |
+| # | File | Records | Layer | New Module |
+|---|------|---------|-------|------------|
+| 1 | `facility_config.json` | 5 sections + 10 params | L1 + L2 | `ageCalc.js`, LLM prompt exclusion |
+| 2 | `insurance.json` | 99 carriers | L1 | LLM prompt (accepted list) |
+| 3 | `payer_router.json` | 27 payer mappings | L2 | `payerCriteria.js` |
+| 4 | `payer_criteria_map.json` | 27 payers → criteria files | L2 | `payerCriteria.js` |
+| 5 | `insurance_allowables.json` | 34 payers, 112 rates | L2 | `costEstimate.js` |
+| 6 | `eligibility_combinations.json` | 21 payers, 75 combos | L2 | `payerCriteria.js` |
+| 7 | `bcbs_prefix_database.json` | 19,511 prefixes | L2 | `bcbsRouter.js` |
+| 8 | `filename_classification.json` | 14 patterns | L1 | File intake enrichment |
+| 9 | `referral_keywords.json` | ~106 phrases | L1 + L2 | Order scope |
+| 10 | `signature_patterns.json` | ~50 patterns | L1 | LLM prompt (credential tiers) |
+| 11 | `contraindications.json` | 15 clinical rules | L2 | `testSelector.js` |
+| 12 | `flags_catalog_tree_v0_19_3.json` | 105 flags | L2 | `flagEngine.js` |
+| 13 | `icd10_curated.json` | 84 codes | L2 | Supplements existing `icd.js` catalog |
+| 14 | `icd10_master_fy2026.json` | 5,193 codes | L3 | ICD Tier B (LLM semantic match) |
+| 15 | `cpt_selector_FIXED.json` | 6 rule categories | L2 | `testSelector.js` |
+| 16 | `cpt_keywords.json` | 21 CPT→keyword maps | L1 | LLM prompt enrichment |
+| 17 | `convert_icd10_master.py` | Script | N/A | Annual ICD code maintenance |
 
 ---
 
-## Integration Point
+## Integration Points — Existing Pipeline
 
-The current result JSON already extracts most input fields that the rules engine needs:
+The current pipeline and where KB fits:
 
-| Extracted Field | Feeds |
-|---|---|
-| `patient.first`, `patient.last`, `patient.dob` | Age calculation, pediatric code selection |
-| `insurance.name`, `insurance.memberId` | Payer identification, routing chain |
-| `provider.name`, `provider.npi`, `provider.phone` | Provider validation, NPI lookup |
-| `clinical.cptCodes` | Order scope determination |
-| OCR raw text | ICD generation, NLP context |
+```
+PDF Upload
+  ↓
+PDF Trim (pageSelector.js)
+  ↓
+OCR (ocr_service, port 8000)
+  ↓
+┌─────────────────────────────────────────┐
+│ Regex Pre-Extraction (rules/index.js)   │  ← EXISTING: detects carriers, CPTs,
+│   → carriers.js, cpt.js, icd.js, etc.  │    ICDs, names, phones, addresses
+│   → ruleEngine.js scores candidates     │
+└─────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────┐
+│ Text LLM Extraction (qwen2.5:14b)      │  ← LAYER 1: inject KB context into
+│   → textLlmExtractor.js                │    prompts (insurance list, CPT
+│                                         │    keywords, facility exclusion)
+└─────────────────────────────────────────┘
+  ↓
+VLM Verification (qwen2.5vl:7b)
+  ↓
+┌─────────────────────────────────────────┐
+│ Decision Tree (decisionTree.js)         │  ← EXISTING: 5-level validation
+│   Levels 1-5: completeness, insurance,  │    Routes to 5 outcomes
+│   clinical, provider, demographics      │
+└─────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────┐
+│ KB Assessment — NEW Level 6             │  ← LAYER 2: runs after extraction
+│   → payerCriteria.js (payer chain)      │
+│   → bcbsRouter.js (prefix lookup)       │
+│   → testSelector.js (recommend test)    │
+│   → flagEngine.js (105-flag catalog)    │
+│   → costEstimate.js (allowable rates)   │
+│   → ageCalc.js (pediatric tiers)        │
+└─────────────────────────────────────────┘
+  ↓
+Save Enriched Result JSON → Download Packet
+```
 
-After extraction completes, the result pipes through the Layer 2 rules engine which enriches it with flags, test selection, auth status, cost estimate, and final status.
+### Extracted Fields That Feed Layer 2
+
+| Extracted Field | Source | Feeds |
+|---|---|---|
+| `carrier` name + status | `carriers.js` + `ruleEngine` | `payerCriteria.js` → payer routing chain |
+| `memberId` | `rules/index.js` member ID detection | `bcbsRouter.js` (prefix extraction) |
+| `cptCodes` + intent | `cpt.js` (with ordered/requested/mentioned) | `testSelector.js` |
+| `icdCodes` + enrichment | `icd.js` (with chronic, severity) | `flagEngine.js`, Layer 3 |
+| `patient.dob` | `patient.js` or LLM | `ageCalc.js` → pediatric tier |
+| `provider.credential` | `ruleEngine.detectCredential()` | `flagEngine.js` (supervision flags) |
+| Clinical notes (raw) | OCR text | `flagEngine.js` (via `clinicalNormalization.js` helpers) |
 
 ---
 
 ## Implementation Order
 
-1. **Copy KB JSON files** into `backend/data/kb/` (or similar)
-2. **Layer 1** — Enrich LLM prompts with `insurance.json`, `cpt_keywords.json`, `signature_patterns.json`, `facility_config.json` exclusion filter
-3. **Layer 2** — Build deterministic rules in order:
-   - `payerRouter.js` (payer identification → criteria chain)
-   - `ageCalc.js` (age at service date, pediatric routing)
-   - `contraCheck.js` (scope narrowing from contraindications)
-   - `testSelector.js` (M3 coverage check + M4 tiebreaker)
-   - `flagEngine.js` (catalog lookup, severity sort, dedup)
-   - `costEstimate.js` (allowables table arithmetic)
-4. **Layer 3** (optional) — ICD-10 Tier B semantic matching + NLP context via Ollama
-5. **Frontend** — Display flags (severity-colored list), test recommendation, auth status badge, cost estimate alongside existing extracted data
-6. **Wire into pipeline** — After extraction + verification, run `rules/` engine, merge output into result JSON
+### Phase 1 — Data Setup (1 hour)
+1. Copy 17 KB JSON files into `backend/data/kb/`
+2. Extend `configLoader.js` to support `kb/` directory path
+3. Verify all files parse cleanly at startup
+
+### Phase 2 — Layer 1: Prompt Enrichment (half day)
+4. Inject `insurance.json` accepted carrier list into text LLM prompt (~5 lines)
+5. Inject `cpt_keywords.json` CPT→keyword mapping into prompt (~5 lines)
+6. Add `facility_config.json` phone/fax exclusion to prompt (~5 lines)
+7. Add `signature_patterns.json` credential tier context to prompt (~5 lines)
+
+### Phase 3 — Layer 2: KB Assessment Modules ✅ COMPLETE
+8. ✅ `ageCalc.js` — age calculation + pediatric tier classification (backend/rules/kb/ageCalc.js)
+9. ✅ `payerCriteria.js` — carrier name → payer_router → payer file → auth/coverage/flags (backend/rules/kb/payerCriteria.js)
+10. ✅ `bcbsRouter.js` — BCBS alpha prefix lookup in 19,511 entries (backend/rules/kb/bcbsRouter.js)
+11. ✅ `testSelector.js` — age + payer + contraindications → recommended CPT (backend/rules/kb/testSelector.js)
+12. ✅ `costEstimate.js` — payer + CPT → allowable rate from insurance_allowables.json (backend/rules/kb/costEstimate.js)
+13. ✅ `flagEngine.js` — aggregate, deduplicate, enrich, sort all flags from all modules (backend/rules/kb/flagEngine.js)
+14. ✅ Wired all modules into `decisionTree.js` as Level 6 (checkKbAssessment method), outputs kbAssessment object
+
+### Phase 4 — Frontend Display ✅ COMPLETE
+15. ✅ `KbAssessmentPanel.jsx` — full panel with flags (severity-colored rows with icons), test recommendation, payer/auth, cost estimate, BCBS routing, submission guidance, alt CPTs
+16. ✅ Wired into `ReferralPage.jsx` Details view (renders when `doc.routing.kbAssessment` exists)
+17. ✅ Added KB status badge to `ChecklistPage.jsx` route badges (STOP/PENDING/FLAG/CLEAR with tooltip showing flagSummary)
+
+### Phase 5 — Layer 3: ICD Tier B ✅ COMPLETE
+19. ✅ Added `getIcd10Master()` to `kbLoader.js` — loads 5,193 codes from `icd10_master_fy2026.json`
+20. ✅ Built `icdMatcher.js` (`backend/rules/kb/icdMatcher.js`) — 3-tier ICD matching engine:
+    - **Tier A**: Keyword-based matching against `icd10_curated.json` (~85 codes). Inverted index, specificity-ranked.
+    - **Tier B**: LLM semantic matching via Ollama `qwen2.5:14b`. Heuristic category selection → compact code block → structured JSON prompt. 15s timeout, graceful fallback.
+    - **NLP Context**: Sentence-boundary-aware negation detection ("denies", "no history of"), family-vs-personal ("family history of"), temporal qualifiers ("previous", "resolved").
+21. ✅ Wired `assessIcd()` into `checkKbAssessment()` in `decisionTree.js` — ICD flags aggregate into flag engine, ICD codes exposed in `kbAssessment.icd`
+22. ✅ Made `evaluate()` async to support Tier B LLM calls. Updated both callers (`server.js`, `dualEngineProcessor.js`).
+23. ✅ Validated: Tier A matches G47.33 (OSA), G47.10 (hypersomnia), R40.0 (somnolence), I10 (hypertension), R06.83 (snoring). NLP correctly detects negation, family history, past temporal context.
 
 ---
 
@@ -161,6 +316,52 @@ After extraction completes, the result pipes through the Layer 2 rules engine wh
 
 Before building, the client must provide:
 
-- **28 facility_config.json values** — real facility NPI, phone, fax, address, physician names (Critical #1)
-- **Fix 4 missing payer_criteria_map entries** — bcbs_non_carelon, uhc_medicare_direct, uhc_medicare_optum, uhc_surest (Critical #2)
-- **Add 4 missing flags to catalog** — FLAG_MERITAIN_CALL_FIRST, FLAG_NV_MEDICAID_NO_HST, FLAG_UMR_CHECK_NETWORK, FLAG_OON_AUTO (Critical #3)
+- **28 facility_config.json values** — real facility NPI, phone, fax, address, physician names (Critical #1) — **AWAITING CLIENT DATA** (see section below)
+- ✅ **Fix 4 missing payer_criteria_map entries** — added `BCBS Non-Carelon`, `UHC Medicare Direct`, `UHC Medicare Optum`, `UHC Surest` (31 payers total now)
+- ✅ **Add 8 missing flags to catalog** — added `FLAG_MERITAIN_CALL_FIRST`, `FLAG_NV_MEDICAID_NO_HST`, `FLAG_UMR_CHECK_NETWORK`, `FLAG_OON_AUTO` + 4 payer-file orphans (`FLAG_BCBS_UNVERIFIED_PREFIX`, `FLAG_OPTUM_MISLABELED_REFERRAL`, `FLAG_OPTUM_WRONG_PORTAL`, `FLAG_SUREST_COPAY_CALL`) — 113 flags total now
+
+---
+
+## CLIENT ACTION REQUIRED — facility_config.json
+
+The file `backend/data/kb/facility_config.json` has **28 PLACEHOLDER values** that must be filled in with the real sleep lab's identity. This is NOT extracted from referrals — it's your client's own facility info (like setting up an EMR). The OCR exclusion filter uses these to avoid confusing the facility's own phone/fax/NPI with the referring provider's.
+
+**Tell your client you need:**
+
+### Facility Identity (10 values)
+| # | Field | What to Ask For |
+|---|-------|-----------------|
+| 1 | Facility legal name | "What is the legal business name on your NPI registration?" |
+| 2 | DBA name | "Do you operate under a different name (DBA)? If same, leave blank." |
+| 3 | Facility NPI | "What is your 10-digit facility NPI?" |
+| 4 | Tax ID / EIN | "What is your facility Tax ID or EIN?" |
+| 5 | Taxonomy code | "What is your facility taxonomy code?" |
+| 6 | Street address | "What is the facility street address?" (city=Las Vegas, state=NV already set) |
+| 7 | ZIP code | "What is the facility ZIP code?" |
+| 8 | Main phone | "What is the main office phone number?" |
+| 9 | Main fax | "What is the facility fax number?" |
+| 10 | Email | "What is the facility email for auth correspondence?" |
+
+### Supervising Physician (3 values)
+| # | Field | What to Ask For |
+|---|-------|-----------------|
+| 11 | First name | "Who is the supervising sleep medicine physician?" |
+| 12 | Last name | (same) |
+| 13 | NPI | "What is the supervising physician's 10-digit NPI?" |
+
+### Interpreting Physician (3 values)
+| # | Field | What to Ask For |
+|---|-------|-----------------|
+| 14 | First name | "Who is the interpreting physician (if different from supervising)?" |
+| 15 | Last name | (same) |
+| 16 | NPI | "What is the interpreting physician's NPI?" |
+
+### Auto-Derived (12 values — we fill these automatically)
+Items 17-28 are the OCR exclusion filter arrays (phone numbers, fax numbers, NPIs, addresses, entity names). Once the client provides items 1-16 above, we populate the exclusion filter automatically — no extra input needed.
+
+### Why This Matters
+Without real facility data:
+- The system confuses the facility's own fax number with the referring provider's fax
+- Auth submissions would have placeholder NPIs and addresses
+- Cost estimates reference the wrong entity
+- The OCR exclusion filter doesn't filter anything

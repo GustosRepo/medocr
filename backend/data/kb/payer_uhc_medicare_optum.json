@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "payer_id": "uhc_medicare_optum",
+    "payer_name": "UHC Medicare (Optum-Managed)",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Optum-managed Medicare plans. Different portal (Curo), different rates, different benefits portal. Watch for mislabeled referrals."
+  },
+  "criteria_source": {
+    "criteria_id": "uhc",
+    "criteria_file": "criteria_uhc.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "curo",
+      "notes_required": "always"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "curo",
+      "notes_required": "always"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "curo",
+      "notes_required": "always"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Curo",
+    "portal_url": "https://curo.optum.com/login",
+    "benefits_portal": "https://providers.optumcaremw.com",
+    "notes": "THREE portals involved. Auth via Curo. Benefits via Optum Care. UHC Provider for initial ID only."
+  },
+  "referral": {
+    "required": "hmo_only",
+    "notes": "HMO plans require PCP-submitted referral via Curo (not uhcprovider.com)."
+  },
+  "pain_level": "yellow",
+  "flags": [
+    {
+      "flag_id": "FLAG_OPTUM_MISLABELED_REFERRAL",
+      "trigger": "uhc_medicare_optum_identified",
+      "message": "Watch for mislabeled referrals -- Optum is an IPA. Verify plan type.",
+      "severity": "medium"
+    },
+    {
+      "flag_id": "FLAG_OPTUM_WRONG_PORTAL",
+      "trigger": "uhc_medicare_optum AND submission_to_uhcprovider",
+      "message": "Use Curo portal, NOT uhcprovider.com",
+      "severity": "high"
+    }
+  ]
+}

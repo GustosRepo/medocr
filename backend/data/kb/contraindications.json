@@ -1,0 +1,166 @@
+{
+  "_version": "0.19.0",
+  "_updated": "2026-02-25",
+  "_description": "Hard and soft contraindication rules for sleep study test selection. Used in M2C (Contraindications & Comorbidity) to determine which tests are blocked, which are recommended against, and which comorbidities affect test routing. Key design principle: O2 is the ONLY hard HST stop. All other comorbidities generate recommendations, not blocks.",
+  "_used_by": "M2C (Contraindications & Comorbidity)",
+  "_source": "Visual Tree v0.19.0 M2C, Audit Report v0.19.0, Developer Handoff v0.19.0 Key Design Decisions",
+
+  "hard_stops": {
+    "_description": "Conditions that completely prevent testing. STOP flags -- cannot proceed.",
+    "homebound_with_o2": {
+      "condition": "Patient is homebound AND on home oxygen",
+      "flag": "STOP_CANNOT_TEST",
+      "severity": "STOP",
+      "description": "Patient cannot travel to lab AND cannot use HST with O2. No testing option available.",
+      "human_action": "Document reason. May need NIV (Non-Invasive Ventilation) referral. Fax UTS if applicable.",
+      "removes_from_scope": ["95806", "G0399", "95810", "95811", "95782", "95783"],
+      "icd_triggers": ["Z99.81", "Z99.1"]
+    },
+    "age_under_2": {
+      "condition": "Patient age < 2 at anticipated service date",
+      "flag": "STOP_AGE",
+      "severity": "STOP",
+      "description": "Cannot perform sleep studies on patients under age 2.",
+      "human_action": "Notify referring provider. Document and return referral.",
+      "removes_from_scope": ["95806", "G0399", "95810", "95811", "95782", "95783"],
+      "checked_in": "M1B (Patient Validation)"
+    }
+  },
+
+  "hst_hard_block": {
+    "_description": "The ONLY clinical condition that blocks HST specifically (besides age < 18). O2 dependency means patient cannot remove supplemental oxygen for home testing.",
+    "home_oxygen": {
+      "condition": "Patient uses home supplemental oxygen (O2 dependent)",
+      "flag": "REMOVE_HST",
+      "severity": "FLAG",
+      "description": "HST cannot be performed while on supplemental O2. In-lab only.",
+      "removes_from_scope": ["95806", "G0399"],
+      "does_not_remove": ["95810", "95811"],
+      "human_action": "Route to in-lab testing. HST physically not possible.",
+      "icd_triggers": ["Z99.81"],
+      "keyword_triggers": ["home oxygen", "supplemental oxygen", "O2 dependent", "on oxygen", "oxygen therapy", "nasal cannula", "home O2"]
+    }
+  },
+
+  "soft_recommendations": {
+    "_description": "Comorbidities that generate FLAG_PSG_RECOMMENDED but do NOT remove HST from scope. Physician order still controls. The system recommends PSG but lets HST proceed if ordered.",
+    
+    "copd_moderate_severe": {
+      "condition": "Moderate to severe COPD",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "Potential central/complex apnea, O2 desaturation monitoring beneficial in-lab",
+      "removes_hst": false,
+      "icd_triggers": ["J44.0", "J44.1"],
+      "keyword_triggers": ["copd", "chronic obstructive", "emphysema", "chronic bronchitis"],
+      "fev1_threshold": "FEV1 < 50% predicted (if available)"
+    },
+    "chf": {
+      "condition": "Congestive heart failure",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "Associated with central sleep apnea and Cheyne-Stokes respiration",
+      "removes_hst": false,
+      "icd_triggers": ["I50.1", "I50.20", "I50.21", "I50.22", "I50.23", "I50.30", "I50.31", "I50.32", "I50.33", "I50.40", "I50.41", "I50.42", "I50.43", "I50.810", "I50.811", "I50.812", "I50.813", "I50.814", "I50.82", "I50.83", "I50.84", "I50.89", "I50.9"],
+      "keyword_triggers": ["heart failure", "chf", "congestive heart", "ejection fraction", "cardiomyopathy"]
+    },
+    "opioid_use": {
+      "condition": "Current opioid use (respiratory depression risk)",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "Opioids cause central apnea and hypoventilation -- in-lab monitoring preferred",
+      "removes_hst": false,
+      "icd_triggers": ["F11.10", "F11.20", "F11.90"],
+      "keyword_triggers": ["opioid", "oxycodone", "hydrocodone", "morphine", "methadone", "fentanyl", "tramadol", "codeine", "vicodin", "percocet", "norco", "dilaudid", "suboxone", "buprenorphine"],
+      "also_triggers": "ALERT_OPIOID_RESPIRATORY_RISK"
+    },
+    "morbid_obesity": {
+      "condition": "BMI > 50 (super morbid obesity)",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "Obesity hypoventilation syndrome risk, complex apnea patterns",
+      "removes_hst": false,
+      "bmi_threshold": 50,
+      "keyword_triggers": ["morbid obesity", "super morbid", "bmi 50", "bmi over 50"],
+      "notes": "BMI > 30 but < 50 is noted for clinical context but does not generate this flag."
+    },
+    "neuromuscular_disease": {
+      "condition": "Neuromuscular disease affecting respiratory muscles",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "Central/complex apnea risk, need respiratory monitoring",
+      "removes_hst": false,
+      "icd_triggers": ["G71.0", "G71.11", "G71.2", "G12.21"],
+      "keyword_triggers": ["myasthenia gravis", "muscular dystrophy", "als", "amyotrophic lateral sclerosis"]
+    },
+    "suspected_central_apnea": {
+      "condition": "Suspected or known central sleep apnea",
+      "flag": "FLAG_PSG_RECOMMENDED",
+      "reason": "HST cannot detect central apneas -- in-lab required for accurate diagnosis",
+      "removes_hst": false,
+      "icd_triggers": ["G47.31"],
+      "keyword_triggers": ["central apnea", "central sleep apnea", "csa", "cheyne-stokes"]
+    },
+    "multiple_moderate_comorbidities": {
+      "condition": "2+ moderate comorbidities from the list above present simultaneously",
+      "flag": "FLAG_COMPLEX_CASE",
+      "reason": "Multiple comorbidities increase complexity -- clinical review recommended",
+      "removes_hst": false,
+      "human_action": "Flag for clinical review. Consider PSG over HST."
+    }
+  },
+
+  "pediatric_restrictions": {
+    "_description": "Age-based test restrictions. Checked in M1B and enforced in M2C/M4.",
+    "under_2": {
+      "restriction": "Cannot test",
+      "flag": "STOP_AGE"
+    },
+    "age_2_to_5": {
+      "restriction": "Pediatric codes only (95782/95783). HST not allowed.",
+      "removes_from_scope": ["95806", "G0399"],
+      "adds_to_scope": ["95782", "95783"],
+      "flag": "REMOVE_HST",
+      "reason": "HST not validated for pediatric patients under 6."
+    },
+    "age_6_to_17": {
+      "restriction": "Adult PSG codes (95810/95811). HST not allowed under 18.",
+      "removes_from_scope": ["95806", "G0399", "95782", "95783"],
+      "flag": "REMOVE_HST",
+      "reason": "HST not validated for pediatric patients."
+    },
+    "age_18_plus": {
+      "restriction": "No pediatric restrictions. Full adult scope available.",
+      "removes_from_scope": [],
+      "notes": "Standard adult rules apply."
+    }
+  },
+
+  "titration_prerequisites": {
+    "_description": "Titration (95811/95783) requires a prior positive diagnostic study. Checked in M2B.",
+    "requires_prior_diagnostic": true,
+    "prior_study_recency": {
+      "max_age_years": 5,
+      "hard_stop_years": 5,
+      "flag_aging_years": 1,
+      "rules": {
+        "under_1_year": { "status": "OK", "flag": null },
+        "1_to_5_years": { "status": "CIRCUMSTANTIAL", "flag": "FLAG_TITRATION_PRIOR_STUDY_AGING" },
+        "over_5_years": { "status": "EXPIRED", "flag": "STOP_TITRATION_EXPIRED" }
+      }
+    },
+    "repeat_titration_paths": {
+      "path_a_pressure": {
+        "description": "Patient already on PAP, needs pressure adjustment.",
+        "requirement": "Most recent titration results showing inadequate pressure.",
+        "max_recency": "5 years"
+      },
+      "path_b_diagnosis": {
+        "description": "Patient has prior positive diagnostic, needs first titration.",
+        "requirement": "Prior diagnostic study showing AHI > 5.",
+        "max_recency": "5 years"
+      }
+    }
+  },
+
+  "design_principles": {
+    "scope_never_expands": "The physician's order defines scope. If order says 'diagnostic only', system never adds titration -- even if clinically indicated. It flags the recommendation but doesn't override the physician.",
+    "o2_is_only_hard_hst_stop": "Every other comorbidity (COPD, CHF, opioids, BMI > 50) generates FLAG_PSG_RECOMMENDED but HST remains available. Only home oxygen physically prevents HST.",
+    "recommendations_not_blocks": "Soft recommendations inform the clinical picture but do not override physician judgment or remove options from scope."
+  }
+}

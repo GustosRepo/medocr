@@ -1,0 +1,190 @@
+{
+  "_meta": {
+    "criteria_id": "umr",
+    "criteria_name": "UMR",
+    "version": "1.0",
+    "effective_date": "2026-02-01",
+    "source_document": "UMR_Clinical_Criteria.md v1.0",
+    "strictness_tier": "varies_by_network",
+    "notes": "UMR routes through 2 distinct networks with different rules. Must identify network during benefits verification. Sierra/HPN = ultra-lenient. UHC = moderate (UHC guidelines).",
+    "last_updated": "2026-02-27"
+  },
+  "critical_rule": "UMR has TWO distinct paths — network MUST be identified during benefits verification",
+  "network_identification": {
+    "description": "Determine Sierra/HPN vs UHC network during benefits verification",
+    "indicators": {
+      "sierra_hpn": [
+        "Benefits show Sierra network",
+        "Benefits show HPN network",
+        "Portal redirects to Sierra"
+      ],
+      "uhc": [
+        "Benefits show UHC/United network",
+        "Portal redirects to UHC"
+      ]
+    },
+    "default_if_unknown": "uhc",
+    "default_reason": "UHC is safer/stricter — avoids under-documenting"
+  },
+  "networks": {
+    "sierra_hpn": {
+      "network_name": "UMR via Sierra/HPN",
+      "strictness_tier": 5,
+      "strictness_label": "ULTRA_LENIENT",
+      "hst_code": "95806",
+      "clinical_criteria_required": false,
+      "clinical_note": "Essentially a rubber stamp — no real clinical documentation requirements. Just submit and get approved.",
+      "referral_required": false,
+      "authorization_status": {
+        "hst_95806": {
+          "auth_required": true,
+          "units": 2
+        },
+        "psg_95810": {
+          "auth_required": true,
+          "units": 2,
+          "clinical_notes_required": false
+        },
+        "titration_95811": {
+          "auth_required": true,
+          "units": 2,
+          "clinical_notes_required": false
+        },
+        "split_night": {
+          "auth_required": true,
+          "units": 2
+        },
+        "pediatric_95782": {
+          "auth_required": true,
+          "units": 2
+        }
+      },
+      "submission": {
+        "benefits_portal": "provider.umr.com",
+        "auth_portal": "provider.healthplanofnevada.com"
+      },
+      "workflow": [
+        "Verify benefits at provider.umr.com",
+        "Confirm Sierra/HPN network",
+        "Submit ALL codes through provider.healthplanofnevada.com",
+        "Request 2 units for each code",
+        "Approval is essentially automatic"
+      ],
+      "nurse_notes_warning": {
+        "problem": "Nurse notes that don't make sense",
+        "result": "Authorization gets VOIDED — must resubmit",
+        "prevention": [
+          "Review nurse notes before submission",
+          "Ensure notes are coherent and relevant",
+          "Flag any notes that seem incomplete or contradictory",
+          "Better to fix notes upfront than resubmit"
+        ]
+      }
+    },
+    "uhc": {
+      "network_name": "UMR via UHC",
+      "strictness_tier": 3,
+      "strictness_label": "MODERATE",
+      "hst_code": "G0399",
+      "clinical_criteria_ref": "criteria_uhc_v2_2.json",
+      "clinical_note": "Follows standard UHC clinical criteria — see criteria_uhc_v2_2.json for full details",
+      "referral_required": "check_benefits",
+      "authorization_status": {
+        "hst_g0399": {
+          "auth_required": false,
+          "note": "Schedule directly"
+        },
+        "psg_95810": {
+          "auth_required": true,
+          "clinical_notes_required": true,
+          "notes_requirement": "ALWAYS include clinical notes"
+        },
+        "titration_95811": {
+          "auth_required": true,
+          "clinical_notes_required": true,
+          "notes_requirement": "ALWAYS include clinical notes"
+        },
+        "split_night": {
+          "auth_required": true,
+          "clinical_notes_required": true
+        }
+      },
+      "submission": {
+        "benefits_portal": "provider.umr.com",
+        "auth_portal": "uhcprovider.com"
+      },
+      "workflow": [
+        "Verify benefits at provider.umr.com",
+        "Confirm UHC network",
+        "HST: No auth needed — schedule directly",
+        "In-lab: Submit auth via uhcprovider.com",
+        "MUST include clinical notes (always)",
+        "If portal issues — call UHC"
+      ]
+    }
+  },
+  "um_only_designation": {
+    "description": "(UM Only) = Authorization-only policy through Sierra/HPN portal",
+    "meaning": [
+      "Sierra/HPN portal handles AUTH ONLY",
+      "Benefits are NOT through Sierra/HPN",
+      "You need the UMR ID to obtain benefits",
+      "Do NOT quote Sierra/HPN benefits to patient"
+    ],
+    "workflow": [
+      "Eligibility shows '(UM Only)' on Sierra portal",
+      "Find the UMR member ID (may differ from Sierra ID)",
+      "Check benefits via provider.umr.com (NOT Sierra portal)",
+      "Submit AUTH through Sierra portal (provider.healthplanofnevada.com)",
+      "Bill using UMR information"
+    ]
+  },
+  "flags": [
+    {
+      "id": "FLAG_UMR_NETWORK_UNKNOWN",
+      "trigger": "UMR plan identified but network unclear",
+      "action": "Call to verify network, default to UHC if unable to determine",
+      "severity": "high"
+    },
+    {
+      "id": "FLAG_UMR_SIERRA_NETWORK",
+      "trigger": "UMR via Sierra/HPN network confirmed",
+      "action": "Use Sierra portal, ultra-lenient criteria, submit all codes",
+      "severity": "low"
+    },
+    {
+      "id": "FLAG_UMR_UHC_NETWORK",
+      "trigger": "UMR via UHC network confirmed",
+      "action": "Use UHC portal, apply UHC clinical criteria",
+      "severity": "low"
+    },
+    {
+      "id": "FLAG_UMR_UM_ONLY",
+      "trigger": "(UM Only) designation on eligibility",
+      "action": "Auth through Sierra, benefits through UMR portal — do NOT quote Sierra benefits",
+      "severity": "high"
+    },
+    {
+      "id": "FLAG_UMR_NOTE_QUALITY",
+      "trigger": "Nurse notes appear incomplete or contradictory (Sierra network)",
+      "action": "Review and correct notes before submission — voided if incoherent",
+      "severity": "medium"
+    }
+  ],
+  "quick_reference": {
+    "sierra_hpn": {
+      "hst_code": "95806",
+      "hst_auth": true,
+      "inlab_auth": true,
+      "portal": "provider.healthplanofnevada.com",
+      "strictness": "Ultra-lenient"
+    },
+    "uhc": {
+      "hst_code": "G0399",
+      "hst_auth": false,
+      "inlab_auth": true,
+      "portal": "uhcprovider.com",
+      "strictness": "Moderate"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "splitNight": {
+    "blockDualCodes": true,
+    "preferred": "95811",
+    "requirePriorPositiveOrTitrationIndicator": true,
+    "notes": "Never approve both 95810 and 95811 at the same time. Prefer 95811 only if prior positive test or titration need is documented."
+  },
+  "titrationAutoApproval": {
+    "requiresAny": [
+      "prior_positive_test",
+      "cpap_issue_pressure_too_high",
+      "cpap_issue_pressure_too_low",
+      "cpap_issue_not_feeling_better",
+      "split_night_documented"
+    ],
+    "notes": "Only approve 95811 automatically if one of these conditions is documented"
+  },
+  "diagnosticRouting": {
+    "home_keywords": ["home sleep", "hst", "at home", "portable monitor"],
+    "lab_keywords": ["in-lab", "polysomnogram", "overnight lab", "PSG"],
+    "notes": "If home keywords present, map to payer-aware HSAT code (G0399 for most payers, 95806 for Cigna/Sierra/Medicare FFS); if lab keywords, map to 95810",
+    "payerAwareHomeCodes": {
+      "default": "G0399",
+      "Cigna": "95806",
+      "Medicare_FFS": "95806",
+      "Sierra": "95806",
+      "HPN": "95806",
+      "Workers_Comp": "95806",
+      "Multiplan": "95806",
+      "PHCS": "95806"
+    },
+    "lab_code": "95810"
+  },
+  "pediatricRouting": {
+    "ageThresholds": {
+      "cannotTest": { "under": 2 },
+      "pediatricCodes": { "minAge": 2, "maxAge": 5 },
+      "adultCodes": { "minAge": 6 }
+    },
+    "codes": {
+      "pediatric_diagnostic": "95782",
+      "pediatric_titration": "95783"
+    },
+    "disallow_home": true,
+    "notes": "Under 2 cannot test. Age 2-5 use pediatric codes (95782/95783). Age 6+ use adult codes. HST never allowed for pediatrics."
+  },
+  "payerOverrides": {
+    "UnitedHealthcare": {
+      "programMatch": ["Medicare Advantage"],
+      "home_code": "G0399",
+      "notes": "UHC Medicare Advantage uses G0399 for HSAT"
+    },
+    "Nevada_Medicaid_FFS": {
+      "hst_allowed": false,
+      "notes": "Nevada Medicaid FFS NEVER allows HST - always requires PSG"
+    }
+  },
+  "fallback": {
+    "code": "95810",
+    "notes": "If nothing else matches, default to in-lab diagnostic PSG"
+  }
+}

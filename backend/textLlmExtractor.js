@@ -13,6 +13,7 @@
 
 import { log } from './logging/logger.js';
 import { normalizeVlmResult, parseVlmJson } from './vlmExtractor.js';
+import { buildKbPromptContext } from './kbLoader.js';
 
 const TEXT_MODEL = process.env.TEXT_MODEL || 'qwen2.5:14b';
 const TEXT_TIMEOUT = parseInt(process.env.TEXT_TIMEOUT || '180000', 10);
@@ -437,14 +438,17 @@ export async function extractFromOcrText(ocrPages, options = {}) {
     });
   }
 
-  const fullPrompt = TEXT_EXTRACTION_PROMPT + hintsBlock + combinedText;
+  const kbBlock = buildKbPromptContext();
+  const fullPrompt = TEXT_EXTRACTION_PROMPT + hintsBlock + kbBlock + combinedText;
 
   // Step 4: Call text-only LLM (single request for ALL pages)
   log('info', 'text_llm_extract_start', {
     id,
     model: TEXT_MODEL,
     pages: pagesToUse.length,
-    textLength: combinedText.length
+    textLength: combinedText.length,
+    promptLength: fullPrompt.length,
+    kbBlockLength: kbBlock.length
   });
 
   try {

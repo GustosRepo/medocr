@@ -1,0 +1,99 @@
+{
+  "_meta": {
+    "payer_id": "umr",
+    "payer_name": "UMR",
+    "version": "1.1",
+    "last_updated": "2026-02-27",
+    "notes": "UMR routes through different networks. Via Sierra/HPN = ultra-lenient (95806, 2 units). Via UHC = UHC guidelines (G0399). Check portal redirect to determine routing. v1.1: HST code set to 95806 default, network_routing and hst_code_overrides added for Sierra vs UHC paths."
+  },
+  "criteria_source": {
+    "criteria_id": "sierra_hpn",
+    "criteria_file": "criteria_sierra_hpn.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "95806": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Via Sierra: 95806, 2 units"
+    },
+    "G0399": {
+      "covered": true,
+      "auth_required": true,
+      "notes": "Via UHC: G0399"
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true
+    }
+  },
+  "hst_code": "95806",
+  "hst_code_overrides": {
+    "uhc_network": {
+      "hst_code": "G0399",
+      "criteria_id": "uhc",
+      "criteria_file": "criteria_uhc.json",
+      "submission": {
+        "primary_method": "portal",
+        "portal_name": "Evicore",
+        "portal_url": "https://www.evicore.com"
+      },
+      "reason": "UMR plans routed through UHC network use G0399 and UHC criteria via Evicore. Minority of UMR plans."
+    }
+  },
+  "network_routing": {
+    "_description": "UMR routes through Sierra (majority) or UHC (minority). Network determines: HST code, criteria, portal, and auth workflow.",
+    "default_network": "sierra",
+    "detection_method": "Portal redirect on Sierra portal indicates network. If redirect to UHC = UHC network.",
+    "sierra_network": {
+      "hst_code": "95806",
+      "criteria_id": "sierra_hpn",
+      "submit_to": "Sierra/HPN portal",
+      "units": 2,
+      "notes": "Majority of UMR plans. Auto-approved HST, lenient PSG criteria."
+    },
+    "uhc_network": {
+      "hst_code": "G0399",
+      "criteria_id": "uhc",
+      "submit_to": "Evicore",
+      "units": null,
+      "notes": "Minority of UMR plans. UHC criteria apply. Submit via Evicore."
+    }
+  },
+  "submission": {
+    "notes": "Depends on network routing. Sierra network: provider.healthplanofnevada.com. UHC network: uhcprovider.com."
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "yellow",
+  "special_rules": [
+    {
+      "rule_id": "umr_network_routing",
+      "description": "UMR routes through Sierra OR UHC depending on plan",
+      "detection": "Portal redirect indicates network"
+    },
+    {
+      "rule_id": "umr_um_only",
+      "description": "If eligibility shows (UM Only), auth through Sierra but benefits through provider.umr.com",
+      "action": "Find UMR member ID for benefits"
+    }
+  ],
+  "flags": [
+    {
+      "flag_id": "FLAG_UMR_NETWORK_CHECK",
+      "trigger": "payer == umr",
+      "message": "Check which network UMR routes through (Sierra vs UHC) -- determines criteria, HST code, and portal",
+      "severity": "medium"
+    }
+  ]
+}

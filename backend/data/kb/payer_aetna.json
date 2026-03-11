@@ -1,0 +1,101 @@
+{
+  "_meta": {
+    "payer_id": "aetna",
+    "payer_name": "Aetna",
+    "version": "1.1",
+    "last_updated": "2026-03-11",
+    "notes": "Aetna routes through Evicore but has special exceptions: HMO referral requirement, dual submission for outlier plans, and Meritain subsidiary detection. v1.1: Added Meritain detailed workflow, portal URL, detection heuristics, referral NPI rules."
+  },
+  "criteria_source": {
+    "criteria_id": "evicore",
+    "criteria_file": "criteria_evicore.json",
+    "confidence": "verified"
+  },
+  "plan_types": ["commercial", "medicare", "supplement"],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true,
+      "submit_to": "evicore"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "Evicore",
+    "portal_url": "https://www.evicore.com",
+    "alternate_method": "availity_dual_submission"
+  },
+  "referral": {
+    "required": "hmo_plans_only",
+    "notes": "Some Aetna HMO plans require PCP referral. Check via Availity.",
+    "npi_rule": "Use PCP NPI + Facility NPI ONLY. Do NOT use specialist/reading physician NPI.",
+    "scope": "Submit referral for ALL codes (HST and in-lab)",
+    "critical_note": "Even if authorization is not required for HST, the referral may still be required. Check both."
+  },
+  "pain_level": "yellow",
+  "meritain": {
+    "description": "Some plans identified as 'Aetna' are actually Meritain Health (Aetna subsidiary)",
+    "detection": {
+      "id_card": "May say 'Meritain' or show Meritain logo",
+      "eligibility": "Eligibility check may return Meritain",
+      "discovery": "Sometimes only discovered during benefits call"
+    },
+    "workflow": [
+      "CALL for benefit information (no portal lookup for benefits)",
+      "During call, ask if authorization is required",
+      "If NO auth required → proceed to scheduling",
+      "If YES auth required → submit via Meritain portal"
+    ],
+    "benefits_method": "phone_only",
+    "auth_portal": "https://meritain.mednecessity.com/",
+    "warning": "Don't assume Aetna portal/process works for Meritain plans"
+  },
+  "special_rules": [
+    {
+      "rule_id": "aetna_dual_submission",
+      "description": "Some Aetna outlier plans require auth through BOTH Evicore AND Availity",
+      "action": "If Evicore returns 'No Auth Required', also submit in Availity",
+      "reason": "Certain Aetna plan configurations don't route to Evicore properly. If not required via Availity either, submission will come back as 'not required'."
+    },
+    {
+      "rule_id": "aetna_meritain_check",
+      "description": "Some 'Aetna' plans are actually Meritain Health (Aetna subsidiary)",
+      "action": "Check card/eligibility for Meritain indicators — use meritain workflow"
+    }
+  ],
+  "flags": [
+    {
+      "flag_id": "FLAG_AETNA_HMO_REFERRAL",
+      "trigger": "aetna AND plan_type == hmo AND benefits_show_referral_required",
+      "message": "Aetna HMO requires PCP referral before any testing. Use PCP NPI + Facility NPI ONLY.",
+      "severity": "high"
+    },
+    {
+      "flag_id": "FLAG_AETNA_DUAL_SUBMIT",
+      "trigger": "evicore_returns_no_auth",
+      "message": "Submit in Availity anyway — some Aetna plans only route through Availity",
+      "severity": "medium"
+    },
+    {
+      "flag_id": "FLAG_AETNA_MERITAIN",
+      "trigger": "card_or_eligibility_shows_meritain",
+      "message": "This is a Meritain plan (Aetna subsidiary). CALL for benefits, auth via meritain.mednecessity.com",
+      "severity": "high"
+    }
+  ]
+}

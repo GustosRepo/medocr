@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "payer_id": "uhc_commercial",
+    "payer_name": "UHC Commercial",
+    "version": "1.0",
+    "last_updated": "2026-02-01",
+    "notes": "Standard UHC Commercial. Notes ALWAYS required with auth submission (not optional). Also applies to subsidiaries: Golden Rule, Oxford, UHSS."
+  },
+  "criteria_source": {
+    "criteria_id": "uhc",
+    "criteria_file": "criteria_uhc.json",
+    "confidence": "verified"
+  },
+  "plan_types": [],
+  "coverage": {
+    "G0399": {
+      "covered": true,
+      "auth_required": false
+    },
+    "95810": {
+      "covered": true,
+      "auth_required": true,
+      "notes_required": "always"
+    },
+    "95811": {
+      "covered": true,
+      "auth_required": true,
+      "notes_required": "always"
+    },
+    "95810_95811": {
+      "covered": true,
+      "auth_required": true,
+      "notes_required": "always"
+    }
+  },
+  "hst_code": "G0399",
+  "submission": {
+    "primary_method": "portal",
+    "portal_name": "UHC Provider",
+    "portal_url": "https://uhcprovider.com",
+    "notes_always_required": true,
+    "fallback": "call"
+  },
+  "referral": {
+    "required": false
+  },
+  "pain_level": "green"
+}
