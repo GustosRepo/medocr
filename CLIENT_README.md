@@ -6,13 +6,15 @@ Sleep study referral intake — upload PDFs, get structured data in seconds.
 
 ## What You Need
 
-| Requirement | Why |
+| Requirement | Status on your laptop |
 |---|---|
-| **Mac** (Apple Silicon M1–M4) | Runs OCR + AI locally |
-| **Docker Desktop** | Runs the 3 services (OCR, API, Frontend) |
-| **Ollama** *(recommended)* | Runs the AI models that read your PDFs |
-| **16 GB+ RAM** | 8 GB minimum, 16+ recommended for LLM |
-| **~15 GB disk space** | Docker images + AI models |
+| **Windows 11** (64-bit) | ✅ Windows 11 Home 24H2 |
+| **Intel Core Ultra 7 155H** | ✅ 3.80 GHz — plenty fast |
+| **32 GB RAM** | ✅ More than enough (16 GB is recommended) |
+| **Docker Desktop** | Install once (see below) |
+| **Ollama** | Install once (see below) |
+| **Git for Windows** | Install once (see below) |
+| **~15 GB free disk space** | For Docker images + AI models |
 
 ---
 
@@ -22,15 +24,23 @@ Sleep study referral intake — upload PDFs, get structured data in seconds.
 
 Download and install: https://www.docker.com/products/docker-desktop/
 
-After installing, open Docker Desktop once so it finishes its setup. You'll see a whale icon in your menu bar when it's ready.
+After installing, open Docker Desktop once so it finishes its setup. You'll see a whale icon in your system tray (bottom-right corner by the clock) when it's ready.
 
-### 2. Install Ollama (recommended)
+> If prompted about WSL 2, follow the instructions to enable it — Docker needs it on Windows.
+
+### 2. Install Git for Windows
+
+Download and install: https://git-scm.com/download/win
+
+Use the default options during installation. This gives you Git Bash and adds `git` to your command line.
+
+### 3. Install Ollama (recommended)
 
 Download and install: https://ollama.com/download
 
-Then open Terminal and pull the AI models:
+After installing, open **PowerShell** (search "PowerShell" in the Start menu) and pull the AI models:
 
-```bash
+```powershell
 ollama pull qwen2.5:14b
 ollama pull qwen2.5vl:7b
 ```
@@ -39,25 +49,19 @@ The first model (~9 GB) reads text from OCR results. The second (~5 GB) reads im
 
 > **Without Ollama:** MedOCR still works — it runs OCR and extracts data using pattern rules. Ollama adds the AI layer that dramatically improves accuracy for messy/handwritten referrals.
 
-### 3. Clone the Repository
+### 4. Clone the Repository
 
-Open **Terminal** (search "Terminal" in Spotlight or find it in Applications → Utilities) and run:
+Open **PowerShell** and run:
 
-```bash
-cd ~/Desktop
+```powershell
+cd ~\Desktop
 git clone https://github.com/GustosRepo/medocr.git
 cd medocr
 ```
 
-### 4. Create Your .env File
+### 5. Create Your .env File
 
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-If there's no `.env.example`, create a file named `.env` in the `medocr` folder with this content:
+In the `medocr` folder, create a file named `.env` (no filename, just the extension) with this content:
 
 ```env
 NODE_ENV=production
@@ -81,11 +85,19 @@ OLLAMA_HOST=http://host.docker.internal:11434
 LEARN_ALL=true
 ```
 
-### 5. First Launch
+> **Tip:** You can create this in Notepad — just make sure to save as "All Files" type and name it `.env` (not `.env.txt`). Or run this in PowerShell in the medocr folder:
+> ```powershell
+> notepad .env
+> ```
+> Paste the content above, save, and close.
 
-```bash
-chmod +x medocr.sh
-./medocr.sh start
+### 6. First Launch
+
+Double-click **medocr.bat** in the `medocr` folder, or open PowerShell and run:
+
+```powershell
+cd ~\Desktop\medocr
+.\medocr.bat start
 ```
 
 The first launch takes a few minutes because Docker needs to build the images. After that, starts take about 15 seconds.
@@ -98,11 +110,13 @@ Your browser will open automatically to **http://localhost** when it's ready.
 
 ### Starting MedOCR
 
-Open **Terminal** and run:
+**Option A:** Double-click **medocr.bat** in your `Desktop\medocr` folder.
 
-```bash
-cd ~/Desktop/medocr
-./medocr.sh start
+**Option B:** Open PowerShell and run:
+
+```powershell
+cd ~\Desktop\medocr
+.\medocr.bat start
 ```
 
 The script handles everything automatically:
@@ -113,18 +127,26 @@ The script handles everything automatically:
 
 ### Stopping MedOCR
 
-```bash
-cd ~/Desktop/medocr
-./medocr.sh stop
+```powershell
+cd ~\Desktop\medocr
+.\medocr.bat stop
 ```
 
 ### Checking if Everything is Running
 
-```bash
-./medocr.sh status
+```powershell
+.\medocr.bat status
 ```
 
-You'll see green or red indicators for each service.
+Shows health indicators for each service.
+
+### Viewing Logs (if something seems wrong)
+
+```powershell
+.\medocr.bat logs
+```
+
+Press `Ctrl+C` to stop watching logs.
 
 ---
 
@@ -132,7 +154,7 @@ You'll see green or red indicators for each service.
 
 ### Uploading Documents
 
-1. Open **http://localhost** in your browser (Safari, Chrome, etc.)
+1. Open **http://localhost** in your browser (Chrome, Edge, etc.)
 2. Click **"Choose files"** or drag-and-drop one or more PDFs
 3. Processing starts automatically — typically **10–20 seconds** per document
 
@@ -180,9 +202,9 @@ Click **"Checklist"** in the sidebar to see all processed documents as a task li
 
 When a new version is available:
 
-```bash
-cd ~/Desktop/medocr
-./medocr.sh update
+```powershell
+cd ~\Desktop\medocr
+.\medocr.bat update
 ```
 
 This pulls the latest code and rebuilds automatically. Your corrections and learned data are preserved.
@@ -204,10 +226,12 @@ If you were running an older version of MedOCR with `llava`, `llava-phi3`, or th
 
 ### Steps to migrate:
 
-```bash
+Open **PowerShell** and run:
+
+```powershell
 # 1. Stop everything
-cd ~/Desktop/medocr
-./medocr.sh stop
+cd ~\Desktop\medocr
+.\medocr.bat stop
 
 # 2. Pull latest code
 git pull
@@ -221,7 +245,7 @@ ollama rm llava:7b
 ollama rm llava:13b
 ollama rm llava-phi3
 
-# 5. Update your .env file — replace any old model references:
+# 5. Update your .env file — replace any old model references with:
 #    TEXT_MODEL=qwen2.5:14b
 #    VLM_MODEL=qwen2.5vl:7b
 #    OLLAMA_MODEL=qwen2.5vl:7b
@@ -229,7 +253,7 @@ ollama rm llava-phi3
 #    LEARN_ALL=true
 
 # 6. Start fresh
-./medocr.sh start
+.\medocr.bat start
 ```
 
 > The Python `llm_service` folder is no longer used. Everything runs through Ollama now, which is simpler and faster.
@@ -240,24 +264,33 @@ ollama rm llava-phi3
 
 ### MedOCR won't start
 
-1. **Is Docker Desktop running?** Look for the whale icon in your menu bar. If it's not there, open Docker Desktop from your Applications folder.
+1. **Is Docker Desktop running?** Look for the whale icon in your system tray (bottom-right by the clock). If it's not there, open Docker Desktop from the Start menu.
 2. **Try stopping and restarting:**
-   ```bash
-   ./medocr.sh stop
-   ./medocr.sh start
+   ```powershell
+   .\medocr.bat stop
+   .\medocr.bat start
    ```
+
+### "WSL 2" errors when starting Docker
+
+Docker on Windows needs WSL 2. If you see errors about it:
+1. Open PowerShell **as Administrator**
+2. Run: `wsl --install`
+3. Restart your computer
+4. Open Docker Desktop again
 
 ### Results are inaccurate or processing is slow
 
-- Run `./medocr.sh status` and check that **Ollama LLM** shows as "running"
-- If Ollama is "not running", open Terminal and run `ollama serve`, then try reprocessing
+- Run `.\medocr.bat status` and check that **Ollama LLM** shows as "running"
+- If Ollama is not running, open PowerShell and run `ollama serve`, then reprocess
 - Very blurry or handwritten documents may need manual corrections — this is normal
 
 ### "Can't connect to localhost"
 
-- Run `./medocr.sh status` to see which services are up
-- If something is down: `./medocr.sh stop` then `./medocr.sh start`
-- Try typing `http://localhost` or `http://127.0.0.1` directly in the browser address bar
+- Run `.\medocr.bat status` to see which services are up
+- If something is down: `.\medocr.bat stop` then `.\medocr.bat start`
+- Try `http://localhost` or `http://127.0.0.1` directly in the browser address bar
+- Check Windows Firewall isn't blocking Docker
 
 ### Upload won't go through
 
@@ -267,10 +300,10 @@ ollama rm llava-phi3
 
 ### Starting completely fresh
 
-```bash
-./medocr.sh stop
+```powershell
+.\medocr.bat stop
 docker compose down -v
-./medocr.sh start
+.\medocr.bat start
 ```
 
 > ⚠️ **Warning:** `docker compose down -v` erases all processed documents and learned corrections. Only do this if you want a completely clean start.
@@ -281,9 +314,9 @@ docker compose down -v
 
 | What you want to do | Command |
 |---|---|
-| **Start MedOCR** | `./medocr.sh start` |
-| **Stop MedOCR** | `./medocr.sh stop` |
-| **Check health** | `./medocr.sh status` |
-| **View logs** | `./medocr.sh logs` |
-| **Update to latest version** | `./medocr.sh update` |
+| **Start MedOCR** | Double-click `medocr.bat` or `.\medocr.bat start` |
+| **Stop MedOCR** | `.\medocr.bat stop` |
+| **Check health** | `.\medocr.bat status` |
+| **View logs** | `.\medocr.bat logs` |
+| **Update to latest version** | `.\medocr.bat update` |
 | **Open in browser** | http://localhost |
