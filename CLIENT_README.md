@@ -61,35 +61,17 @@ cd medocr
 
 ### 5. Create Your .env File
 
-In the `medocr` folder, create a file named `.env` (no filename, just the extension) with this content:
+In **PowerShell**, from the `medocr` folder, run:
 
-```env
-NODE_ENV=production
-PORT=4387
-
-# OCR
-OCR_SERVICE_URL=http://ocr:8000
-OCR_TIMEOUT_MS=120000
-OCR_MAX_CONCURRENCY=2
-MAX_PDF_PAGES=30
-
-# AI Pipeline
-TEXT_LLM=true
-TEXT_MODEL=qwen2.5:14b
-TEXT_LLM_MAX_PAGES=8
-VLM_MODEL=qwen2.5vl:7b
-VLM_MAX_PAGES=6
-OLLAMA_HOST=http://host.docker.internal:11434
-
-# Learning — save all corrections locally to improve accuracy over time
-LEARN_ALL=true
+```powershell
+copy .env.example .env
 ```
 
-> **Tip:** You can create this in Notepad — just make sure to save as "All Files" type and name it `.env` (not `.env.txt`). Or run this in PowerShell in the medocr folder:
-> ```powershell
-> notepad .env
-> ```
-> Paste the content above, save, and close.
+That's it — the defaults are already set for you. If you want to see what's inside, open it in Notepad:
+
+```powershell
+notepad .env
+```
 
 ### 6. First Launch
 
