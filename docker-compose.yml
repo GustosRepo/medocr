@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
+  # ── OCR Service (Python + RapidOCR + PP-OCRv4) ──────────────────────
   ocr:
-    image: medocr-ocr:local
     build:
       context: ./ocr_service
       dockerfile: Dockerfile
@@ -11,89 +9,93 @@ services:
     volumes:
       - ./ocr_service/models:/app/models:ro
     environment:
+      # Rendering
       - MEDOCR_RENDER_DPI=300
-      - MEDOCR_DOWNSAMPLE_PAGES=4
-      - MEDOCR_DOWNSAMPLE_PAGES_HIGH=8
-      - MEDOCR_DOWNSAMPLE_SCALE=0.5
-      - MEDOCR_DOWNSAMPLE_SCALE_HIGH=0.4
+      - MEDOCR_DOWNSAMPLE_PAGES=5
+      - MEDOCR_DOWNSAMPLE_PAGES_HIGH=10
+      - MEDOCR_DOWNSAMPLE_SCALE=0.8
+      - MEDOCR_DOWNSAMPLE_SCALE_HIGH=0.7
       - MEDOCR_PREPROCESS_MODE=enhanced
+      # CLAHE
       - MEDOCR_USE_CLAHE=true
-      - MEDOCR_CLAHE_CLIP_LIMIT=2.0
+      - MEDOCR_CLAHE_CLIP_LIMIT=2.5
       - MEDOCR_CLAHE_TILE_SIZE=8
+      # Bilateral filter (off by default — enable for noisy scans)
       - MEDOCR_USE_BILATERAL=false
-      - MEDOCR_BILATERAL_D=9
-      - MEDOCR_BILATERAL_SIGMA=75
+      # Confidence retry
       - MEDOCR_ENABLE_CONFIDENCE_RETRY=true
-      - MEDOCR_CONFIDENCE_THRESHOLD=0.65
-      # PP-OCRv4 Server Models (ONNX converted, ready to use!)
+      - MEDOCR_CONFIDENCE_THRESHOLD=0.70
+      # Table detection
+      - OCR_ENABLE_TABLES=1
+      - OCR_AUTO_DPI=1
+      - OCR_DPI_BASE=300
+      - OCR_DPI_BUMP=450
+      - OCR_DPI_MAX=600
+      # Early exit (skip useless pages)
+      - MEDOCR_ENABLE_EARLY_EXIT=true
+      - MEDOCR_EARLY_EXIT_TIME_THRESHOLD=60
+      - MEDOCR_PAGE_TIMEOUT_SECONDS=90
+      # PP-OCRv4 Server Models (ONNX)
       - MEDOCR_DET_MODEL_PATH=/app/models/ch_PP-OCRv4_det_server_infer.onnx
       - MEDOCR_CLS_MODEL_PATH=/app/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
       - MEDOCR_REC_MODEL_PATH=/app/models/ch_PP-OCRv4_rec_server_infer.onnx
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - medocr-net
 
-  llm:
-    image: medocr-llm:local
-    build:
-      context: ./llm_service
-      dockerfile: Dockerfile
-    ports:
-      - "8001:8001"
-    environment:
-      - MODEL_NAME=microsoft/phi-3.5-vision-instruct
-      - DEVICE=cuda
-      - MAX_NEW_TOKENS=2048
-      - TEMPERATURE=0.0
-      - TRANSFORMERS_CACHE=/app/models
-      - HF_HOME=/app/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-        limits:
-          memory: 16G
-    volumes:
-      - ./llm_service/models:/app/models
-      - ./uploads:/app/uploads:ro
-    restart: unless-stopped
-    networks:
-      - medocr-net
-
+  # ── Backend API (Node.js + Express) ─────────────────────────────────
   api:
-    image: medocr-backend:local
     build:
       context: .
       dockerfile: backend/Dockerfile
     ports:
       - "4387:4387"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
+      # OCR connection (Docker service name)
       - OCR_SERVICE_URL=http://ocr:8000
-      - LLM_SERVICE_URL=http://llm:8001
-      - ENABLE_LLM=true
-      - LLM_TIMEOUT=30000
-      - OCR_TIMEOUT_MS=900000
-      - OCR_MAX_CONCURRENCY=4
+      - OCR_TIMEOUT_MS=10800000
+      - FETCH_BODY_TIMEOUT_MS=10800000
+      - FETCH_HEADERS_TIMEOUT_MS=10800000
+      - OCR_MAX_CONCURRENCY=2
       - DOC_MAX_CONCURRENCY=2
       - MAX_PDF_PAGES=150
+      # Upload / rate limits
       - UPLOAD_MAX_BYTES=52428800
       - RATE_WINDOW_MS=60000
       - RATE_MAX=500
+      # Pipeline: OCR → text LLM (Ollama on host)
+      - TEXT_LLM=true
+      - TEXT_MODEL=qwen2.5:14b
+      - TEXT_TIMEOUT=180000
+      - VLM_DIRECT=false
+      - VLM_MODEL=qwen2.5vl:7b
+      - VLM_MAX_PAGES=6
+      - TEXT_LLM_MAX_PAGES=8
+      - VLM_TIMEOUT=180000
+      # Ollama runs on the host — use Docker host gateway
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5vl:7b
+      - OLLAMA_TIMEOUT=180000
+      - LLM_MODE=extract
+      - LLM_TIMEOUT=300000
+      - ENABLE_LLM=false
     depends_on:
-      - ocr
-      - llm
+      ocr:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
-      - ./backend/data:/app/data
+      - medocr-data:/usr/src/app/backend/data
     networks:
       - medocr-net
 
+  # ── Frontend (React SPA via nginx) ──────────────────────────────────
   frontend:
-    image: medocr-frontend:local
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -104,6 +106,10 @@ services:
     restart: unless-stopped
     networks:
       - medocr-net
+
+volumes:
+  medocr-data:
+    driver: local
 
 networks:
   medocr-net:

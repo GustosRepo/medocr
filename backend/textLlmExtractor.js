@@ -14,6 +14,7 @@
 import { log } from './logging/logger.js';
 import { normalizeVlmResult, parseVlmJson } from './vlmExtractor.js';
 import { buildKbPromptContext } from './kbLoader.js';
+import { selectInformationRichPages } from './pageSelector.js';
 
 const TEXT_MODEL = process.env.TEXT_MODEL || 'qwen2.5:14b';
 const TEXT_TIMEOUT = parseInt(process.env.TEXT_TIMEOUT || '180000', 10);
@@ -329,7 +330,7 @@ async function callTextLlm(prompt) {
         stream: false,
         options: {
           temperature: TEXT_TEMPERATURE,
-          num_ctx: 16384,
+          num_ctx: 32768,
         }
       }),
       signal: controller.signal
@@ -409,9 +410,34 @@ export async function extractFromOcrText(ocrPages, options = {}) {
     return null;
   }
 
-  // Step 3: Build combined text from all pages
-  const maxPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
-  const pagesToUse = ocrPages.slice(0, maxPages);
+  // Step 3: Smart page selection — pick information-rich pages instead of blind first-N
+  const maxLlmPages = parseInt(process.env.TEXT_LLM_MAX_PAGES || '8', 10);
+  let pagesToUse;
+
+  if (ocrPages.length <= maxLlmPages) {
+    // Small doc — use all pages
+    pagesToUse = ocrPages;
+  } else {
+    // Large doc — use pageSelector to pick the richest pages
+    const selection = selectInformationRichPages(
+      { ocr: ocrPages },
+      { maxPages: maxLlmPages, minScore: 10 }
+    );
+    const selectedSet = new Set(selection.selectedPages);
+    pagesToUse = ocrPages.filter((_, i) => selectedSet.has(i));
+
+    // If pageSelector found fewer than 2, fall back to first N (safety net)
+    if (pagesToUse.length < 2) {
+      pagesToUse = ocrPages.slice(0, maxLlmPages);
+    }
+
+    log('info', 'text_llm_page_selection', {
+      id,
+      totalPages: ocrPages.length,
+      selectedPages: pagesToUse.length,
+      pageIndices: selection.selectedPages
+    });
+  }
   
   let combinedText = '';
   for (const page of pagesToUse) {
@@ -419,8 +445,8 @@ export async function extractFromOcrText(ocrPages, options = {}) {
   }
 
   // Trim if excessively long (stay within 16k context)
-  if (combinedText.length > 20000) {
-    combinedText = combinedText.slice(0, 20000) + '\n[... truncated]';
+  if (combinedText.length > 32000) {
+    combinedText = combinedText.slice(0, 32000) + '\n[... truncated]';
   }
 
   // Step 3b: Regex pre-extraction — pull structured hints from OCR text

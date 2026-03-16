@@ -1898,24 +1898,24 @@ async function processDocumentTextLlm(id) {
   log('info', 'text_llm_pipeline_start', { id });
 
   try {
-    // Step 1: Limit PDF to first N pages, then OCR
-    const ocrTimeoutMs = parseInt(process.env.OCR_TIMEOUT_MS || '60000', 10);
-    const maxPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
+    // Step 1: OCR the FULL PDF (page selection happens AFTER OCR via pageSelector)
+    const ocrTimeoutMs = parseInt(process.env.OCR_TIMEOUT_MS || '120000', 10);
+    const maxOcrPages = parseInt(process.env.MAX_PDF_PAGES || '30', 10);
     const fileBuffer = await fs.promises.readFile(entry.filePath);
 
-    // Extract only first N pages to avoid OCR processing 10+ page PDFs
     const { PDFDocument } = await import('pdf-lib');
     const srcDoc = await PDFDocument.load(fileBuffer);
     const totalPages = srcDoc.getPageCount();
     let pdfToSend = fileBuffer;
 
-    if (totalPages > maxPages) {
+    // Only trim if absurdly long (e.g. 30+ pages) — normal referrals are 3-14 pages
+    if (totalPages > maxOcrPages) {
       const trimmedDoc = await PDFDocument.create();
-      const pageIndices = Array.from({ length: Math.min(totalPages, maxPages) }, (_, i) => i);
+      const pageIndices = Array.from({ length: maxOcrPages }, (_, i) => i);
       const copiedPages = await trimmedDoc.copyPages(srcDoc, pageIndices);
       copiedPages.forEach(p => trimmedDoc.addPage(p));
       pdfToSend = Buffer.from(await trimmedDoc.save());
-      log('info', 'text_llm_pdf_trimmed', { id, totalPages, sentPages: maxPages });
+      log('info', 'text_llm_pdf_trimmed', { id, totalPages, sentPages: maxOcrPages });
     }
 
     const form = new FormData();
@@ -1950,11 +1950,22 @@ async function processDocumentTextLlm(id) {
     if (!mappedResult) {
       log('info', 'text_llm_fallback_to_vlm', { id, reason: 'text_llm_returned_null' });
 
-      // Convert PDF pages to images and run VLM (same as vlm_direct pipeline)
-      const pdfDoc = await (await import('pdf-lib')).PDFDocument.load(fileBuffer);
-      const totalPages = pdfDoc.getPageCount();
-      const maxVlmPages = parseInt(process.env.VLM_MAX_PAGES || '4', 10);
-      const pageIndices = Array.from({ length: Math.min(totalPages, maxVlmPages) }, (_, i) => i);
+      // Use pageSelector to pick information-rich pages for VLM
+      const maxVlmPages = parseInt(process.env.VLM_MAX_PAGES || '6', 10);
+      let pageIndices;
+
+      if (ocrPages.length > maxVlmPages) {
+        const selection = selectInformationRichPages(
+          { ocr: ocrPages },
+          { maxPages: maxVlmPages, minScore: 10 }
+        );
+        pageIndices = selection.selectedPages.length >= 2
+          ? selection.selectedPages
+          : Array.from({ length: Math.min(totalPages, maxVlmPages) }, (_, i) => i);
+        log('info', 'vlm_fallback_page_selection', { id, totalPages, selected: pageIndices });
+      } else {
+        pageIndices = Array.from({ length: totalPages }, (_, i) => i);
+      }
 
       const docTempDir = `data/temp/${id}`;
       const imageResults = await convertPdfPagesToImages(entry.filePath, pageIndices, {
