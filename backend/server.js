@@ -1565,6 +1565,29 @@ app.post('/api/feedback', (req, res) => {
   const { docId, path: fPath, previousValue, newValue, reason, user, accepted } = req.body || {};
   if (!docId || !fPath) return res.status(400).json({ error: { code: 'bad_request', message: 'docId and path required' } });
   const rec = addFeedback({ docId, path: fPath, previousValue, newValue, reason, user, accepted });
+
+  // Bridge feedback into corrections_db so the learning loop is closed
+  if (previousValue && newValue && previousValue !== newValue) {
+    const feedbackTypeMap = {
+      'procedure.cpt': 'cpt',
+      'procedure.description': 'procedureDescription',
+      'clinical.primaryDiagnosis.code': 'icd',
+      'clinical.primaryDiagnosis.description': 'diagnosisDescription',
+      'insurance.carrier': 'carrier',
+      'provider.name': 'provider',
+      'provider.npi': 'npi',
+      'provider.phone': 'phone',
+      'provider.fax': 'fax',
+      'provider.practice': 'practiceName',
+    };
+    const corrType = feedbackTypeMap[fPath];
+    if (corrType) {
+      try {
+        correctionsDB.recordCorrection(corrType, previousValue, newValue, { documentId: docId });
+      } catch (_) { /* non-fatal */ }
+    }
+  }
+
   res.status(201).json({ ok: true, record: rec });
 });
 
@@ -1608,7 +1631,9 @@ app.post('/api/corrections', express.json({ limit: '64kb' }), (req, res) => {
       // Tier 2: Quality-of-life
       'providerNotes', 'safetyCategory', 'accommodationType',
       // Tier 3: Nice-to-have
-      'supervisingProvider', 'supervisingNpi', 'planType', 'studyType'
+      'supervisingProvider', 'supervisingNpi', 'planType', 'studyType',
+      // Local-mode: patient/PHI fields (gated by LEARN_ALL in corrections_db)
+      'patientName', 'patient', 'dob', 'memberId', 'groupId', 'patientPhone', 'patientEmail'
     ];
 
     for (const correction of corrections) {
@@ -2025,12 +2050,8 @@ async function processDocumentTextLlm(id) {
     // Step 4: Apply corrections and save
     const trace = [{ rule: 'text_llm_extraction', value: `${ocrPages.length} pages via ${process.env.TEXT_MODEL || 'qwen2.5:7b'}` }];
 
-    // Apply learned corrections
-    try {
-      const corrections = await import('./corrections_db.js');
-      const learnedPhone = corrections.lookupCorrection?.('provider.phone');
-      if (learnedPhone) mappedResult.provider.phone = learnedPhone;
-    } catch (_) {}
+    // Apply learned post-extraction corrections (carrier, CPT, practice, phone, fax, etc.)
+    applyCorrectionsPostprocess(mappedResult, trace, { id });
 
     // Enrich documentMeta with fileHash, filename, pages (mirrors vlm_direct pipeline)
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');

@@ -120,8 +120,8 @@
   },
   "facilities": {},
   "metadata": {
-    "totalCorrections": 38,
-    "lastUpdated": "2026-03-01T06:38:36.948Z",
+    "totalCorrections": 39,
+    "lastUpdated": "2026-03-16T16:33:22.188Z",
     "hipaaCompliant": true,
     "note": "Patient PHI (names, DOB, Member IDs) is NEVER stored per HIPAA compliance"
   },
@@ -523,6 +523,22 @@
           "metadata": {
             "documentId": "doc_1761865363078_g9nsp3"
           }
+        }
+      ],
+      "confidence": 1,
+      "count": 1
+    }
+  },
+  "patientName": {
+    "smthjohn": {
+      "ocrText": "SMTH, JOHN",
+      "corrections": [
+        {
+          "text": "Smith, John",
+          "count": 1,
+          "firstSeen": "2026-03-16T16:33:22.187Z",
+          "lastSeen": "2026-03-16T16:33:22.188Z",
+          "metadata": {}
         }
       ],
       "confidence": 1,

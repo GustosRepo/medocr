@@ -15,6 +15,8 @@ import { log } from './logging/logger.js';
 import { normalizeVlmResult, parseVlmJson } from './vlmExtractor.js';
 import { buildKbPromptContext } from './kbLoader.js';
 import { selectInformationRichPages } from './pageSelector.js';
+import { applyOcrCorrections } from './rules/utils/ocrCorrector.js';
+import correctionsDB from './corrections_db.js';
 
 const TEXT_MODEL = process.env.TEXT_MODEL || 'qwen2.5:14b';
 const TEXT_TIMEOUT = parseInt(process.env.TEXT_TIMEOUT || '180000', 10);
@@ -443,6 +445,9 @@ export async function extractFromOcrText(ocrPages, options = {}) {
   for (const page of pagesToUse) {
     combinedText += `\n=== PAGE ${page.page} ===\n${page.text}\n`;
   }
+
+  // Apply learned OCR corrections before sending to LLM
+  combinedText = applyOcrCorrections(combinedText, correctionsDB);
 
   // Trim if excessively long (stay within 16k context)
   if (combinedText.length > 32000) {

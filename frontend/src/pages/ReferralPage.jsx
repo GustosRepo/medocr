@@ -848,13 +848,47 @@ export default function ReferralPage() {
       });
     }
 
-    // HIPAA: Patient data is NEVER sent to learning database
-    // (patientLast, patientFirst, patientDob, insuranceMemberId are silently filtered)
+    // Local mode: send patient fields too (server gates storage via LEARN_ALL env var)
+    if (editedFields.patientLast !== original.patientLast || editedFields.patientFirst !== original.patientFirst) {
+      corrections.push({
+        type: 'patientName',
+        ocrText: `${original.patientLast}, ${original.patientFirst}`,
+        correctedText: `${editedFields.patientLast}, ${editedFields.patientFirst}`
+      });
+    }
+    if (editedFields.patientDob !== original.patientDob) {
+      corrections.push({
+        type: 'dob',
+        ocrText: original.patientDob,
+        correctedText: editedFields.patientDob
+      });
+    }
+    if (editedFields.patientPhone !== original.patientPhone) {
+      corrections.push({
+        type: 'patientPhone',
+        ocrText: original.patientPhone,
+        correctedText: editedFields.patientPhone
+      });
+    }
+    if (editedFields.insuranceMemberId !== original.insuranceMemberId) {
+      corrections.push({
+        type: 'memberId',
+        ocrText: original.insuranceMemberId,
+        correctedText: editedFields.insuranceMemberId
+      });
+    }
+    if (editedFields.insuranceGroupId !== original.insuranceGroupId) {
+      corrections.push({
+        type: 'groupId',
+        ocrText: original.insuranceGroupId,
+        correctedText: editedFields.insuranceGroupId
+      });
+    }
 
     if (corrections.length === 0) {
       notifications.show({
         title: 'No Changes',
-        message: 'No non-PHI corrections to save (patient data not stored per HIPAA)',
+        message: 'No corrections to save.',
         color: 'blue',
         autoClose: 2000
       });
@@ -873,10 +907,25 @@ export default function ReferralPage() {
       if (!response.ok) throw new Error('save-failed');
 
       const result = await response.json();
+
+      // Also send feedback records for analytics tracking
+      for (const c of corrections) {
+        fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            docId,
+            path: c.type,
+            previousValue: c.ocrText,
+            newValue: c.correctedText,
+            accepted: true
+          })
+        }).catch(() => {}); // fire-and-forget, non-blocking
+      }
       
       notifications.show({
         title: 'Corrections Saved',
-        message: `${corrections.length} non-PHI corrections recorded. Patient data not stored per HIPAA.`,
+        message: `${corrections.length} corrections recorded for future learning.`,
         color: 'green',
         autoClose: 3000
       });
@@ -1083,9 +1132,7 @@ export default function ReferralPage() {
                 </Group>
               </Group>
               <Text size="xs" c="dimmed">
-                • <Badge size="xs" color="red" variant="light">PHI Protected</Badge> Patient data edited locally only, never stored
-                <br />
-                • <Badge size="xs" color="green" variant="light">Learned</Badge> Provider, codes, and facility info saved to improve future OCR
+                Edit any field — all corrections are saved locally to improve future OCR accuracy.
               </Text>
             </Stack>
           </Paper>
@@ -1121,7 +1168,7 @@ export default function ReferralPage() {
             <Stack gap="xs">
               <Group gap="xs" align="center">
                 <Text size="xs" fw={500}>Patient Info</Text>
-                <Badge size="xs" color="red" variant="light">PHI - Not Stored</Badge>
+                <Badge size="xs" color="green" variant="light">✓ Learned</Badge>
               </Group>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1265,11 +1312,11 @@ export default function ReferralPage() {
             <Stack gap="xs">
               <Group gap="xs" align="center">
                 <Text size="xs" fw={500}>Insurance</Text>
-                <Badge size="xs" color="yellow" variant="light">Partial Learning</Badge>
+                <Badge size="xs" color="green" variant="light">✓ Learned</Badge>
               </Group>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Text size="xs" fw={500} c="dimmed" mb={4}>Carrier (Learned)</Text>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Carrier</Text>
                   <input
                     type="text"
                     value={editedFields.insuranceCarrier}
@@ -1278,7 +1325,7 @@ export default function ReferralPage() {
                   />
                 </div>
                 <div>
-                  <Text size="xs" fw={500} c="dimmed" mb={4}>Member ID (PHI - Not Stored)</Text>
+                  <Text size="xs" fw={500} c="dimmed" mb={4}>Member ID</Text>
                   <input
                     type="text"
                     value={editedFields.insuranceMemberId}
@@ -1289,7 +1336,7 @@ export default function ReferralPage() {
               </div>
               {/* Bug 12 fix: groupId edit field */}
               <div>
-                <Text size="xs" fw={500} c="dimmed" mb={4}>Group ID (PHI - Not Stored)</Text>
+                <Text size="xs" fw={500} c="dimmed" mb={4}>Group ID</Text>
                 <input
                   type="text"
                   value={editedFields.insuranceGroupId}

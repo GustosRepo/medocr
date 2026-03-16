@@ -55,11 +55,17 @@ class CorrectionsDB {
       supervisingNpi: {},
       planType: {},
       studyType: {},
-      // patientNames removed - HIPAA compliance, never store patient PHI
+      // Local-mode PHI fields (only stored when LEARN_ALL=true)
+      patientName: {},
+      patientDob: {},
+      memberId: {},
+      groupId: {},
+      patientPhone: {},
+      patientEmail: {},
       metadata: {
         totalCorrections: 0,
         lastUpdated: null,
-        hipaaCompliant: true
+        learnAll: process.env.LEARN_ALL === 'true'
       }
     };
   }
@@ -102,9 +108,9 @@ class CorrectionsDB {
   recordCorrection(type, ocrText, correctedText, metadata = {}) {
     if (!ocrText || !correctedText || ocrText === correctedText) return;
 
-    // HIPAA COMPLIANCE: Block patient data and member IDs
-    if (type === 'patient' || type === 'memberId' || type === 'patientName' || type === 'dob') {
-      console.warn(`HIPAA: ${type} correction blocked from storage (PHI)`);
+    // PHI fields: only store when running locally with LEARN_ALL=true
+    const learnAll = process.env.LEARN_ALL === 'true';
+    if (!learnAll && (type === 'patient' || type === 'patientName' || type === 'memberId' || type === 'dob' || type === 'groupId' || type === 'patientPhone' || type === 'patientEmail')) {
       return;
     }
 
@@ -134,7 +140,15 @@ class CorrectionsDB {
       'supervisingProvider': 'supervisingProvider',
       'supervisingNpi': 'supervisingNpi',
       'planType': 'planType',
-      'studyType': 'studyType'
+      'studyType': 'studyType',
+      // Local-mode PHI fields
+      'patientName': 'patientName',
+      'patient': 'patientName',
+      'dob': 'patientDob',
+      'memberId': 'memberId',
+      'groupId': 'groupId',
+      'patientPhone': 'patientPhone',
+      'patientEmail': 'patientEmail'
     };
 
     const field = fieldMap[type];
@@ -199,8 +213,8 @@ class CorrectionsDB {
   getCorrection(type, ocrText) {
     if (!ocrText) return null;
 
-    // HIPAA COMPLIANCE: Block patient data
-    if (type === 'patient' || type === 'memberId' || type === 'patientName' || type === 'dob') {
+    const learnAll = process.env.LEARN_ALL === 'true';
+    if (!learnAll && (type === 'patient' || type === 'patientName' || type === 'memberId' || type === 'dob' || type === 'groupId' || type === 'patientPhone' || type === 'patientEmail')) {
       return null;
     }
 
@@ -228,7 +242,15 @@ class CorrectionsDB {
       'supervisingProvider': 'supervisingProvider',
       'supervisingNpi': 'supervisingNpi',
       'planType': 'planType',
-      'studyType': 'studyType'
+      'studyType': 'studyType',
+      // Local-mode PHI fields
+      'patientName': 'patientName',
+      'patient': 'patientName',
+      'dob': 'patientDob',
+      'memberId': 'memberId',
+      'groupId': 'groupId',
+      'patientPhone': 'patientPhone',
+      'patientEmail': 'patientEmail'
     };
 
     const field = fieldMap[type];
@@ -310,8 +332,7 @@ class CorrectionsDB {
   /**
    * Fuzzy match OCR text against corrections database
    * @param {string} type - Correction type: 'provider', 'npi', 'phone', 'fax', 'carrier', 'cpt', 'icd', 'facility',
-   *                        and all Tier 1-3 types
-   *                        NOTE: 'patient' type returns null per HIPAA
+   *                        and all Tier 1-3 types. PHI types gated by LEARN_ALL env var.
    * @param {string} ocrText - The text extracted by OCR
    * @param {number} threshold - Similarity threshold (0-1)
    * @returns {object|null} - {text, confidence, similarity} or null
@@ -319,8 +340,8 @@ class CorrectionsDB {
   fuzzyMatch(type, ocrText, threshold = 0.8) {
     if (!ocrText) return null;
 
-    // HIPAA COMPLIANCE: Block patient data
-    if (type === 'patient' || type === 'memberId' || type === 'patientName' || type === 'dob') {
+    const learnAll = process.env.LEARN_ALL === 'true';
+    if (!learnAll && (type === 'patient' || type === 'patientName' || type === 'memberId' || type === 'dob' || type === 'groupId' || type === 'patientPhone' || type === 'patientEmail')) {
       return null;
     }
 
@@ -348,7 +369,15 @@ class CorrectionsDB {
       'supervisingProvider': 'supervisingProvider',
       'supervisingNpi': 'supervisingNpi',
       'planType': 'planType',
-      'studyType': 'studyType'
+      'studyType': 'studyType',
+      // Local-mode PHI fields
+      'patientName': 'patientName',
+      'patient': 'patientName',
+      'dob': 'patientDob',
+      'memberId': 'memberId',
+      'groupId': 'groupId',
+      'patientPhone': 'patientPhone',
+      'patientEmail': 'patientEmail'
     };
 
     const field = fieldMap[type];
@@ -425,6 +454,13 @@ class CorrectionsDB {
   }
 
   /**
+   * Return the full corrections object (used by ocrCorrector for pre-extraction text-level fixes)
+   */
+  getAll() {
+    return this.corrections;
+  }
+
+  /**
    * Get statistics about corrections
    */
   getStats() {
@@ -456,7 +492,14 @@ class CorrectionsDB {
       supervisingNpi: Object.keys(this.corrections.supervisingNpi || {}).length,
       planType: Object.keys(this.corrections.planType || {}).length,
       studyType: Object.keys(this.corrections.studyType || {}).length,
-      hipaaCompliant: true // Never stores patient PHI
+      // Local-mode PHI stats
+      patientName: Object.keys(this.corrections.patientName || {}).length,
+      patientDob: Object.keys(this.corrections.patientDob || {}).length,
+      memberId: Object.keys(this.corrections.memberId || {}).length,
+      groupId: Object.keys(this.corrections.groupId || {}).length,
+      patientPhone: Object.keys(this.corrections.patientPhone || {}).length,
+      patientEmail: Object.keys(this.corrections.patientEmail || {}).length,
+      learnAll: process.env.LEARN_ALL === 'true'
     };
   }
 }
