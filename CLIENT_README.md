@@ -100,7 +100,7 @@ cd ~\Desktop\medocr
 .\medocr.bat start
 ```
 
-The first launch takes a few minutes because Docker needs to build the images. After that, starts take about 15 seconds.
+The first launch downloads the pre-built Docker images (~2 GB total). This only happens once — after that, starts take about 15 seconds.
 
 Your browser will open automatically to **http://localhost** when it's ready.
 
@@ -207,7 +207,7 @@ cd ~\Desktop\medocr
 .\medocr.bat update
 ```
 
-This pulls the latest code and rebuilds automatically. Your corrections and learned data are preserved.
+This pulls the latest code and images automatically. Your corrections and learned data are preserved.
 
 ---
 

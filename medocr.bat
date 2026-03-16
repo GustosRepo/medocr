@@ -74,8 +74,9 @@ if not errorlevel 1 (
 
 :launch
 echo.
-echo [2/3] Starting MedOCR services...
-docker compose up -d --build --remove-orphans
+echo [2/3] Pulling latest images and starting MedOCR services...
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
 echo.
 echo [3/3] Waiting for services to be healthy...
 set tries=0
@@ -106,19 +107,19 @@ goto :eof
 :: ── STOP ──────────────────────────────────────────────────────────────
 :stop
 echo Stopping MedOCR...
-docker compose down
+docker compose -f docker-compose.prod.yml down
 echo [OK] MedOCR stopped
 goto :eof
 
 :: ── LOGS ──────────────────────────────────────────────────────────────
 :logs
-docker compose logs -f --tail=100
+docker compose -f docker-compose.prod.yml logs -f --tail=100
 goto :eof
 
 :: ── STATUS ────────────────────────────────────────────────────────────
 :status
 echo MedOCR Service Status:
-docker compose ps
+docker compose -f docker-compose.prod.yml ps
 echo.
 curl -sf http://localhost:8000/health >nul 2>&1
 if not errorlevel 1 (echo   OCR Service:  [OK] healthy) else (echo   OCR Service:  [DOWN])
@@ -134,7 +135,9 @@ goto :eof
 :update
 echo Updating MedOCR...
 git pull --ff-only
-docker compose up -d --build --remove-orphans
+echo Pulling latest images...
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
 echo [OK] Updated and restarted
 goto :eof
 

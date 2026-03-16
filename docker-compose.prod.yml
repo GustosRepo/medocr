@@ -1,0 +1,102 @@
+# docker-compose.prod.yml — pulls pre-built images from GitHub Container Registry
+# Use this instead of docker-compose.yml to skip local builds.
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # ── OCR Service (Python + RapidOCR + PP-OCRv4) ──────────────────────
+  ocr:
+    image: ghcr.io/gustosrepo/medocr-ocr:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - MEDOCR_RENDER_DPI=300
+      - MEDOCR_DOWNSAMPLE_PAGES=5
+      - MEDOCR_DOWNSAMPLE_PAGES_HIGH=10
+      - MEDOCR_DOWNSAMPLE_SCALE=0.8
+      - MEDOCR_DOWNSAMPLE_SCALE_HIGH=0.7
+      - MEDOCR_PREPROCESS_MODE=enhanced
+      - MEDOCR_USE_CLAHE=true
+      - MEDOCR_CLAHE_CLIP_LIMIT=2.5
+      - MEDOCR_CLAHE_TILE_SIZE=8
+      - MEDOCR_USE_BILATERAL=false
+      - MEDOCR_ENABLE_CONFIDENCE_RETRY=true
+      - MEDOCR_CONFIDENCE_THRESHOLD=0.70
+      - OCR_ENABLE_TABLES=1
+      - OCR_AUTO_DPI=1
+      - OCR_DPI_BASE=300
+      - OCR_DPI_BUMP=450
+      - OCR_DPI_MAX=600
+      - MEDOCR_ENABLE_EARLY_EXIT=true
+      - MEDOCR_EARLY_EXIT_TIME_THRESHOLD=60
+      - MEDOCR_PAGE_TIMEOUT_SECONDS=90
+      - MEDOCR_DET_MODEL_PATH=/app/models/ch_PP-OCRv4_det_server_infer.onnx
+      - MEDOCR_CLS_MODEL_PATH=/app/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+      - MEDOCR_REC_MODEL_PATH=/app/models/ch_PP-OCRv4_rec_server_infer.onnx
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medocr-net
+
+  # ── Backend API (Node.js + Express) ─────────────────────────────────
+  api:
+    image: ghcr.io/gustosrepo/medocr-backend:latest
+    ports:
+      - "4387:4387"
+    environment:
+      - NODE_ENV=production
+      - OCR_SERVICE_URL=http://ocr:8000
+      - OCR_TIMEOUT_MS=10800000
+      - FETCH_BODY_TIMEOUT_MS=10800000
+      - FETCH_HEADERS_TIMEOUT_MS=10800000
+      - OCR_MAX_CONCURRENCY=2
+      - DOC_MAX_CONCURRENCY=2
+      - MAX_PDF_PAGES=150
+      - UPLOAD_MAX_BYTES=52428800
+      - RATE_WINDOW_MS=60000
+      - RATE_MAX=500
+      - TEXT_LLM=true
+      - TEXT_MODEL=qwen2.5:14b
+      - TEXT_TIMEOUT=180000
+      - VLM_DIRECT=false
+      - VLM_MODEL=qwen2.5vl:7b
+      - VLM_MAX_PAGES=6
+      - TEXT_LLM_MAX_PAGES=8
+      - VLM_TIMEOUT=180000
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5vl:7b
+      - OLLAMA_TIMEOUT=180000
+      - LLM_MODE=extract
+      - LLM_TIMEOUT=300000
+      - ENABLE_LLM=false
+      - LEARN_ALL=true
+    depends_on:
+      ocr:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - medocr-data:/usr/src/app/backend/data
+    networks:
+      - medocr-net
+
+  # ── Frontend (React SPA via nginx) ──────────────────────────────────
+  frontend:
+    image: ghcr.io/gustosrepo/medocr-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - medocr-net
+
+volumes:
+  medocr-data:
+    driver: local
+
+networks:
+  medocr-net:
+    driver: bridge
