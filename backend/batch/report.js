@@ -386,7 +386,7 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
     bullet(contactParts.join(' | '));
   }
 
-  // Clinical Information
+  // Clinical Information (merged with clinical notes to avoid duplication)
   section('CLINICAL INFORMATION');
   if (clinical.primaryDiagnosis) {
     const diag = clinical.primaryDiagnosis;
@@ -425,6 +425,20 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   else if (vitals.weightLbs) vitalsParts.push(`Weight: ${vitals.weightLbs} lbs`);
   if (vitals.bp) vitalsParts.push('BP: ' + vitals.bp);
   if (vitalsParts.length) bullet(vitalsParts.join(' | '));
+  // Inline clinical notes (was previously a separate section)
+  const narrative = r.narrative || {};
+  if (narrative.reasonForReferral) bullet(`Reason for Referral: ${narrative.reasonForReferral}`);
+  if (narrative.presentIllness) bullet(`Present Illness: ${narrative.presentIllness}`);
+  if (narrative.clinicalHistory) bullet(`Clinical History: ${narrative.clinicalHistory}`);
+  if (narrative.clinicalNotes) bullet(`Clinical Notes: ${narrative.clinicalNotes}`);
+  if (Array.isArray(clinical.problemsList) && clinical.problemsList.length > 0) {
+    const problemsFormatted = clinical.problemsList.map(p => {
+      const parts = [p.condition];
+      if (p.onset) parts.push(`onset: ${p.onset}`);
+      return parts.join(' (') + (p.onset ? ')' : '');
+    }).join(' | ');
+    bullet(`Problems List: ${problemsFormatted}`);
+  }
 
   // Information Alerts
   section('INFORMATION ALERTS');
@@ -442,30 +456,8 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   const testNote = joinList(info.testResults);
   if (testNote) bullet(`Referenced Test Results: ${testNote}`);
 
-  // Clinical Notes (narrative content from LLM extraction)
-  const narrative = r.narrative || {};
-  const hasNarrativeContent = narrative.clinicalHistory || narrative.clinicalNotes || 
-                              narrative.reasonForReferral || narrative.presentIllness ||
-                              (Array.isArray(clinical.problemsList) && clinical.problemsList.length > 0);
-  if (hasNarrativeContent) {
-    section('CLINICAL NOTES');
-    if (narrative.reasonForReferral) bullet(`Reason for Referral: ${narrative.reasonForReferral}`);
-    if (narrative.presentIllness) bullet(`Present Illness: ${narrative.presentIllness}`);
-    if (narrative.clinicalHistory) bullet(`Clinical History: ${narrative.clinicalHistory}`);
-    if (narrative.clinicalNotes) bullet(`Clinical Notes: ${narrative.clinicalNotes}`);
-    // Display problems list in clinical notes section
-    if (Array.isArray(clinical.problemsList) && clinical.problemsList.length > 0) {
-      const problemsFormatted = clinical.problemsList.map(p => {
-        const parts = [p.condition];
-        if (p.onset) parts.push(`onset: ${p.onset}`);
-        return parts.join(' (') + (p.onset ? ')' : '');
-      }).join(' | ');
-      bullet(`Problems List: ${problemsFormatted}`);
-    }
-  }
-
-  // Problem Flags
-  section('PROBLEM FLAGS');
+  // Problem Flags & Authorization
+  section('PROBLEM FLAGS / AUTHORIZATION');
   const reasonsRaw = m.problemFlags?.reasons || [];
   const actions = m.problemFlags?.actions || [];
   const combined = [...reasonsRaw, ...actions];
@@ -475,35 +467,24 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
   } else {
     bullet('None');
   }
-
-  // Authorization Notes (placeholder derived from actions)
-  section('AUTHORIZATION NOTES');
   const authNotes = m.authorization?.notes || [];
+  if (authNotes.length) {
+    bullet(`Authorization: ${authNotes.join(', ')}`);
+  }
   try {
     const infoNotes = authNotes.length ? authNotes : (m.problemFlags?.actions || []);
     doc.info.AuthorizationNotes = JSON.stringify(infoNotes);
   } catch (e) { /* metadata hint only */ }
-  if (authNotes.length) {
-    for (const n of authNotes) {
-      bullet(n);
-    }
-  } else {
-    const acts = m.problemFlags?.actions || [];
-    if (acts.length) bullet(acts.join(', ')); else bullet('None');
-  }
 
-  // Data Quality Summary
+  // Data Quality & Confidence
   section('DATA QUALITY');
   const qc = m.dataQuality?.qc || {};
-  bullet(`Confidence: ${m.dataQuality?.confidence || '—'}`);
+  const confLevel = m.confidenceLevel || m.dataQuality?.confidence || '—';
+  bullet(`Confidence: ${confLevel}`);
   bullet(`QC: name=${qc.nameConsistency || 'unk'} | dob=${qc.dateValidity || 'unk'} | phone=${qc.phoneValidity || 'unk'} | cpt=${qc.cptValid || 'unk'}`);
   if (Array.isArray(m.procedure?.cptCandidates) && m.procedure.cptCandidates.length > 1) {
     bullet('CPT Ambiguity: ' + m.procedure.cptCandidates.join(', '));
   }
-
-  // Confidence
-  section('CONFIDENCE LEVEL');
-  bullet(m.confidenceLevel || m.dataQuality?.confidence || '—');
 
   // Hidden multi-page marker fallback (in case no break triggered ensureSpace after content growth)
   if (pageCount > 1) {

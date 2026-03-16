@@ -49,6 +49,7 @@ export default function ChecklistPage() {
   const [overrides, setOverrides] = useState({}); // id -> { note, category }
   const [statusFilter, setStatusFilter] = useState([]); // array of categories
   const [insuranceFilter, setInsuranceFilter] = useState([]); // carriers
+  const [allCarriers, setAllCarriers] = useState([]); // stable list of all known carriers
   const [routeFilter, setRouteFilter] = useState(''); // decision tree route filter
   const [showArchived, setShowArchived] = useState(false);
   const [expanded, setExpanded] = useState({}); // id -> bool (false means collapsed); persisted
@@ -101,6 +102,11 @@ export default function ChecklistPage() {
       if (!resp.ok) throw new Error('Failed to load checklist');
       const json = await resp.json();
       setRows(json.items || []);
+      // Accumulate carriers for stable filter dropdown (don't lose options when filtering)
+      setAllCarriers(prev => {
+        const set = new Set([...prev, ...(json.items || []).map(it => it.insurance).filter(Boolean)]);
+        return [...set].sort().slice(0, 60);
+      });
       const ov = {};
       (json.items||[]).forEach(it=>{ if (it.override) ov[it.id] = it.override; });
       setOverrides(ov);
@@ -139,9 +145,16 @@ export default function ChecklistPage() {
     const id = setInterval(()=> { load().catch(()=>{}); }, 5000);
     return ()=> clearInterval(id);
   }, [autoRefresh, statusFilter, insuranceFilter, showArchived]);
-  useEffect(()=>{ // refresh textual view when rows change via /api/checklist for authoritative counts
-    (async ()=>{ try { const r = await fetch('/api/checklist'); if (r.ok){ const j = await r.json(); setTextView(buildText(j)); } } catch{} })();
-  }, [rows, buildText]);
+  useEffect(()=>{ // refresh textual view when rows change, respecting active filters
+    (async ()=>{ try {
+      const params = new URLSearchParams();
+      if (statusFilter.length) params.set('status', statusFilter.join(','));
+      if (insuranceFilter.length) params.set('insurance', insuranceFilter.join(','));
+      if (showArchived) params.set('includeArchived','1');
+      const r = await fetch(`/api/checklist?${params.toString()}`);
+      if (r.ok){ const j = await r.json(); setTextView(buildText(j)); }
+    } catch{} })();
+  }, [rows, buildText, statusFilter, insuranceFilter, showArchived]);
 
   return (
     <Stack gap="md">
@@ -161,7 +174,7 @@ export default function ChecklistPage() {
           />
           <MultiSelect
             placeholder="Insurance"
-            data={[...new Set(rows.map(r=>r.insurance).filter(Boolean))].slice(0,40)}
+            data={allCarriers}
             value={insuranceFilter}
             onChange={setInsuranceFilter}
             searchable
@@ -260,7 +273,7 @@ export default function ChecklistPage() {
                               } catch {
                                 // revert
                                 setOverrides(o=>({ ...o, [r.id]: prevOv }));
-                                setRows(()=> rows); // fallback reload soon via auto refresh
+                                load().catch(()=>{}); // reload fresh data
                               }
                             }}
                           >{isArchived? '↩':'🗄'}</ActionIcon>
@@ -381,9 +394,7 @@ export default function ChecklistPage() {
                       {acts.map((a,i)=>(<Badge key={i} size="xs" color="blue" variant="light" style={{ cursor:'default' }}>{a}</Badge>))}
                     </Group>
                   )}
-                  {isExpanded && override?.note && (
-                    <Text size="xs" mt={6} c="dimmed" lineClamp={3}>Note: {override.note}</Text>
-                  )}
+
                   {isExpanded && <Text size="xs" mt={10} c="dimmed" style={{wordBreak:'break-all'}}>{r.id}</Text>}
                 </div>
               );

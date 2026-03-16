@@ -670,9 +670,10 @@ app.get('/api/checklist', (req, res) => {
   let processed = 0, additionalActions = 0, readyToSchedule = 0;
   // Iterate newest-first similar to documents listing
   for (const [id, entry] of Array.from(docs.entries()).reverse()) {
-    if (!isDone(entry)) continue;
-    const r = entry.result;
-    if (dateFilter && r.documentMeta?.intakeDate !== dateFilter) continue;
+    if (!entry || !entry.status) continue;
+    const entryDone = isDone(entry);
+    const r = entry.result || {};
+    if (entryDone && dateFilter && r.documentMeta?.intakeDate !== dateFilter) continue;
     processed++;
     const p = r.patient || {};
     const insArr = Array.isArray(r.insurance) ? r.insurance : [];
@@ -682,7 +683,7 @@ app.get('/api/checklist', (req, res) => {
     if (problem) additionalActions++; else readyToSchedule++;
     for (const a of actionsRaw) {
       if (/verify_insurance|insurance_verification/i.test(a)) forms.insuranceVerification++;
-      if (/prior_auth|authorization_required|submit_auth/i.test(a)) forms.authorizationRequests++;
+      if (/prior_auth|authorization_required|submit_auth|auth_required/i.test(a)) forms.authorizationRequests++;
       if (/uts|out_of_network/i.test(a)) forms.utsReferrals++;
       if (/provider_follow|obtain_additional/i.test(a)) forms.providerFollowUps++;
       if (/contact_patient|missing_demographics|call_patient/i.test(a)) forms.patientContacts++;
@@ -739,14 +740,14 @@ app.patch('/api/checklist/:id', (req, res) => {
   const { id } = req.params;
   if (!docs.has(id)) return res.status(404).json({ error: { code: 'not_found', message: 'document not found' } });
   const { note, category, status, archived } = req.body || {};
-  const cat = category || status; // support either field name
+  const cat = category !== undefined ? category : status; // support either field name
   if (cat && !['ready','attention','processing','error'].includes(cat)) {
     return res.status(400).json({ error: { code: 'invalid_category', message: 'category must be one of ready|attention|processing|error' } });
   }
   const existing = checklistOverrides.get(id) || {};
   const updated = { ...existing };
   if (note !== undefined) updated.note = String(note).slice(0, 1000);
-  if (cat) updated.category = cat; else if (cat === null) delete updated.category;
+  if (cat) updated.category = cat; else if (cat === null || cat === undefined) delete updated.category;
   if (archived !== undefined) updated.archived = !!archived;
   updated.updatedAt = new Date().toISOString();
   checklistOverrides.set(id, updated);
