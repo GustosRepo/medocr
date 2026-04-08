@@ -449,9 +449,11 @@ export async function extractFromOcrText(ocrPages, options = {}) {
   // Apply learned OCR corrections before sending to LLM
   combinedText = applyOcrCorrections(combinedText, correctionsDB);
 
-  // Trim if excessively long (stay within 16k context)
-  if (combinedText.length > 32000) {
-    combinedText = combinedText.slice(0, 32000) + '\n[... truncated]';
+  // Trim to keep total prompt under ~20k chars (prompt overhead is ~7k)
+  // This prevents LLM timeouts on large multi-page documents
+  const MAX_TEXT_CHARS = parseInt(process.env.TEXT_LLM_MAX_CHARS || '14000', 10);
+  if (combinedText.length > MAX_TEXT_CHARS) {
+    combinedText = combinedText.slice(0, MAX_TEXT_CHARS) + '\n[... truncated]';
   }
 
   // Step 3b: Regex pre-extraction — pull structured hints from OCR text

@@ -659,13 +659,27 @@ export function normalizeVlmResult(vlm) {
       temporal: 'current'
     })).filter(dx => dx.code),
     symptoms,
-    clinical: {
-      reasonForReferral: vlm.clinical?.reasonForReferral || null,
-      medications: vlm.clinical?.medications || [],
-      history: vlm.clinical?.history || null,
-      bmi: vlm.clinical?.bmi || null,
-      notes: vlm.clinical?.notes || null
-    },
+    clinical: (() => {
+      const clin = {
+        reasonForReferral: vlm.clinical?.reasonForReferral || null,
+        medications: vlm.clinical?.medications || [],
+        history: vlm.clinical?.history || null,
+        bmi: vlm.clinical?.bmi || null,
+        notes: vlm.clinical?.notes || null
+      };
+      // Promote first diagnosis to primaryDiagnosis so frontend can display it
+      const dxArr = (vlm.diagnoses || []).filter(dx => cleanIcdCode(dx.code));
+      if (dxArr.length > 0) {
+        clin.primaryDiagnosis = {
+          code: cleanIcdCode(dxArr[0].code),
+          description: typeof dxArr[0].description === 'string' ? dxArr[0].description : null,
+          chronic: null,
+          severity: null,
+          note: null
+        };
+      }
+      return clin;
+    })(),
     confidence: mapConfidenceLevel(vlm.confidence),
     confidenceScore: vlm.confidence || 0,
     extractionMethod: 'vlm_primary',
@@ -906,6 +920,23 @@ export function crossValidate(vlmResult, regexResult) {
     if (dx.code && !dxCodes.has(dx.code)) {
       merged.diagnoses.push(dx);
       dxCodes.add(dx.code);
+    }
+  }
+
+  // Ensure clinical.primaryDiagnosis is set (prefer regex enrichment, fallback to VLM first dx)
+  if (!merged.clinical?.primaryDiagnosis) {
+    merged.clinical = merged.clinical || {};
+    if (regexResult.clinical?.primaryDiagnosis) {
+      merged.clinical.primaryDiagnosis = regexResult.clinical.primaryDiagnosis;
+    } else if (merged.diagnoses?.length > 0) {
+      const first = merged.diagnoses[0];
+      merged.clinical.primaryDiagnosis = {
+        code: first.code,
+        description: first.description || null,
+        chronic: null,
+        severity: null,
+        note: null
+      };
     }
   }
 

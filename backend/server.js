@@ -1994,17 +1994,34 @@ async function processDocumentTextLlm(id) {
       }
 
       const docTempDir = `data/temp/${id}`;
+      // maxWidth 840 avoids the GGML_ASSERT matrix-shape crash in qwen2.5vl:7b on Ollama 0.19.0.
+      // The vision encoder uses 14px patches; 840 = 60 patches wide, well within the model's token budget.
       const imageResults = await convertPdfPagesToImages(entry.filePath, pageIndices, {
-        targetDPI: 150,
-        maxWidth: 1600,
+        targetDPI: 100,
+        maxWidth: 840,
         quality: 85,
         outputDir: docTempDir
       });
 
       const imagePaths = imageResults.map(r => r.imagePath);
-      mappedResult = await vlmExtractDocument(imagePaths, {});
-      mappedResult.extractionMethod = 'vlm_fallback';
-      mappedResult._vlmFallback = { reason: 'low_ocr_confidence_or_parse_failure' };
+      const vlmFallbackResult = await vlmExtractDocument(imagePaths, {});
+
+      const vlmUsable = (vlmFallbackResult?._vlm?.pagesUsable ?? 0) > 0
+        || (Array.isArray(vlmFallbackResult?.diagnoses) && vlmFallbackResult.diagnoses.length > 0)
+        || vlmFallbackResult?.patient?.first;
+
+      if (vlmUsable) {
+        mappedResult = vlmFallbackResult;
+        mappedResult.extractionMethod = 'vlm_fallback';
+        mappedResult._vlmFallback = { reason: 'low_ocr_confidence_or_parse_failure' };
+      } else {
+        // VLM crashed or produced nothing — fall back to regex engine on the OCR text
+        log('warn', 'vlm_fallback_failed_using_regex', { id, pagesUsable: vlmFallbackResult?._vlm?.pagesUsable ?? 0 });
+        const { result: regexResult } = await runExtractionWithDates(ocrPages);
+        mappedResult = regexResult;
+        mappedResult.extractionMethod = 'regex_fallback';
+        mappedResult._vlmFallback = { reason: 'vlm_crashed_regex_used' };
+      }
 
       await cleanupTempImages(imageResults);
       try { await import('fs').then(f => f.promises.rm(docTempDir, { recursive: true, force: true })); } catch (_) {}
@@ -2365,8 +2382,8 @@ async function processDocument(id) {
       // Step 2: Convert selected PDF pages to images for VLM
       const docTempDir = `data/temp/${id}`;
       const imageResults = await convertPdfPagesToImages(entry.filePath, pagesToProcess, {
-        targetDPI: 200,
-        maxWidth: 2400,
+        targetDPI: 150,
+        maxWidth: 840,
         quality: 90,
         outputDir: docTempDir
       });
@@ -2498,6 +2515,17 @@ async function processDocument(id) {
 
   // Defensive post-process: re-apply learned corrections
   applyCorrectionsPostprocess(mappedResult, trace, { id });
+
+  // Ensure clinical.primaryDiagnosis is always populated when diagnoses exist
+  if (!mappedResult.clinical?.primaryDiagnosis && Array.isArray(mappedResult.diagnoses) && mappedResult.diagnoses.length > 0) {
+    if (!mappedResult.clinical) mappedResult.clinical = {};
+    const first = mappedResult.diagnoses[0];
+    const code = typeof first === 'string' ? first : first?.code;
+    const description = typeof first === 'object' ? (first?.description || null) : null;
+    if (code) {
+      mappedResult.clinical.primaryDiagnosis = { code, description, chronic: null, severity: null, note: null };
+    }
+  }
   
   // Set meta.documentDate from priority date fields (no fallback to today's date)
   const meta = mappedResult?.documentMeta || {};

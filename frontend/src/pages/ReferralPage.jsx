@@ -1101,6 +1101,41 @@ export default function ReferralPage() {
             </Button>
           </Group>
         )}
+
+        {/* Regex fallback warning — shown when AI timed out and regex engine was used */}
+        {doc.extractionMethod === 'regex_fallback' && doc._vlmFallback?.reason === 'vlm_crashed_regex_used' && (
+          <Paper p="sm" withBorder style={{ background: 'rgba(234, 179, 8, 0.08)', borderColor: '#eab308' }}>
+            <Group justify="space-between" align="center">
+              <Group gap="xs" align="center">
+                <Text size="lg">⚠️</Text>
+                <Stack gap={2}>
+                  <Text size="xs" fw={600} c="yellow.4">AI extraction timed out — results from pattern matching only</Text>
+                  <Text size="xs" c="dimmed">This document was too large for the AI model. Data may be incomplete. Reprocess to retry with AI.</Text>
+                </Stack>
+              </Group>
+              <Button
+                size="xs"
+                variant="light"
+                color="yellow"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${apiBase}/documents/${docId}/reprocess`, { method: 'POST' });
+                    if (!res.ok) throw new Error('reprocess-failed');
+                    // Mark the card as re-processing so the spinner shows
+                    setResultsMap(m => ({ ...m, [docId]: { ...m[docId], extractionMethod: null, _reprocessing: true } }));
+                    notifications.show({ message: 'Reprocessing — results will update when complete', color: 'blue', autoClose: 3000 });
+                    // Resume polling so the card updates automatically when done
+                    pollStatus(docId, () => {}, () => {});
+                  } catch {
+                    notifications.show({ message: 'Failed to start reprocess', color: 'red' });
+                  }
+                }}
+              >
+                Reprocess
+              </Button>
+            </Group>
+          </Paper>
+        )}
         
         {isEditing && (
           <Paper p="md" withBorder style={{ background: 'rgba(59, 130, 246, 0.05)', borderColor: '#3b82f6' }}>
@@ -1357,8 +1392,8 @@ export default function ReferralPage() {
                   {doc.clinical.primaryDiagnosis.description && ` — ${doc.clinical.primaryDiagnosis.description}`}
                 </Text>
               )}
-              {/* Bug 1 fix: display full diagnoses array (secondary/tertiary) */}
-              {Array.isArray(doc.diagnoses) && doc.diagnoses.length > 1 && (
+              {/* Bug 1 fix: display full diagnoses array */}
+              {Array.isArray(doc.diagnoses) && doc.diagnoses.length > 0 && (
                 <div>
                   <Text size="xs" fw={600} c="dimmed" mb={4}>All Diagnoses:</Text>
                   <Stack gap={2}>
@@ -2108,7 +2143,7 @@ export default function ReferralPage() {
                                   </Text>
                                 </Group>
                                 <Text size="xs" c="dimmed">
-                                  {r?._placeholder ? (r._uploading ? 'Uploading…' : 'Processing…') : (
+                                  {r?._placeholder ? (r._uploading ? 'Uploading…' : 'Processing…') : r?._reprocessing ? 'Reprocessing…' : (
                                     <>
                                       CPT: {primaryCpt}
                                       {conf && ` • ${conf}`}
