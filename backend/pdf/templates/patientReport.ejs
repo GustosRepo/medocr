@@ -74,12 +74,28 @@
 
   <!-- CLINICAL INFORMATION -->
   <h2>CLINICAL INFORMATION:</h2>
-  <div class="row">• Primary Diagnosis: 
-    <%= report.clinical.primaryDiagnosis.code %>
-    <% if (report.clinical.primaryDiagnosis.description && report.clinical.primaryDiagnosis.description !== '—') { %>
-      &nbsp;—&nbsp;<span class="muted"><%= report.clinical.primaryDiagnosis.description %></span>
+  <% if (Array.isArray(report.clinical.allDiagnoses) && report.clinical.allDiagnoses.length > 0) { %>
+    <div class="row">• Primary Diagnosis: 
+      <%= report.clinical.allDiagnoses[0].code %>
+      <% if (report.clinical.allDiagnoses[0].description && report.clinical.allDiagnoses[0].description !== '—' && report.clinical.allDiagnoses[0].description !== '') { %>
+        &nbsp;—&nbsp;<span class="muted"><%= report.clinical.allDiagnoses[0].description %></span>
+      <% } %>
+      <% if (report.clinical.allDiagnoses[0].ocrFlag) { %><span style="color:#c06000;font-weight:bold;font-size:0.85em"> [OCR?]</span><% } %>
+    </div>
+    <% if (report.clinical.allDiagnoses.length > 1) { %>
+      <div class="row">• Additional Diagnoses:</div>
+      <% for (let i = 1; i < report.clinical.allDiagnoses.length; i++) { %>
+        <div class="row">&nbsp;&nbsp;&nbsp;&nbsp;<%= report.clinical.allDiagnoses[i].code %><% if (report.clinical.allDiagnoses[i].description && report.clinical.allDiagnoses[i].description !== '') { %> — <span class="muted"><%= report.clinical.allDiagnoses[i].description %></span><% } %><% if (report.clinical.allDiagnoses[i].ocrFlag) { %><span style="color:#c06000;font-weight:bold;font-size:0.85em"> [OCR?]</span><% } %></div>
+      <% } %>
     <% } %>
-  </div>
+  <% } else { %>
+    <div class="row">• Primary Diagnosis: 
+      <%= report.clinical.primaryDiagnosis.code %>
+      <% if (report.clinical.primaryDiagnosis.description && report.clinical.primaryDiagnosis.description !== '—') { %>
+        &nbsp;—&nbsp;<span class="muted"><%= report.clinical.primaryDiagnosis.description %></span>
+      <% } %>
+    </div>
+  <% } %>
   <div class="row">• Symptoms Present:
     <% if (Array.isArray(report.clinical.symptoms) && report.clinical.symptoms.length) { %>
       <span><%= report.clinical.symptoms.join(', ') %></span>
@@ -115,22 +131,26 @@
   </div>
 
   <!-- PROBLEM FLAGS -->
-  <h2>PROBLEM FLAGS:</h2>
+  <h2>PROBLEM FLAGS / AUTHORIZATION</h2>
   <div class="row">
-    <% if (Array.isArray(report.problemFlags) && report.problemFlags.length) { %>
-      <span><%= report.problemFlags.join(', ') %></span>
+    <%
+      let _pfList = [];
+      if (Array.isArray(report.problemFlags)) {
+        _pfList = report.problemFlags;
+      } else if (report.problemFlags) {
+        _pfList = [...(report.problemFlags.reasons || []), ...(report.problemFlags.actions || [])];
+      }
+    %>
+    <% if (_pfList.length) { %>
+      <% _pfList.forEach(function(flag) { %>
+        <div>- <%= flag %></div>
+      <% }); %>
     <% } else { %>
-      <span>—</span>
+      <span>- None</span>
     <% } %>
-  </div>
-
-  <!-- AUTHORIZATION NOTES -->
-  <h2>AUTHORIZATION NOTES:</h2>
-  <div class="row">
-    <% if (Array.isArray(report.authorizationNotes) && report.authorizationNotes.length) { %>
-      <span><%= report.authorizationNotes.join(' • ') %></span>
-    <% } else { %>
-      <span>—</span>
+    <% const _authNotes = (report.authorization && report.authorization.notes) || []; %>
+    <% if (_authNotes.length) { %>
+      <div style="margin-top:4px">Authorization: <%= _authNotes.join(' • ') %></div>
     <% } %>
   </div>
 

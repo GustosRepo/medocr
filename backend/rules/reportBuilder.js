@@ -185,6 +185,11 @@ export function buildPatientReport(extractionResult) {
     },
     clinical: {
       primaryDiagnosis: primaryDx,
+      allDiagnoses: (Array.isArray(res?.diagnoses) ? res.diagnoses : []).map(d => ({
+        code: typeof d === 'string' ? d : (d?.code || '—'),
+        description: typeof d === 'object' ? (d?.description || '') : '',
+        ocrFlag: typeof d === 'object' ? (d?.ocrFlag || false) : false
+      })),
       symptoms,
       vitals
     },

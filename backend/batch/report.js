@@ -388,7 +388,20 @@ export function renderPatientPdf(res, extractionResult, logoPath) {
 
   // Clinical Information (merged with clinical notes to avoid duplication)
   section('CLINICAL INFORMATION');
-  if (clinical.primaryDiagnosis) {
+  // Show all diagnoses from the extraction result
+  const allDiagnoses = m.diagnoses || (Array.isArray(r.diagnoses) ? r.diagnoses : []);
+  if (allDiagnoses.length > 0) {
+    const ocrTag = (dx) => dx.ocrFlag ? ' [OCR?]' : '';
+    bullet(`Primary Diagnosis: ${allDiagnoses[0].code}${allDiagnoses[0].description ? ' — ' + allDiagnoses[0].description : ''}${ocrTag(allDiagnoses[0])}`);
+    if (allDiagnoses.length > 1) {
+      ensureSpace(allDiagnoses.length + 1);
+      bullet('Additional Diagnoses:');
+      for (let i = 1; i < allDiagnoses.length; i++) {
+        const dx = allDiagnoses[i];
+        bullet(`  ${dx.code}${dx.description ? ' — ' + dx.description : ''}${ocrTag(dx)}`);
+      }
+    }
+  } else if (clinical.primaryDiagnosis) {
     const diag = clinical.primaryDiagnosis;
     const diagParts = [diag.code || ''];
     if (diag.description) diagParts.push(diag.description);

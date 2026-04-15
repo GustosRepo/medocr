@@ -1400,9 +1400,10 @@ export default function ReferralPage() {
                     {doc.diagnoses.map((dx, idx) => {
                       const code = typeof dx === 'string' ? dx : dx?.code;
                       const desc = typeof dx === 'object' ? dx?.description : '';
+                      const ocrFlag = typeof dx === 'object' && dx?.ocrFlag;
                       return (
                         <Text key={idx} size="xs" c="dimmed">
-                          • {code}{desc ? ` — ${desc}` : ''}
+                          • {code}{desc ? ` — ${desc}` : ''}{ocrFlag && <span style={{color:'#c06000', fontWeight:'bold', fontSize:'0.85em'}}> [OCR?]</span>}
                         </Text>
                       );
                     })}

@@ -17,6 +17,7 @@ import { buildKbPromptContext } from './kbLoader.js';
 import { selectInformationRichPages } from './pageSelector.js';
 import { applyOcrCorrections } from './rules/utils/ocrCorrector.js';
 import correctionsDB from './corrections_db.js';
+import { extractDiagnoses } from './diagnosisExtractor.js';
 
 const TEXT_MODEL = process.env.TEXT_MODEL || 'qwen2.5:14b';
 const TEXT_TIMEOUT = parseInt(process.env.TEXT_TIMEOUT || '180000', 10);
@@ -184,16 +185,22 @@ function regexExtractCpt(text) {
  */
 function regexExtractIcd(text) {
   const codes = [];
-  const icdPattern = /\b([A-TV-Z]\d{2}\.?\d{0,4})\b/g;
+  // Match ICD-10 codes: letter + 2 digits + optional dot + 1-4 more digits
+  // Must have at least 1 digit after the 3-char prefix to avoid state abbrevs
+  const icdPattern = /\b([A-TV-Z]\d{2}\.?\d{1,4})\b/g;
   let m;
+  // Common non-ICD patterns to exclude (state abbreviations, page references, etc.)
+  const EXCLUDE = /^(NV\d|VA\d|MD\d|DO\d|PA\d|PO\d|US\d)/i;
   while ((m = icdPattern.exec(text)) !== null) {
-    const code = m[1];
-    // Filter out clearly non-ICD codes
-    if (/^[A-TV-Z]\d{2}/.test(code) && !/^(NV|NV|VA|MD|DO|PA|PO|US)$/i.test(code)) {
-      codes.push(code);
+    let code = m[1];
+    if (EXCLUDE.test(code)) continue;
+    // Normalize: add dot if missing (e.g. G4730 → G47.30)
+    if (code.length >= 4 && !code.includes('.')) {
+      code = code.slice(0, 3) + '.' + code.slice(3);
     }
+    codes.push(code);
   }
-  return [...new Set(codes)].slice(0, 10);
+  return [...new Set(codes)].slice(0, 30);
 }
 
 /**
@@ -279,12 +286,7 @@ Extract ALL structured data into this EXACT JSON format. Use null for any field 
     "description": "procedure description" or null,
     "authNumber": "authorization number" or null
   },
-  "diagnoses": [
-    {
-      "code": "ICD-10 code like G47.33" or null,
-      "description": "diagnosis text" or null
-    }
-  ],
+  "diagnoses": [],
   "clinical": {
     "reasonForReferral": "why referred" or null,
     "symptoms": ["symptoms"] or [],
@@ -310,7 +312,8 @@ CRITICAL RULES:
 6. Member IDs: copy EXACTLY as printed including letters, numbers, dashes.
 7. Dates: MM/DD/YYYY format.
 8. CPT: 5-digit numeric code. If you don't see a CPT code, use null.
-9. Each diagnosis code = single string (e.g. "G47.33"), not an array.
+9. DIAGNOSES: Leave the diagnoses array EMPTY ([]). Diagnosis codes are extracted separately — do NOT try to find ICD-10 codes.
+10. INSURANCE: Preserve the EXACT plan name as printed (e.g. "UHC Surest", "SGIC – Multiplan", "Anthem Medicaid", "BCBS Southwest Carpenters"). Do NOT generalize to just the parent company name.
 
 OCR TEXT FROM DOCUMENT:
 `;
@@ -530,6 +533,61 @@ export async function extractFromOcrText(ocrPages, options = {}) {
       if (!normalized.patient) normalized.patient = {};
       normalized.patient.phones = hints.phones;
       log('info', 'regex_patched_phones', { id, count: hints.phones.length });
+    }
+
+    // Step 6c: Extract diagnoses from ALL pages using context-aware extractor
+    // This replaces LLM diagnosis extraction — runs on full document, not just 8 pages
+    const dxResult = extractDiagnoses(ocrPages, { id });
+    normalized.diagnoses = dxResult.diagnoses.map(dx => ({
+      code: dx.code,
+      description: dx.description || null,
+      temporal: 'current',
+      ocrFlag: dx.ocrFlag || false
+    }));
+
+    // Promote first diagnosis to clinical.primaryDiagnosis
+    if (normalized.diagnoses.length > 0) {
+      if (!normalized.clinical) normalized.clinical = {};
+      normalized.clinical.primaryDiagnosis = {
+        code: normalized.diagnoses[0].code,
+        description: normalized.diagnoses[0].description || null,
+        ocrFlag: normalized.diagnoses[0].ocrFlag || false,
+        chronic: null,
+        severity: null,
+        note: null
+      };
+    }
+
+    log('info', 'dx_replaced_llm', {
+      id,
+      llmDxCount: (parsed.diagnoses || []).length,
+      newDxCount: normalized.diagnoses.length,
+      codes: normalized.diagnoses.map(d => d.code)
+    });
+
+    // Step 6d: Derive PPE requirements from extracted ICD codes
+    // Infectious disease codes (A/B chapter) trigger PPE alerts
+    const PPE_AIRBORNE = /^(A15|A16|A17|A18|A19|A31|B05|B06|B97\.29|J09|J10|J11|U07)/i;
+    const PPE_BLOODBORNE = /^(B1[5678]|B20|B97\.35|Z21)/i;
+    const PPE_CONTACT = /^(A46|A49\.0[12]|B00|B01|B02|B35|B36|B37|L0[0-8])/i;
+    const ppeTypes = [];
+    for (const dx of normalized.diagnoses) {
+      const code = dx.code || '';
+      if (PPE_AIRBORNE.test(code)) ppeTypes.push('airborne');
+      else if (PPE_BLOODBORNE.test(code)) ppeTypes.push('bloodborne');
+      else if (PPE_CONTACT.test(code)) ppeTypes.push('contact');
+    }
+    if (!normalized.infoAlerts) normalized.infoAlerts = {};
+    if (ppeTypes.length > 0) {
+      const uniqueTypes = [...new Set(ppeTypes)];
+      normalized.infoAlerts.ppeRequired = true;
+      normalized.infoAlerts.safety = uniqueTypes.map(t =>
+        t === 'airborne' ? 'Airborne precautions (N95 mask + isolation)' :
+        t === 'bloodborne' ? 'Bloodborne precautions (enhanced PPE + sharps)' :
+        'Contact precautions (gown + gloves)');
+      log('info', 'ppe_detected', { id, types: uniqueTypes, codes: normalized.diagnoses.filter(d => PPE_AIRBORNE.test(d.code) || PPE_BLOODBORNE.test(d.code) || PPE_CONTACT.test(d.code)).map(d => d.code) });
+    } else {
+      normalized.infoAlerts.ppeRequired = false;
     }
 
     // Step 7: OCR-text-based CPT inference if LLM didn't find a sleep CPT
