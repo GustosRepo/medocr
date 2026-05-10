@@ -17,11 +17,11 @@ function makeSample(i) {
   return `Patient${randomSep()}John${randomSep()}Doe${randomSep()}DOB${randomSep()}01/02/1970\n${junk}\nPhone${randomSep()}${basePhone}${randomSep()}alt${randomSep()}${altPhone}\nEmail:${randomSep()}${businessEmail}\nPatient Email${randomSep()}${patientEmail}\nRequest 95810 polysomnography.`;
 }
 
-test('randomized phone/email noise extraction robustness', () => {
+test('randomized phone/email noise extraction robustness', async () => {
   const ITER = 20;
   for (let i=0;i<ITER;i++) {
     const text = makeSample(i);
-    const { result } = runExtraction([{ text }]);
+    const { result } = await runExtraction([{ text }]);
     assert.ok(result.patient?.phones && result.patient.phones.length >= 1, 'primary phone missing');
     const phone = result.patient.phones[0];
     assert.match(phone, /^\(555\) \d{3}-\d{4}$/,'phone normalization format unexpected');

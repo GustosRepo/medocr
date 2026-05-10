@@ -1,0 +1,390 @@
+{
+  "createdAt": "2026-05-08T05:45:39.117Z",
+  "api": "http://127.0.0.1:4387",
+  "benchDir": "/Users/agyhernandez/Desktop/medocr/examples/benchmark",
+  "env": {
+    "TEXT_LLM": null,
+    "VLM_DIRECT": null,
+    "VLM_MODEL": null,
+    "TEXT_MODEL": null,
+    "OCR_SERVICE_URL": null
+  },
+  "limit": null,
+  "cases": [
+    {
+      "file": "Anderson, Darryl_95806,95810,95811.pdf",
+      "id": "doc_1778219139125_etl7sz",
+      "ok": true,
+      "elapsedMs": 111049.466541,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Bautista Portillo, Zenen_95806,95810.pdf",
+      "id": "doc_1778219250179_wbemyn",
+      "ok": true,
+      "elapsedMs": 96156.71804200001,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Becerra, KAranina_95806.pdf",
+      "id": "doc_1778219346337_kd0567",
+      "ok": true,
+      "elapsedMs": 126408.44912499998,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Bennett, Rickie_95806.pdf",
+      "id": "doc_1778219472751_zzoe10",
+      "ok": true,
+      "elapsedMs": 76316.54545900004,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Boronkay, AnnaMaria_95806,95810.pdf",
+      "id": "doc_1778219549078_w1tolz",
+      "ok": true,
+      "elapsedMs": 106251.486875,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Brissette Jr., Normand_95806,95810.pdf",
+      "id": "doc_1778219655322_jif45j",
+      "ok": true,
+      "elapsedMs": 72093.72591600002,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Brissette Jr., Normand_Chart Notes.pdf",
+      "id": "doc_1778219727416_hclrsa",
+      "ok": true,
+      "elapsedMs": 236922.9672079999,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Carmona, Nicholas Joseph_95806.pdf",
+      "id": "doc_1778219964347_qkvtup",
+      "ok": true,
+      "elapsedMs": 84299.94187500002,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "De La Cruz Diaz, Mario_95806.pdf",
+      "id": "doc_1778220048673_1wcday",
+      "ok": true,
+      "elapsedMs": 88241.84104099998,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Edry, David_95806.pdf",
+      "id": "doc_1778220136903_3msd9l",
+      "ok": true,
+      "elapsedMs": 100167.4892500001,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Eilers, Larry_95806.pdf",
+      "id": "doc_1778220237062_fqhnrv",
+      "ok": true,
+      "elapsedMs": 64118.11037499993,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Fuller, Wendy_95806,95810,95811.pdf",
+      "id": "doc_1778220301186_syu9bb",
+      "ok": true,
+      "elapsedMs": 92178.82941700006,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Garcia, Mary_95806,95810,95811.pdf",
+      "id": "doc_1778220393373_yhyjz3",
+      "ok": true,
+      "elapsedMs": 100655.80741699995,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Grizzle, Ward_95811.pdf",
+      "id": "doc_1778220494043_3bpp15",
+      "ok": true,
+      "elapsedMs": 122639.99695800012,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Hadjisavas, Peter_95811.pdf",
+      "id": "doc_1778220616684_des7l3",
+      "ok": true,
+      "elapsedMs": 108317.68208299996,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Hantin, Judith_95806,95810.pdf",
+      "id": "doc_1778220724998_asvnrg",
+      "ok": true,
+      "elapsedMs": 82143.54862500005,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Hardy, Jasmine_95806,95810.pdf",
+      "id": "doc_1778220807148_o5xvgv",
+      "ok": true,
+      "elapsedMs": 52105.47683400009,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Hook, Cameron_95806,95810,95811.pdf",
+      "id": "doc_1778220859252_fs32ls",
+      "ok": true,
+      "elapsedMs": 92819.68862499995,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Kamer, Gregory_95806.pdf",
+      "id": "doc_1778220952084_4mhy17",
+      "ok": true,
+      "elapsedMs": 96223.91270900005,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Kitchen, Jon_95806,95810.pdf",
+      "id": "doc_1778221048305_ti31kj",
+      "ok": true,
+      "elapsedMs": 76246.12445899984,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Kuehn, Morgan_95806 (2).pdf",
+      "id": "doc_1778221124569_1a1x24",
+      "ok": true,
+      "elapsedMs": 66135.56566700013,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Landeros, Francisco_95806.pdf",
+      "id": "doc_1778221190689_fzpwy7",
+      "ok": true,
+      "elapsedMs": 120888.47900000005,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Lombardi, Camille_95806.pdf",
+      "id": "doc_1778221311588_y0bc01",
+      "ok": true,
+      "elapsedMs": 297832.85295800027,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Martinez, Mariah_95806,95810.pdf",
+      "id": "doc_1778221609433_z32214",
+      "ok": true,
+      "elapsedMs": 34081.85545799974,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Oporto, Ed Anthony_VA.pdf",
+      "id": "doc_1778221643516_req10r",
+      "ok": true,
+      "elapsedMs": 86220.07262500003,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Polo, Shirley_95806.pdf",
+      "id": "doc_1778221729734_bv8dd1",
+      "ok": true,
+      "elapsedMs": 34062.77804200025,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Regine, Alberta_95806,95810.pdf",
+      "id": "doc_1778221763797_f2tb56",
+      "ok": true,
+      "elapsedMs": 42073.479415999725,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Reyes-Tobar, Dayana_95806,95810.pdf",
+      "id": "doc_1778221805872_25qvc4",
+      "ok": true,
+      "elapsedMs": 56090.36450000014,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Sengprachanh, Inlavanh_95806,95810,95811.pdf",
+      "id": "doc_1778221861979_3xg0cn",
+      "ok": false,
+      "elapsedMs": 18134.014458000194,
+      "terminalStatus": "error",
+      "resultStatus": 502,
+      "score": null,
+      "error": {
+        "code": "ocr_failed",
+        "category": "external",
+        "message": "fetch failed"
+      },
+      "goldPath": null
+    },
+    {
+      "file": "Sengprachanh, Inlavanh_95806.pdf",
+      "id": "doc_1778221880170_azw7my",
+      "ok": false,
+      "elapsedMs": 2065.872415999882,
+      "terminalStatus": "error",
+      "resultStatus": 502,
+      "score": null,
+      "error": {
+        "code": "ocr_failed",
+        "category": "external",
+        "message": "fetch failed"
+      },
+      "goldPath": null
+    },
+    {
+      "file": "Serenil, Sherilyn_95806,95810,95811.pdf",
+      "id": "doc_1778221882250_m0f39b",
+      "ok": false,
+      "elapsedMs": 2051.6337500000373,
+      "terminalStatus": "error",
+      "resultStatus": 502,
+      "score": null,
+      "error": {
+        "code": "ocr_failed",
+        "category": "external",
+        "message": "fetch failed"
+      },
+      "goldPath": null
+    },
+    {
+      "file": "White, Gastinel Depriest_VA.pdf",
+      "id": "doc_1778221884281_ojh4wd",
+      "ok": false,
+      "elapsedMs": 2032.341707999818,
+      "terminalStatus": "error",
+      "resultStatus": 502,
+      "score": null,
+      "error": {
+        "code": "ocr_failed",
+        "category": "external",
+        "message": "fetch failed"
+      },
+      "goldPath": null
+    }
+  ],
+  "summary": {
+    "totalCases": 32,
+    "successfulCases": 28,
+    "scoredCases": 0,
+    "avgAccuracy": null,
+    "totalElapsedMs": 2747143.227458
+  }
+}

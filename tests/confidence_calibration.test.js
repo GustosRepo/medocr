@@ -11,8 +11,8 @@ const samples = [
   'Polysomnogram 95810 due to excessive daytime sleepiness and snoring.'
 ];
 
-test('confidence calibration harness produces distribution stats', () => {
-  const stats = calibrateConfidence(samples);
+test('confidence calibration harness produces distribution stats', async () => {
+  const stats = await calibrateConfidence(samples);
   assert.equal(stats.samples, samples.length);
   assert.ok(stats.score.min != null && stats.score.max != null);
   assert.ok(stats.score.avg >= 0, 'avg score should be non-negative');

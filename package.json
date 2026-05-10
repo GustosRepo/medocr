@@ -11,6 +11,7 @@
     "dev:all": "bash scripts/dev-all.sh",
     "stop:all": "bash scripts/stop-all.sh",
     "inspect": "node scripts/inspect-upload.js",
+    "benchmark:local": "node scripts/benchmark-local-extraction.mjs",
     "test": "NODE_ENV=test node --test",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",

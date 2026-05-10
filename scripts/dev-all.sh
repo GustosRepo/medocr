@@ -19,12 +19,18 @@ PRIMARY_OCR_URL="${OCR_URL_ARR[0]}"
 
 HOLD=0
 FORCE=0
+NO_TABLES=0
 for arg in "$@"; do
   case "$arg" in
     --hold) HOLD=1 ;;
     --force) FORCE=1 ;;
+    --no-tables) NO_TABLES=1 ;;
   esac
 done
+
+if [ $NO_TABLES -eq 1 ]; then
+  export OCR_ENABLE_TABLES=0
+fi
 
 # Always clear stale PID files and free the expected ports before starting so
 # repeated dev cycles don't leave zombie uvicorn/node processes behind.

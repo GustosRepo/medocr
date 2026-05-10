@@ -71,3 +71,7 @@ release_backup_*/
 
 # Backup files
 *.bak
+
+# Benchmark outputs
+examples/benchmark/
+data/benchmarks/subset-current/

@@ -1,0 +1,66 @@
+{
+  "createdAt": "2026-05-08T04:35:20.086Z",
+  "api": "http://127.0.0.1:4387",
+  "benchDir": "/Users/agyhernandez/Desktop/medocr/data/benchmarks/subset-current",
+  "env": {
+    "TEXT_LLM": null,
+    "VLM_DIRECT": null,
+    "VLM_MODEL": null,
+    "TEXT_MODEL": null,
+    "OCR_SERVICE_URL": null
+  },
+  "limit": null,
+  "cases": [
+    {
+      "file": "Bennett, Rickie_95806.pdf",
+      "id": "doc_1778214920093_sd8ghy",
+      "ok": true,
+      "elapsedMs": 80574.22104199999,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Hardy, Jasmine_95806,95810.pdf",
+      "id": "doc_1778215000678_u1uv5s",
+      "ok": true,
+      "elapsedMs": 297443.73166600004,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Martinez, Mariah_95806,95810.pdf",
+      "id": "doc_1778215298141_ym930l",
+      "ok": true,
+      "elapsedMs": 275129.785,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    },
+    {
+      "file": "Polo, Shirley_95806.pdf",
+      "id": "doc_1778215573271_jgozwd",
+      "ok": true,
+      "elapsedMs": 186872.055208,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null
+    }
+  ],
+  "summary": {
+    "totalCases": 4,
+    "successfulCases": 4,
+    "scoredCases": 0,
+    "avgAccuracy": null,
+    "totalElapsedMs": 840034.104417
+  }
+}

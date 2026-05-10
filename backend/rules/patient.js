@@ -81,7 +81,7 @@ export function detectName(fullText, structLinesInput) {
     return { last: normLast, first: normFirst };
   }
 
-  const PATIENT_LABEL_RE = /^\s*(patient\s*(?:name|information)?|pt\s*name)\s*[:\-]?\s*(.*)$/i;
+  const PATIENT_LABEL_RE = /^\s*(patient\s*(?:name|information)\s*[:\-]?\s*|patient\s*[:\-]\s*|pt\s*name\s*[:\-]?\s*)(.*)$/i;
   const GENERIC_NAME_LABEL_RE = /(name)\s*[:\-]\s*(.*)$/i;
   const NON_PATIENT_LABEL_HINTS = /(from|to|subject|company|facility|provider|attention|attn|fax|cc|re:|regarding)/i;
 
@@ -105,7 +105,10 @@ export function detectName(fullText, structLinesInput) {
       if (structLines[i + 1]?.text) candidatesArr.push(structLines[i + 1].text.trim());
       for (const cand of candidatesArr) {
         if (!cand) continue;
-        if (isHeaderLine(cand) || isNonPatientLine(cand)) continue;
+        // When extracting from a strong patient-labeled line (requirePatient=true),
+        // isNonPatientLine is too broad and incorrectly rejects plain names — skip it.
+        if (isHeaderLine(cand)) continue;
+        if (!requirePatient && isNonPatientLine(cand)) continue;
         if (DISCLAIMER_HINTS.test(cand)) continue;
         if (TIMESTAMP_HINTS.test(cand)) continue;
         if (ADDRESS_HINTS.test(cand)) continue;

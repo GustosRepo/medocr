@@ -65,10 +65,12 @@ export function applyOcrCorrections(text, correctionsDB) {
       const learned = correctionsDB.getAll();
       
       // Apply corrections for non-PHI fields only
+      // Note: 'cpt' intentionally excluded — CPT codes are specific numeric
+      // identifiers that must not be globally substituted in raw text.
+      // CPT corrections are applied at field level via applyFieldCorrection().
       const safeTypes = [
         'providerNames',
         'facilities',
-        'cpt',
         'carrier',
         'procedureDescription',
         'diagnosisDescription',

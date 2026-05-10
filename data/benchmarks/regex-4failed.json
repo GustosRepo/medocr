@@ -1,0 +1,870 @@
+{
+  "createdAt": "2026-05-08T06:38:59.082Z",
+  "api": "http://127.0.0.1:4387",
+  "benchDir": "/Users/agyhernandez/Desktop/medocr/data/temp/failed4",
+  "env": {
+    "TEXT_LLM": null,
+    "VLM_DIRECT": null,
+    "VLM_MODEL": null,
+    "TEXT_MODEL": null,
+    "OCR_SERVICE_URL": null
+  },
+  "limit": null,
+  "cases": [
+    {
+      "file": "Sengprachanh, Inlavanh_95806,95810,95811.pdf",
+      "id": "doc_1778222339107_0y8imt",
+      "ok": true,
+      "elapsedMs": 185579.889917,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null,
+      "result": {
+        "patient": {
+          "first": "Inlavanh",
+          "last": "Sengprachanah",
+          "dob": "06/23/1973",
+          "phones": [
+            "7024638062",
+            "7025062220",
+            "7027421090"
+          ],
+          "email": null,
+          "address": {
+            "street": "4420 E CINCINNATIAVE",
+            "city": "LAS VEGAS",
+            "state": "NV",
+            "zip": "89104"
+          }
+        },
+        "insurance": [
+          {
+            "carrier": "TEAMSTERS 986 ALL PLANS (MOVED-BILLED)",
+            "memberId": "TDGZHc005371",
+            "groupId": "280597M001",
+            "planType": null,
+            "status": "pending_verification"
+          }
+        ],
+        "provider": {
+          "name": "CARLOS MINJAREZ, NP",
+          "npi": null,
+          "practice": "Marathon Health at Centennial Hills",
+          "phone": "7024638062",
+          "fax": "7024638368",
+          "email": "athomesleepstudies@ymail.com"
+        },
+        "procedure": {
+          "cpt": "95811",
+          "description": "COMPLETE SLEEP STUDY: (Based on nsurance or Patent s Choce)",
+          "authNumber": null,
+          "notes": [
+            "COMPLETE SLEEP STUDY: (Based on nsurance or Patent s Choce)"
+          ]
+        },
+        "diagnoses": [
+          {
+            "code": "R06.83",
+            "description": "snoring",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "K21.9",
+            "description": "gastroesophageal reflux",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "D50.9",
+            "description": "Iron deficiency anemia, unspecified",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "J30.1",
+            "description": "Allergic rhinitis due to pollen",
+            "temporal": "current",
+            "ocrFlag": true
+          },
+          {
+            "code": "E55.9",
+            "description": "Vitamin D deficiency, unspecified",
+            "temporal": "current",
+            "ocrFlag": false
+          }
+        ],
+        "symptoms": [
+          {
+            "name": "vertigo",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "syncope",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "blurry vision",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          }
+        ],
+        "clinical": {
+          "reasonForReferral": "Discussed iron deficiency anemia. Expedited referral to gastroenterology",
+          "medications": [
+            "albuterol 90 mcg-budesonide 80 mcg/actuation HFA aerosol inhaler",
+            "cholecalciferol (vitamin D3) 1,250 mcg capsule",
+            "ferrous sulfate tablet",
+            "levocetirizine 5 mg tablet",
+            "losartan 100 mg-hydrochlorothiazide 25 mg tablet"
+          ],
+          "history": "longstanding history of hypertension, requiring 4 medications to control, prior history of iron deficiency anemia assumed to be secondary to menorrhagia AuB",
+          "bmi": "36.3",
+          "notes": "Patient presents with longstanding history of hypertension and iron deficiency anemia.",
+          "primaryDiagnosis": {
+            "code": "R06.83",
+            "description": "snoring",
+            "ocrFlag": false,
+            "chronic": null,
+            "severity": null,
+            "note": null
+          }
+        },
+        "confidence": "High",
+        "confidenceScore": 0.95,
+        "extractionMethod": "text_llm",
+        "flags": {
+          "verifyManually": false,
+          "reasons": []
+        },
+        "infoAlerts": {
+          "ppeRequired": false
+        },
+        "_textLlm": {
+          "model": "qwen2.5:14b",
+          "elapsed": 84801,
+          "ocrConfidence": 0.9453206060433651,
+          "pagesUsed": 8,
+          "textLength": 14016
+        },
+        "_verification": {
+          "stringMatch": {
+            "score": 0.875,
+            "hallucinations": [
+              "patient.last \"Sengprachanah\" not found in OCR text"
+            ]
+          },
+          "uncertainty": {
+            "needsVlm": true,
+            "score": 3,
+            "reasons": [
+              "hallucinations: 1 field(s) not found in OCR text",
+              "12 phone numbers in OCR text — high ambiguity"
+            ]
+          },
+          "vlmConfirmation": {
+            "matches": [
+              "patient.first",
+              "patient.last",
+              "patient.dob",
+              "provider.name",
+              "provider.phone"
+            ],
+            "mismatches": [
+              {
+                "field": "patient.phone",
+                "extracted": "7025062220",
+                "vlmSays": "(702) 463-8062",
+                "verdict": "wrong",
+                "severity": "high",
+                "note": "This is the provider's phone number, not the patient's."
+              }
+            ],
+            "correctionsApplied": [
+              {
+                "field": "patient.phone",
+                "old": "7025062220",
+                "new": "7024638062"
+              }
+            ],
+            "elapsed": 32799
+          },
+          "elapsed": 32803,
+          "verified": true,
+          "status": "auto_corrected",
+          "corrections": [
+            {
+              "field": "patient.phone",
+              "old": "7025062220",
+              "new": "7024638062"
+            }
+          ]
+        },
+        "documentMeta": {
+          "filename": "Sengprachanh, Inlavanh_95806,95810,95811.pdf",
+          "pages": 14,
+          "intakeDate": "",
+          "fileHash": "cd415aec6c1bb829c4290e6846fbabceaab12fdc96ee3e9df766b8fc005e3d2b",
+          "originalFilePath": "/Users/agyhernandez/Desktop/medocr/data/uploads/1b38b67af2cd50738cd871a9187d11f1"
+        },
+        "_trace": [
+          {
+            "rule": "text_llm_extraction",
+            "value": "14 pages via qwen2.5:14b"
+          },
+          {
+            "rule": "learned_correction_cpt_postprocess",
+            "from": "95810",
+            "to": "95811"
+          }
+        ],
+        "_timing": {
+          "totalMs": 184279,
+          "ocrMs": 66380
+        },
+        "debug": {
+          "trace": [],
+          "rawText": "",
+          "spans": [],
+          "scopeColors": {
+            "patient": "#1f8efa",
+            "provider": "#f97316",
+            "facility": "#22c55e",
+            "default": "#8b5cf6"
+          }
+        }
+      }
+    },
+    {
+      "file": "Sengprachanh, Inlavanh_95806.pdf",
+      "id": "doc_1778222524694_5bkgv4",
+      "ok": true,
+      "elapsedMs": 78499.966167,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null,
+      "result": {
+        "patient": {
+          "first": "Inlavanh",
+          "last": "Sengprachanah",
+          "dob": "06/23/1973",
+          "phones": [
+            "7024638062",
+            "7025062220",
+            "7027421090"
+          ],
+          "email": null,
+          "address": {
+            "street": "4420 E CINCINNATIAVE",
+            "city": "LAS VEGAS",
+            "state": "NV",
+            "zip": "89104"
+          }
+        },
+        "insurance": [
+          {
+            "carrier": "TEAMSTERS 986 ALL PLANS (MOVED-BILLED)",
+            "memberId": "TDGZHC005371",
+            "groupId": "280597M001",
+            "planType": null,
+            "status": "pending_verification"
+          }
+        ],
+        "provider": {
+          "name": "CARLOS MINJAREZ, NP",
+          "npi": "1710639208",
+          "practice": "Marathon Health at Centennial Hills",
+          "phone": "7024638062",
+          "fax": "7024638368",
+          "email": null
+        },
+        "procedure": {
+          "cpt": "95811",
+          "description": "HOME SLEEP STUDY With Consultation?",
+          "authNumber": "TEAMSTERS 986 ALL PLANS (MOVED-BILLED)",
+          "notes": [
+            "HOME SLEEP STUDY With Consultation?"
+          ]
+        },
+        "diagnoses": [
+          {
+            "code": "R06.83",
+            "description": "Snoring",
+            "temporal": "current",
+            "ocrFlag": false
+          }
+        ],
+        "symptoms": [
+          {
+            "name": "snoring",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          }
+        ],
+        "clinical": {
+          "reasonForReferral": "Snoring",
+          "medications": [],
+          "history": null,
+          "bmi": null,
+          "notes": "Patient Information\nSENGPRACHANH,INLAVANH T\nSex-DOB\nF06/23/197352y0",
+          "primaryDiagnosis": {
+            "code": "R06.83",
+            "description": "Snoring",
+            "ocrFlag": false,
+            "chronic": null,
+            "severity": null,
+            "note": null
+          }
+        },
+        "confidence": "Medium",
+        "confidenceScore": 0.8,
+        "extractionMethod": "text_llm",
+        "flags": {
+          "verifyManually": false,
+          "reasons": []
+        },
+        "infoAlerts": {
+          "ppeRequired": false
+        },
+        "_textLlm": {
+          "model": "qwen2.5:14b",
+          "elapsed": 41266,
+          "ocrConfidence": 0.9707783662221011,
+          "pagesUsed": 2,
+          "textLength": 2000
+        },
+        "_verification": {
+          "stringMatch": {
+            "score": 0.8888888888888888,
+            "hallucinations": [
+              "patient.last \"Sengprachanah\" not found in OCR text"
+            ]
+          },
+          "uncertainty": {
+            "needsVlm": true,
+            "score": 2,
+            "reasons": [
+              "hallucinations: 1 field(s) not found in OCR text"
+            ]
+          },
+          "vlmConfirmation": {
+            "matches": [
+              "patient.first",
+              "patient.last",
+              "patient.dob",
+              "provider.name",
+              "provider.phone"
+            ],
+            "mismatches": [
+              {
+                "field": "patient.phone",
+                "extracted": "7025062220",
+                "vlmSays": "702-463-8062",
+                "verdict": "swapped",
+                "severity": "high",
+                "note": "The patient phone number is the provider's office number."
+              }
+            ],
+            "correctionsApplied": [
+              {
+                "field": "patient.phone",
+                "old": "7025062220",
+                "new": "7024638062"
+              }
+            ],
+            "elapsed": 31721
+          },
+          "elapsed": 31721,
+          "verified": true,
+          "status": "auto_corrected",
+          "corrections": [
+            {
+              "field": "patient.phone",
+              "old": "7025062220",
+              "new": "7024638062"
+            }
+          ]
+        },
+        "documentMeta": {
+          "filename": "Sengprachanh, Inlavanh_95806.pdf",
+          "pages": 2,
+          "intakeDate": "",
+          "fileHash": "1531f4f4b87a76a1b117345bacb3208b0ea31a8748609c5287bb2630475d1e20",
+          "originalFilePath": "/Users/agyhernandez/Desktop/medocr/data/uploads/2b85d4361ca4b56914b4fed923eee5b7"
+        },
+        "_trace": [
+          {
+            "rule": "text_llm_extraction",
+            "value": "2 pages via qwen2.5:14b"
+          },
+          {
+            "rule": "learned_correction_cpt_postprocess",
+            "from": "95810",
+            "to": "95811"
+          }
+        ],
+        "_timing": {
+          "totalMs": 76547,
+          "ocrMs": 3190
+        },
+        "debug": {
+          "trace": [],
+          "rawText": "",
+          "spans": [],
+          "scopeColors": {
+            "patient": "#1f8efa",
+            "provider": "#f97316",
+            "facility": "#22c55e",
+            "default": "#8b5cf6"
+          }
+        }
+      }
+    },
+    {
+      "file": "Serenil, Sherilyn_95806,95810,95811.pdf",
+      "id": "doc_1778222603204_j1s21d",
+      "ok": true,
+      "elapsedMs": 102349.22516600002,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null,
+      "result": {
+        "patient": {
+          "first": "Sherilyn",
+          "last": "Serenil",
+          "dob": "06/07/1981",
+          "phones": [
+            "7477770417"
+          ],
+          "email": "SHERILYN818@GMAIL.COM",
+          "address": {
+            "street": "921 Turtleback Falls Ave",
+            "city": "Indian Springs",
+            "state": "NV",
+            "zip": "89018"
+          }
+        },
+        "insurance": [
+          {
+            "carrier": "Prominence Health Plan-WELLPORTAL",
+            "memberId": "000038630000",
+            "groupId": null,
+            "planType": null,
+            "status": "pending_verification"
+          }
+        ],
+        "provider": {
+          "name": "Kevin Dunsmoor, D.O.",
+          "npi": "1710935697",
+          "practice": "Mountain View Primary Care",
+          "phone": "7022287054",
+          "fax": "7023819418",
+          "email": null
+        },
+        "procedure": {
+          "cpt": "95811",
+          "description": "In-Lab Sleep Study (PSG)",
+          "authNumber": null,
+          "notes": [
+            "In-Lab Sleep Study (PSG)"
+          ]
+        },
+        "diagnoses": [
+          {
+            "code": "E78.2",
+            "description": "Mixed hyperlipidemia",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "E66.09",
+            "description": null,
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "R53.83",
+            "description": "Other fatigue",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "E66.3",
+            "description": "Overweight",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "J30.1",
+            "description": "Allergic rhinitis due to pollen",
+            "temporal": "current",
+            "ocrFlag": true
+          },
+          {
+            "code": "K21.9",
+            "description": "Gastro-esophageal reflux disease without",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "F06.4",
+            "description": "Anxiety disorder due to known physiological",
+            "temporal": "current",
+            "ocrFlag": true
+          },
+          {
+            "code": "E04.0",
+            "description": "Nontoxic diffuse goiter",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "R06.02",
+            "description": "Shortness of breath",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "M67.431",
+            "description": "Ganglion, right wrist",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "R07.9",
+            "description": "Chest pain, unspecified",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "D72.828",
+            "description": null,
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "D50.0",
+            "description": null,
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "B02.9",
+            "description": "Zoster without complications",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "E78.5",
+            "description": "hyperlipidemia",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "I10",
+            "description": "hypertension",
+            "temporal": "current",
+            "ocrFlag": false
+          },
+          {
+            "code": "F41.9",
+            "description": "anxiety",
+            "temporal": "current",
+            "ocrFlag": false
+          }
+        ],
+        "symptoms": [
+          {
+            "name": "Loud snoring",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "Frequent awakenings",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "Witnessed apnea",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          }
+        ],
+        "clinical": {
+          "reasonForReferral": "Excessive Daytime Sleepiness, Loud Snoring, Frequent Awakenings, Witnessed Apnea",
+          "medications": [
+            "Phentermine HCI 37.5 MG Tablet (Oral) 1 PO Q AM",
+            "Macrobid 100 MG Capsule (Oral) 1 po bid for UTI",
+            "Vitamin D3 50000 IU Capsule (Oral) 1 P0 Q WEEK"
+          ],
+          "history": null,
+          "bmi": "29.4",
+          "notes": "Patient presents with symptoms of sleep apnea and requires further evaluation.",
+          "primaryDiagnosis": {
+            "code": "E78.2",
+            "description": "Mixed hyperlipidemia",
+            "ocrFlag": false,
+            "chronic": null,
+            "severity": null,
+            "note": null
+          }
+        },
+        "confidence": "Medium",
+        "confidenceScore": 0.8,
+        "extractionMethod": "text_llm",
+        "flags": {
+          "verifyManually": false,
+          "reasons": []
+        },
+        "infoAlerts": {
+          "ppeRequired": true,
+          "safety": [
+            "Contact precautions (gown + gloves)"
+          ]
+        },
+        "_textLlm": {
+          "model": "qwen2.5:14b",
+          "elapsed": 62456,
+          "ocrConfidence": 0.9701285333785201,
+          "pagesUsed": 8,
+          "textLength": 9934
+        },
+        "_verification": {
+          "stringMatch": {
+            "score": 1,
+            "hallucinations": []
+          },
+          "uncertainty": {
+            "needsVlm": false,
+            "score": 1,
+            "reasons": [
+              "10 phone numbers in OCR text — high ambiguity"
+            ]
+          },
+          "vlmConfirmation": null,
+          "elapsed": 0,
+          "verified": true,
+          "status": "confirmed"
+        },
+        "documentMeta": {
+          "filename": "Serenil, Sherilyn_95806,95810,95811.pdf",
+          "pages": 8,
+          "intakeDate": "",
+          "fileHash": "c0fb23a6129146abe1ce0da67622ce04d82a4e0343e1de68f53fb1370bdf780b",
+          "originalFilePath": "/Users/agyhernandez/Desktop/medocr/data/uploads/6e7f389758cb0cad48bef5cf1b1ea233"
+        },
+        "_trace": [
+          {
+            "rule": "text_llm_extraction",
+            "value": "8 pages via qwen2.5:14b"
+          },
+          {
+            "rule": "learned_correction_cpt_postprocess",
+            "from": "95810",
+            "to": "95811"
+          }
+        ],
+        "_timing": {
+          "totalMs": 101234,
+          "ocrMs": 38459
+        },
+        "debug": {
+          "trace": [],
+          "rawText": "",
+          "spans": [],
+          "scopeColors": {
+            "patient": "#1f8efa",
+            "provider": "#f97316",
+            "facility": "#22c55e",
+            "default": "#8b5cf6"
+          }
+        }
+      }
+    },
+    {
+      "file": "White, Gastinel Depriest_VA.pdf",
+      "id": "doc_1778222705548_v6xxw5",
+      "ok": true,
+      "elapsedMs": 86207.97408299998,
+      "terminalStatus": "done",
+      "resultStatus": 200,
+      "score": null,
+      "error": null,
+      "goldPath": null,
+      "result": {
+        "patient": {
+          "first": "Gastinel",
+          "last": "White",
+          "dob": "01/21/1971",
+          "phones": [],
+          "email": null,
+          "address": {
+            "street": null,
+            "city": null,
+            "state": null,
+            "zip": null
+          }
+        },
+        "insurance": [
+          {
+            "carrier": null,
+            "memberId": null,
+            "groupId": null,
+            "planType": null,
+            "status": "pending_verification"
+          }
+        ],
+        "provider": {
+          "name": "BANNICK-MOHRLAND, SUSAN",
+          "npi": "1760459002",
+          "practice": "Las Vegas VA Medical Center",
+          "phone": "7027919066",
+          "fax": null,
+          "email": null
+        },
+        "procedure": {
+          "cpt": "95811",
+          "description": "Attended Diagnostic Polysomnogram (No Titration)",
+          "authNumber": "VA0051041638",
+          "notes": [
+            "Attended Diagnostic Polysomnogram (No Titration)"
+          ]
+        },
+        "diagnoses": [
+          {
+            "code": "G47.30",
+            "description": null,
+            "temporal": "current",
+            "ocrFlag": false
+          }
+        ],
+        "symptoms": [
+          {
+            "name": "Snoring",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "Observed apnea",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          },
+          {
+            "name": "Daytime tiredness",
+            "status": "confirmed",
+            "context": "VLM extraction",
+            "page": 1
+          }
+        ],
+        "clinical": {
+          "reasonForReferral": "Possible sleep apnea, Suspected OSA",
+          "medications": [],
+          "history": "Depression",
+          "bmi": "30.9",
+          "notes": "STOP-BANG: 6/8",
+          "primaryDiagnosis": {
+            "code": "G47.30",
+            "description": null,
+            "ocrFlag": false,
+            "chronic": null,
+            "severity": null,
+            "note": null
+          }
+        },
+        "confidence": "High",
+        "confidenceScore": 1,
+        "extractionMethod": "text_llm",
+        "flags": {
+          "verifyManually": true,
+          "reasons": [
+            "No patient phone found — verify provider phone is not patient's"
+          ]
+        },
+        "infoAlerts": {
+          "ppeRequired": false
+        },
+        "_textLlm": {
+          "model": "qwen2.5:14b",
+          "elapsed": 48820,
+          "ocrConfidence": 0.977372947654161,
+          "pagesUsed": 8,
+          "textLength": 14016
+        },
+        "_verification": {
+          "stringMatch": {
+            "score": 1,
+            "hallucinations": []
+          },
+          "uncertainty": {
+            "needsVlm": false,
+            "score": 1,
+            "reasons": [
+              "10 phone numbers in OCR text — high ambiguity"
+            ]
+          },
+          "vlmConfirmation": null,
+          "elapsed": 1,
+          "verified": true,
+          "status": "confirmed"
+        },
+        "documentMeta": {
+          "filename": "White, Gastinel Depriest_VA.pdf",
+          "pages": 16,
+          "intakeDate": "",
+          "fileHash": "6e83b3b1233b203d43f4bed42f69ab1e59f7917d0cdc824d5745f9424e4a633d",
+          "originalFilePath": "/Users/agyhernandez/Desktop/medocr/data/uploads/f50c72cbf1b2aa5eee413e0a9775e4f6"
+        },
+        "_trace": [
+          {
+            "rule": "text_llm_extraction",
+            "value": "16 pages via qwen2.5:14b"
+          },
+          {
+            "rule": "learned_correction_cpt_postprocess",
+            "from": "95810",
+            "to": "95811"
+          }
+        ],
+        "_timing": {
+          "totalMs": 85088,
+          "ocrMs": 35970
+        },
+        "debug": {
+          "trace": [],
+          "rawText": "",
+          "spans": [],
+          "scopeColors": {
+            "patient": "#1f8efa",
+            "provider": "#f97316",
+            "facility": "#22c55e",
+            "default": "#8b5cf6"
+          }
+        }
+      }
+    }
+  ],
+  "summary": {
+    "totalCases": 4,
+    "successfulCases": 4,
+    "scoredCases": 0,
+    "avgAccuracy": null,
+    "totalElapsedMs": 452666.205666
+  }
+}

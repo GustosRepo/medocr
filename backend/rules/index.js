@@ -795,8 +795,8 @@ export async function runExtraction(ocrPages) {
       if (!value) return null;
       const normalized = value.replace(/[^A-Za-z0-9]/g, '');
       const upper = normalized.toUpperCase();
-      // Tighten eligibility: require at least 8 chars AND at least one digit
-      if (upper.length < 8 || !/\d/.test(upper)) return null;
+      // Tighten eligibility: require at least 6 chars AND at least one digit
+      if (upper.length < 6 || !/\d/.test(upper)) return null;
       const entry = memberIdCandidates.get(upper) || { value: upper, score: 0, count: 0, sources: [] };
       entry.score += weight;
       entry.count += 1;
@@ -1215,12 +1215,14 @@ export async function runExtraction(ocrPages) {
   // Policy-driven action inference heuristics
   {
     const actsBefore = new Set(result.alerts.actions);
+    let policyHeuristicFired = false;
     const cptCode = String(result.procedure?.cpt || '');
     const txtLower = (fullText || '').toLowerCase();
     const dxSet = new Set((result.diagnoses || []).map(d => String(d)));
     // If in-lab titration (95811) mentioned but no explicit prior diagnostic evidence phrases
     if (cptCode === '95811' && !/95810|diagnostic\s+psg|prior\s+psg|baseline\s+study|hsat|home\s+sleep/i.test(fullText || '')) {
       result.alerts.actions.push('document_prior_study_evidence');
+      policyHeuristicFired = true;
     }
     // Prior study evidence enhancement: if explicit mention of prior PSG or HSAT failure, mark supporting evidence
     if (/prior\s+(diagnostic\s+)?psg|baseline\s+study|failed\s+hsat|inconclusive\s+hsat/i.test(fullText || '')) {
@@ -1275,7 +1277,7 @@ export async function runExtraction(ocrPages) {
     result.alerts.actions = Array.from(new Set(result.alerts.actions));
     
     const added = result.alerts.actions.filter(a => !actsBefore.has(a));
-    if (added.length) {
+    if (added.length || policyHeuristicFired) {
       result.flags.verifyManually = true;
       if (!result.flags.reasons.includes('policy_action_inference')) result.flags.reasons.push('policy_action_inference');
       trace.push({ rule: 'policy_action_infer', added });
@@ -2577,29 +2579,10 @@ export async function runExtraction(ocrPages) {
       }
     }
     
-    // CPT code
-    if (result.procedure?.cpt) {
-      const corrected = applyFieldCorrection('cpt', result.procedure.cpt, correctionsDB);
-      if (corrected !== result.procedure.cpt) {
-        trace.push({ 
-          rule: 'learned_correction_cpt', 
-          from: result.procedure.cpt, 
-          to: corrected 
-        });
-        result.procedure.cpt = corrected;
-        // Update description to match new CPT code
-        const cptCatalog = getCptCatalog();
-        const catalogEntry = cptCatalog[corrected];
-        if (catalogEntry?.description) {
-          trace.push({
-            rule: 'cpt_description_updated',
-            from: result.procedure.description || 'none',
-            to: catalogEntry.description
-          });
-          result.procedure.description = catalogEntry.description;
-        }
-      }
-    }
+    // CPT code — intentionally skipped for learned corrections.
+    // CPT codes (95810, 95811, etc.) are distinct medical procedure codes and
+    // must not be blindly "corrected" by the learned-corrections system.
+    // Corrections are only valid for OCR character errors, not coding decisions.
     
     // Re-check titration flag after CPT corrections
     if (result.procedure?.cpt === '95811') {

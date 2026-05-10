@@ -13,7 +13,7 @@ import { runExtraction } from '../backend/rules/index.js';
     - Precision = 1.0, Recall = 1.0 (strict for now; relax later if sample diversifies)
 */
 
-test('secondary insurance metrics (precision/recall/F1) curated sample', () => {
+test('secondary insurance metrics (precision/recall/F1) curated sample', async () => {
   const fixturePath = path.resolve(process.cwd(), 'tests/fixtures/secondary_insurance_labeled.json');
   const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
@@ -21,7 +21,7 @@ test('secondary insurance metrics (precision/recall/F1) curated sample', () => {
   const detail = [];
 
   for (const c of cases) {
-    const { result } = runExtraction([{ text: c.text }]);
+    const { result } = await runExtraction([{ text: c.text }]);
     const detected = (result.insurance || []).map(i => i.carrier).filter(Boolean);
     const expected = c.expectCarriers;
 

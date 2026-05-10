@@ -8,9 +8,9 @@ import { runExtraction } from '../backend/rules/index.js';
     { anchors, score, base, avgOcrConf, manualTriggers, adjustments }
 */
 
-test('confidenceDetail structure and anchor weighting present', () => {
+test('confidenceDetail structure and anchor weighting present', async () => {
   const text = `Patient: Jane Doe\nDOB: 01/02/1970\nOrder: 95810 polysomnography due to suspected OSA.\nDiagnosis ICD: G47.33 obstructive sleep apnea.\nInsurance: Aetna Member ID: ABC123 Group: GRP1 status accepted.`;
-  const { result } = runExtraction([{ text }]);
+  const { result } = await runExtraction([{ text }]);
   assert.ok(result.confidenceDetail, 'confidenceDetail missing');
   const d = result.confidenceDetail;
   for (const k of ['anchors','score','base','avgOcrConf','manualTriggers','adjustments']) {

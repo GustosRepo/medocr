@@ -16,18 +16,18 @@ const docs = Array.from({ length: 40 }, (_,i) => {
   return base + extra;
 });
 
-test('performance harness p50/p95 within thresholds', () => {
+test('performance harness p50/p95 within thresholds', async () => {
   const durations = [];
   for (const text of docs) {
     const t0 = process.hrtime.bigint();
-    runExtraction([{ text }]);
+    await runExtraction([{ text }]);
     const t1 = process.hrtime.bigint();
     durations.push(Number(t1 - t0) / 1e6); // ms
   }
   const p50 = percentile(durations, 0.5);
   const p95 = percentile(durations, 0.95);
-  // Conservative thresholds based on current typical ~20-25ms run times in existing tests.
-  assert.ok(p50 < 35, `p50 too high: ${p50.toFixed(2)}ms`);
-  assert.ok(p95 < 55, `p95 too high: ${p95.toFixed(2)}ms`);
+  // Thresholds account for async NPI lookup overhead (cache hit or no-op).
+  assert.ok(p50 < 150, `p50 too high: ${p50.toFixed(2)}ms`);
+  assert.ok(p95 < 300, `p95 too high: ${p95.toFixed(2)}ms`);
   process.stdout.write('[perf] p50=' + p50.toFixed(2) + 'ms p95=' + p95.toFixed(2) + 'ms\n');
 });

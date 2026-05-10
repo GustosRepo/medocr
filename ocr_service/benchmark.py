@@ -26,13 +26,30 @@ try:
     import numpy as np
     import cv2
 except ImportError as e:
-    print(f"Missing dependency: {e}", file=sys.stderr)
-    print("Install with: pip install rapidocr-onnxruntime pillow pdf2image opencv-python-headless numpy", file=sys.stderr)
-    sys.exit(1)
+    _import_error = e
+    RapidOCR = None
+    Image = None
+    ImageOps = None
+    ImageFilter = None
+    convert_from_path = None
+    np = None
+    cv2 = None
+else:
+    _import_error = None
 
 # Import preprocessing from app.py
 sys.path.insert(0, str(Path(__file__).parent))
-from app import preprocess_image as app_preprocess_image
+try:
+    from app import preprocess_image as app_preprocess_image
+except Exception:
+    def app_preprocess_image(img):
+        return img
+
+try:
+    from paddle_candidate import PaddleOcrCandidate, PaddleCandidateUnavailable
+except Exception:
+    PaddleOcrCandidate = None
+    PaddleCandidateUnavailable = RuntimeError
 
 
 @dataclass
@@ -141,6 +158,7 @@ def benchmark_file(
     engine: Any,
     ground_truth: Optional[str] = None,
     preprocess_mode: str = "enhanced",
+    engine_name: str = "rapidocr",
     verbose: bool = False
 ) -> BenchmarkResult:
     """Benchmark OCR on a single PDF/image file"""
@@ -186,7 +204,14 @@ def benchmark_file(
         # OCR Inference
         inf_start = time.perf_counter()
         try:
-            result, _ = engine(processed_img)
+            if engine_name == "paddleocr":
+                paddle_result = engine.recognize(processed_img)
+                result = [
+                    [line.get("box"), line.get("text", ""), line.get("confidence", 0.0)]
+                    for line in paddle_result.get("lines", [])
+                ]
+            else:
+                result, _ = engine(processed_img)
         except Exception as e:
             print(f"Error during OCR inference: {e}", file=sys.stderr)
             result = []
@@ -271,6 +296,7 @@ def run_benchmark_suite(
     test_dir: Path,
     output_file: Optional[Path] = None,
     preprocess_mode: str = "enhanced",
+    engine_name: str = "rapidocr",
     verbose: bool = True
 ) -> BenchmarkSummary:
     """Run benchmark suite on all PDFs/images in test directory"""
@@ -278,13 +304,23 @@ def run_benchmark_suite(
     print("=== OCR Benchmark Harness ===")
     print(f"Test Directory: {test_dir}")
     print(f"Preprocessing Mode: {preprocess_mode}")
-    print(f"RapidOCR Version: rapidocr-onnxruntime")
+    print(f"Engine: {engine_name}")
     print()
     
     # Initialize engine
-    print("Loading RapidOCR engine...", end=" ", flush=True)
+    print(f"Loading {engine_name} engine...", end=" ", flush=True)
     try:
-        engine = RapidOCR()
+        if engine_name == "paddleocr":
+            if PaddleOcrCandidate is None:
+                raise RuntimeError("PaddleOCR adapter unavailable")
+            engine = PaddleOcrCandidate()
+        else:
+            if RapidOCR is None:
+                raise RuntimeError(
+                    f"RapidOCR dependencies are not installed: {_import_error}. "
+                    "Install with `pip install -r ocr_service/requirements.txt`."
+                )
+            engine = RapidOCR()
         print("OK")
     except Exception as e:
         print(f"FAILED: {e}", file=sys.stderr)
@@ -309,7 +345,7 @@ def run_benchmark_suite(
         gt_file = test_file.with_suffix('.txt')
         ground_truth = load_ground_truth(gt_file) if gt_file.exists() else None
         
-        result = benchmark_file(test_file, engine, ground_truth, preprocess_mode, verbose)
+        result = benchmark_file(test_file, engine, ground_truth, preprocess_mode, engine_name, verbose)
         if result:
             results.append(result)
     
@@ -349,9 +385,9 @@ def run_benchmark_suite(
         avg_wer=avg_wer,
         avg_char_accuracy=avg_char_acc,
         model_info={
-            "engine": "RapidOCR",
-            "version": "1.3.24",
-            "backend": "onnxruntime",
+            "engine": engine_name,
+            "version": "optional" if engine_name == "paddleocr" else "1.3.24",
+            "backend": "paddleocr" if engine_name == "paddleocr" else "onnxruntime",
             "preprocessing": preprocess_mode
         }
     )
@@ -419,6 +455,12 @@ def main():
         help='Preprocessing mode (default: enhanced)'
     )
     parser.add_argument(
+        '--engine',
+        choices=['rapidocr', 'paddleocr'],
+        default='rapidocr',
+        help='OCR engine to benchmark (default: rapidocr)'
+    )
+    parser.add_argument(
         '--verbose',
         action='store_true',
         help='Verbose output'
@@ -432,12 +474,22 @@ def main():
             print(f"File not found: {args.single}", file=sys.stderr)
             sys.exit(1)
         
-        print("Loading RapidOCR engine...", end=" ", flush=True)
-        engine = RapidOCR()
+        print(f"Loading {args.engine} engine...", end=" ", flush=True)
+        if args.engine == "paddleocr":
+            if PaddleOcrCandidate is None:
+                raise RuntimeError("PaddleOCR adapter unavailable")
+            engine = PaddleOcrCandidate()
+        else:
+            if RapidOCR is None:
+                raise RuntimeError(
+                    f"RapidOCR dependencies are not installed: {_import_error}. "
+                    "Install with `pip install -r ocr_service/requirements.txt`."
+                )
+            engine = RapidOCR()
         print("OK")
         
         gt = load_ground_truth(args.ground_truth) if args.ground_truth else None
-        result = benchmark_file(args.single, engine, gt, args.preprocess, verbose=True)
+        result = benchmark_file(args.single, engine, gt, args.preprocess, args.engine, verbose=True)
         
         if result:
             print(f"\n=== RESULTS ===")
@@ -464,7 +516,7 @@ def main():
             print(f"Directory not found: {args.test_dir}", file=sys.stderr)
             sys.exit(1)
         
-        run_benchmark_suite(args.test_dir, args.output, args.preprocess, args.verbose)
+        run_benchmark_suite(args.test_dir, args.output, args.preprocess, args.engine, args.verbose)
     
     else:
         parser.print_help()

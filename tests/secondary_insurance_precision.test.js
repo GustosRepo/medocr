@@ -12,7 +12,7 @@ import { runExtraction } from '../backend/rules/index.js';
   Thresholds: zero false positives tolerated; zero false negatives in this curated sample.
 */
 
-test('secondary insurance precision harness', () => {
+test('secondary insurance precision harness', async () => {
   const cases = [
     {
       name: 'single primary only',
@@ -48,7 +48,7 @@ test('secondary insurance precision harness', () => {
 
   let truePos = 0, falseNeg = 0, falsePos = 0;
   for (const c of cases) {
-    const { result } = runExtraction([{ text: c.text }]);
+    const { result } = await runExtraction([{ text: c.text }]);
     const count = Array.isArray(result.insurance) ? result.insurance.length : 0;
     if (c.expect === 2) {
       if (count === 2) {

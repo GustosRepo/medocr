@@ -31,9 +31,9 @@ test('GET /api/batch/:date/problem-log.json returns shape', async () => {
   assert.ok(Array.isArray(res.body.items));
 });
 
-test('runExtraction produces QC object and missing patient info flag when no patient data', () => {
+test('runExtraction produces QC object and missing patient info flag when no patient data', async () => {
   const pages = [{ text: 'Referral for sleep study due to snoring and fatigue. CPT 95810 requested.' }];
-  const { result, trace } = runExtraction(pages);
+  const { result, trace } = await runExtraction(pages);
   assert.ok(result.qc, 'qc object missing');
   assert.ok(['nameConsistency','dateValidity','phoneValidity','cptValid'].every(k => Object.prototype.hasOwnProperty.call(result.qc, k)), 'qc keys incomplete');
   assert.ok(result.flags && Array.isArray(result.flags.reasons), 'flags reasons missing');
@@ -42,11 +42,11 @@ test('runExtraction produces QC object and missing patient info flag when no pat
   assert.ok(Array.isArray(trace));
 });
 
-test('multi CPT detection surfaces candidates and ambiguity without titration evidence', () => {
+test('multi CPT detection surfaces candidates and ambiguity without titration evidence', async () => {
   // Deliberately avoid titration evidence keywords
   const text = 'Overnight sleep study 95810 also listing 95811 (no adjustment terms)';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(Array.isArray(result.procedure?.cptCandidates), 'cptCandidates missing');
   assert.ok(result.procedure.cptCandidates.includes('95810')); 
   assert.ok(result.procedure.cptCandidates.includes('95811'));
@@ -58,49 +58,49 @@ test('multi CPT detection surfaces candidates and ambiguity without titration ev
   assert.ok(result.procedure.cptConfidence !== 'high', 'expected downgraded cptConfidence due to ambiguity');
 });
 
-test('CPT confidence high when single unambiguous code', () => {
+test('CPT confidence high when single unambiguous code', async () => {
   const text = 'Polysomnography ordered 95810 due to snoring and fatigue.';
-  const { result } = runExtraction([{ text }]);
+  const { result } = await runExtraction([{ text }]);
   assert.equal(result.procedure.cpt, '95810');
   assert.ok(Array.isArray(result.procedure.cptAmbiguity));
   assert.equal(result.procedure.cptAmbiguity.length, 0, 'no ambiguity expected');
   assert.equal(result.procedure.cptConfidence, 'high');
 });
 
-test('titration evidence promotes 95811 to primary', () => {
+test('titration evidence promotes 95811 to primary', async () => {
   const text = 'Patient failed CPAP pressure too high needs titration 95810 95811 polysomnography';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.equal(result.procedure.cpt, '95811');
   assert.ok(result.procedure.cptCandidates.includes('95810'));
   assert.ok(result.procedure.cptCandidates.includes('95811'));
 });
 
-test('phone detection extracts and formats multiple numbers', () => {
+test('phone detection extracts and formats multiple numbers', async () => {
   // Use valid NANP numbers (exchange cannot start with 0 or 1) and same area code so clustering keeps them
   const text = 'Patient John Doe DOB 01/02/1970 Phone: (555) 234-4567 alt 555.987.6543 notes.';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(Array.isArray(result.patient?.phones), 'phones array missing');
   assert.ok(result.patient.phones.some(p => p.startsWith('(555)')), 'expected (555) area code phone present');
   // QC should have phoneValidity present
   assert.ok(result.qc && typeof result.qc.phoneValidity === 'string', 'phoneValidity QC missing');
 });
 
-test('emergency contact extracted for adult with explicit line', () => {
+test('emergency contact extracted for adult with explicit line', async () => {
   const text = `Patient John Doe DOB 01/02/1970 Phone: (555) 234-4567\nIn case of emergency contact Mary Smith (daughter) (555) 321-9876 requesting sleep study.`;
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.patient?.emergencyContact, 'emergencyContact not populated');
   assert.ok(result.patient.emergencyContact.raw.startsWith('Mary Smith'), 'contact name mismatch');
   assert.equal(result.patient.emergencyContact.relationship, 'daughter');
   assert.equal(result.patient.emergencyContact.phone, '(555) 321-9876');
 });
 
-test('expanded symptom phrase detection with denied and confirmed', () => {
+test('expanded symptom phrase detection with denied and confirmed', async () => {
   const text = `Patient reports excessive daytime sleepiness and morning headaches. Denies insomnia. Witnessed apnea events noted by spouse. No restless legs. Snoring nightly.`;
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.clinical?.symptoms, 'symptoms list missing');
   // Should include snoring, daytime_sleepiness, headache, witnessed_apnea
   const syms = new Set(result.clinical.symptoms);
@@ -116,19 +116,19 @@ test('expanded symptom phrase detection with denied and confirmed', () => {
   assert.ok(hasDenied, 'expected at least one denied symptom detail');
 });
 
-test('ICD primary diagnosis description present when code detected', () => {
+test('ICD primary diagnosis description present when code detected', async () => {
   const text = 'Diagnosis / ICD: G47.33 patient presents with witnessed apnea and snoring';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.clinical?.primaryDiagnosis, 'primaryDiagnosis missing');
   assert.equal(result.clinical.primaryDiagnosis.code, 'G47.33');
   assert.ok(result.clinical.primaryDiagnosis.description && result.clinical.primaryDiagnosis.description.length > 3, 'description missing');
 });
 
-test('ICD enrichment adds chronic/severity/note metadata when available', () => {
+test('ICD enrichment adds chronic/severity/note metadata when available', async () => {
   const text = 'ICD Codes: G47.33 and G47.10 noted for sleep issues';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   const diag = result.clinical?.primaryDiagnosis;
   assert.ok(diag, 'primaryDiagnosis missing');
   // Enrichment fields should exist (may be null if not enriched, but G47.33 expected present per enrichment file)
@@ -137,27 +137,27 @@ test('ICD enrichment adds chronic/severity/note metadata when available', () => 
   assert.ok(Object.prototype.hasOwnProperty.call(diag, 'note'), 'note enrichment field missing');
 });
 
-test('insurance member and group IDs extracted', () => {
+test('insurance member and group IDs extracted', async () => {
   const text = 'Insurance: Aetna Member ID: ABC123456 Group: GRP789 Provider orders sleep study 95810.';
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(Array.isArray(result.insurance) && result.insurance[0], 'insurance object missing');
   assert.equal(result.insurance[0].memberId, 'ABC123456');
   assert.equal(result.insurance[0].groupId, 'GRP789');
 });
 
-test('business email ignored and patient email captured when labeled', () => {
+test('business email ignored and patient email captured when labeled', async () => {
   const text = `Facility: AtHome Sleep Lab Email: athomesleepstudies@ymail.com\nPatient: Jane Roe DOB 02/02/1980\nPatient Email: jane.roe@example.com requesting 95810.`;
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(!result.patient || result.patient.email !== 'athomesleepstudies@ymail.com', 'business email should be ignored');
   assert.equal(result.patient.email, 'jane.roe@example.com');
 });
 
-test('secondary insurance and altPhones detection', () => {
+test('secondary insurance and altPhones detection', async () => {
   const text = `Patient John Doe DOB 01/02/1970 Phone: (555) 234-4567 alt (555) 987-6543\nInsurance: Aetna Member ID: ABC123 Group: GRP1\nOther Insurance: Medicare Member ID: Z99999 Group: MGRP`;
   const pages = [{ text }];
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(Array.isArray(result.insurance) && result.insurance.length >= 1, 'primary insurance missing');
   assert.ok(result.insurance[0].memberId === 'ABC123');
   assert.ok(result.insurance.some(i => i.carrier && i.carrier !== result.insurance[0].carrier), 'secondary insurance not detected');
@@ -221,9 +221,9 @@ test('authorizationNotes derived and surfaced in PDF', async () => {
   assert.match(str, /AuthorizationNotes/, 'authorization notes metadata missing');
 });
 
-test('authorization notes enrichment adds structured rationale', () => {
+test('authorization notes enrichment adds structured rationale', async () => {
   const text = `Insurance: Aetna Member ID: ABC123 Group: GRP1\nOrder: Polysomnography 95810. Missing chart notes. Please verify benefits.`;
-  const { result } = runExtraction([{ text }]);
+  const { result } = await runExtraction([{ text }]);
   const meta = result.documentMeta || {};
   assert.ok(Array.isArray(meta.authorizationNotes) && meta.authorizationNotes.length, 'authorizationNotes missing');
   assert.ok(Array.isArray(meta.authorizationNotesStructured), 'authorizationNotesStructured missing');
@@ -236,9 +236,9 @@ test('authorization notes enrichment adds structured rationale', () => {
   assert.ok(meta.authorizationNotes.length > 1, 'expected multiple authorization notes');
 });
 
-test('snapshot contract: core extraction shape stable', () => {
+test('snapshot contract: core extraction shape stable', async () => {
   const sample = `Patient John Doe DOB 01/02/1970\nPolysomnography ordered 95810 due to witnessed apnea and snoring.\nDiagnosis ICD: G47.33 obstructive sleep apnea.\nInsurance: Aetna Member ID: ABC123 Group: GRP1 status accepted.`;
-  const { result } = runExtraction([{ text: sample }]);
+  const { result } = await runExtraction([{ text: sample }]);
   const current = {
     patient: { last: result.patient.last, first: result.patient.first, dob: result.patient.dob },
     procedure: { cpt: result.procedure.cpt, cptConfidence: result.procedure.cptConfidence },
@@ -319,7 +319,7 @@ test('preauth rule triggers for Aetna 95811', async () => {
   const txt = `Patient: Jane Doe\nDOB: 02/02/1970\nInsurance: Aetna\nCPT 95811 titration requested`; 
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.flags.reasons.includes('preauth_required_possible'), 'expected preauth flag');
   assert.ok(result.alerts.actions.includes('preauth_check_needed'), 'expected preauth action');
   const notes = result.documentMeta.authorizationNotes || [];
@@ -330,7 +330,7 @@ test('policy-driven action inference adds actions for 95811 without prior study 
   const txt = `REFERRAL\nPatient: Mark Smith\nDOB: 03/03/1975\nStudy Ordered: 95811 titration polysomnography\nHistory: loud snoring, witnessed apneas, daytime fatigue.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.alerts.actions.includes('document_prior_study_evidence'), 'should request prior study evidence');
   assert.ok(result.flags.reasons.includes('policy_action_inference'), 'policy inference flag expected');
 });
@@ -339,7 +339,7 @@ test('policy inference marks prior study evidence present when failed HSAT refer
   const txt = `Referral\nOrder: 95811\nHistory: prior PSG baseline study noted. Failed HSAT earlier this month.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.alerts.actions.includes('prior_study_evidence_present'), 'expected prior_study_evidence_present');
 });
 
@@ -347,7 +347,7 @@ test('pcp referral requirement inferred when PCP referral language present', asy
   const txt = `Referral Form\nOrder: 95810\nNote: PCP referral pending; patient under HMO plan requires primary care referral authorization.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.alerts.actions.includes('obtain_pcp_referral'), 'expected obtain_pcp_referral action');
 });
 
@@ -355,26 +355,26 @@ test('policy inference suggests HSAT prerequisite review for 95810 with uncompli
   const txt = `Referral\nPatient: Alice Roe\nDOB: 04/04/1970\nOrder: 95810\nIndication: uncomplicated suspected OSA initial evaluation`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.alerts.actions.includes('evaluate_hsat_prerequisite'), 'expect HSAT prerequisite evaluation action');
 });
 
 test('provider fax and phone classified distinctly and patient phones cleaned', async () => {
-  const txt = `Referring Provider: Dr. John Example MD\nTel: (702) 111-2222  Fax: (702) 333-4444\nPatient Name: Doe, Jane\nDOB: 01/01/1970\nContact Phone: (702) 555-7777`;
+  const txt = `PATIENT INFORMATION\nPatient Name: Doe, Jane\nDOB: 01/01/1970\nPatient Phone: (702) 555-7777\nREFERRING PROVIDER\nReferring Provider: Dr. John Example MD\nTel: (702) 234-2222  Fax: (702) 333-4444`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
-  assert.equal(result.provider.phone, '(702) 111-2222');
+  const { result } = await runExtraction(pages);
+  assert.equal(result.provider.phone, '(702) 234-2222');
   assert.equal(result.provider.fax, '(702) 333-4444');
   assert.ok(Array.isArray(result.patient.phones) && result.patient.phones.includes('(702) 555-7777'), 'patient main phone retained');
-  assert.ok(!result.patient.phones.includes('(702) 111-2222'), 'provider phone removed from patient list');
+  assert.ok(!result.patient.phones.includes('(702) 234-2222'), 'provider phone removed from patient list');
 });
 
 test('risk scoring aggregates flags and assigns tier', async () => {
   const txt = `REFERRAL\nPatient: Test Person\nDOB: 01/01/1970\nOrder: 95811\nIndication: suspected OSA\n(Note) Missing chart notes statement\nFAX: (555) 000-1111\n`; // minimal content (low volume) + no prior study evidence
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.risk && typeof result.risk.score === 'number');
   assert.ok(['low','medium','high'].includes(result.risk.tier));
   // Expect factors to include prior study evidence and low text volume
@@ -387,7 +387,7 @@ test('DME compliance inference adds action when CPAP mentioned without complianc
   const txt = `History: Patient uses CPAP nightly for OSA but reports mask leak issues and pressure discomfort. No compliance report provided.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.alerts.actions.includes('obtain_cpap_compliance_data'), 'expected compliance data action');
   assert.ok(result.flags.reasons.includes('dme_compliance_data_missing'), 'expected dme_compliance_data_missing flag');
 });
@@ -396,7 +396,7 @@ test('DME compliance metrics extraction captures hours, AHI, 90% pressure, usage
   const txt = `Device: Auto CPAP 5-15 cm H2O. Avg usage 6.5 hrs per night. AHI 4.2. 90% pressure 11. Usage 82% of nights.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.ok(result.compliance, 'expected compliance object');
   assert.equal(result.compliance.avgHours, 6.5);
   assert.equal(result.compliance.ahi, 4.2);
@@ -420,7 +420,7 @@ test('positive cardiology support note for 95811 with cardiovascular dx and titr
   const txt = `Referring Provider: Dr Jane Cardio MD\nOrder: 95811 titration study\nDiagnoses: G47.33, I10\nProvider Notes: titration recommended due to persistent events on auto-PAP.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.equal(result.procedure?.cpt, '95811', 'expected 95811 CPT');
   const notes = result.documentMeta?.authorizationNotes || [];
   assert.ok(notes.some(n => /cardiovascular comorbidity supports in-lab titration/i.test(n)), 'expected positive cardio note');
@@ -432,7 +432,7 @@ test('provider credential expansion aggregates multiple tokens', async () => {
   const txt = `Referring Provider: Dr Sarah Example MD FNP APRN\nPatient: Doe, Jane\nDOB: 01/01/1970`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   assert.match(result.provider.name || '', /MD.*FNP.*APRN/, 'expected multiple credentials appended');
 });
 
@@ -440,7 +440,7 @@ test('date detection identifies order and study dates', async () => {
   const txt = `Referral Date: 09/15/2025\nOrder Date: 09/20/2025\nStudy Date: 10/05/2025\nPatient: Doe, Jane`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtractionWithDates } = await import('../backend/rules/index.js');
-  const { result } = runExtractionWithDates(pages);
+  const { result } = await runExtractionWithDates(pages);
   assert.equal(result.documentMeta.orderDate, '2025-09-20');
   assert.equal(result.documentMeta.studyDate, '2025-10-05');
   assert.ok(Array.isArray(result.documentMeta.dates) && result.documentMeta.dates.length >= 3, 'expected at least 3 labeled dates');
@@ -450,7 +450,7 @@ test('date detection captures unlabeled date with low confidence', async () => {
   const txt = `Patient: Doe, Jane\nSome note 09/22/2025 regarding scheduling.`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtractionWithDates } = await import('../backend/rules/index.js');
-  const { result } = runExtractionWithDates(pages);
+  const { result } = await runExtractionWithDates(pages);
   const any = result.documentMeta?.dates || [];
   assert.ok(any.some(d => d.type === 'unknown' && d.value === '2025-09-22'), 'expected unknown date captured');
 });
@@ -459,7 +459,7 @@ test('risk scoring factors include chronic and severity weighting when enriched'
   const txt = `Patient: Doe, Jane\nDOB: 01/01/1970\nOrder: 95810\nDiagnoses: G47.33 I10\n`;
   const pages = [{ page: 1, text: txt, boxes: [] }];
   const { runExtraction } = await import('../backend/rules/index.js');
-  const { result } = runExtraction(pages);
+  const { result } = await runExtraction(pages);
   const factors = result.risk?.factors || [];
   // At least chronic condition should appear (G47.33 is chronic in enrichment) and I10 chronic but severity maybe absent
   assert.ok(factors.includes('chronic_condition'), 'expected chronic_condition factor');

@@ -120,8 +120,8 @@
   },
   "facilities": {},
   "metadata": {
-    "totalCorrections": 39,
-    "lastUpdated": "2026-03-16T16:33:22.188Z",
+    "totalCorrections": 77,
+    "lastUpdated": "2026-05-08T05:29:35.598Z",
     "hipaaCompliant": true,
     "note": "Patient PHI (names, DOB, Member IDs) is NEVER stored per HIPAA compliance"
   },
@@ -131,14 +131,14 @@
       "corrections": [
         {
           "text": "95811",
-          "count": 1,
+          "count": 39,
           "firstSeen": "2025-10-27T17:25:51.149Z",
-          "lastSeen": "2025-10-27T17:25:51.149Z",
+          "lastSeen": "2026-05-08T05:29:35.598Z",
           "metadata": {}
         }
       ],
       "confidence": 1,
-      "count": 1
+      "count": 39
     }
   },
   "carrier": {

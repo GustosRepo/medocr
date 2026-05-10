@@ -1,0 +1,4 @@
+# Optional 2026 OCR experiment dependencies.
+# Keep separate from production requirements until benchmarks prove a win.
+paddleocr>=3.2.0
+paddlepaddle>=3.1.0
